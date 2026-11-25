@@ -1,0 +1,8 @@
+# dsh-repowiki bundle patch：插入插件行。
+# 本包是一个 Host 工具插件：注册 repowiki-index / repowiki-cards 两个
+# 模型工具，资产写入会话 cwd 下的 .dsh-repowiki/ 目录（随 Git 共享）。
+# config 整行替换语义：新增字段时必须重述本行全部字段。
+- insert:
+    - id: repowiki
+      name: dsh-repowiki
+      config: {}

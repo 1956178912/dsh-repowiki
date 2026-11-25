@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Repo wiki",
+    "description": "Index a repository into a shareable symbol-level knowledge base (.dsh-repowiki) and query symbols, files and dependencies from any session. Deterministic indexing, no model calls; Phase 1 provides repowiki-index and repowiki-cards tools."
+  }
+}

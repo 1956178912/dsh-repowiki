@@ -1,0 +1,55 @@
+# ADR-0002：手写 ToolDefinition，不 import @deepseek-ai/dsh-tools
+
+- 日期：2026-11-25
+- 状态：已采纳（Phase 1）
+
+## 背景
+
+官方工具插件（如 dsh-tool-todo）用 `import { defineTool } from '@deepseek-ai/dsh-tools'`
+构建工具定义。该包随 dsh 安装分发、由宿主解析；但本地 bundle 不声明依赖时，
+Node 的模块解析能否在 install_bundle 落位后找到该包属于未验证边界（方案
+§10.3-1 指出 shipped packages 从 dsh 安装目录解析是官方解耦设计，代价是
+每次升级须回归）。
+
+## 选项
+
+- **A. 手写 ToolDefinition 对象**直接传给 `ctx.tools.register`：
+  按 dsh-tools 的 DSL（ValueSchemaSpec）声明 parameters 与
+  output.schema，自行做参数校验。
+- **B. import defineTool**：与官方包保持一致，但引入对解析路径的隐含依赖。
+
+## 最终选择
+
+选项 A。
+
+## 理由
+
+1. ToolDefinition 的字段契约在 `docs/subsystems/tools.zh.md` 完全公开，
+   手写无信息缺口；dsh-tool-todo 源码提供了精确形态参照。
+2. bundle 实现真正的零外部 import（除 node 内置模块与包内相对 import），
+   本地目录安装的确定性最高，不受 npm 解析路径变化影响。
+3. defineTool 的附加价值是参数类型推导与自动校验；Phase 1 的工具参数
+   少且简单，自行校验成本可控。
+
+## 影响范围
+
+- 若 dsh 变更 ToolDefinition 契约（新增必需字段），手写定义会在注册时
+  失败——这被"安装后跑 repowiki-index/repowiki-cards 冒烟"的升级回归
+  约束覆盖（README 升级运维约定）。
+- 参数校验逻辑分散在工具内（本 Phase 两个工具，可接受；后续工具变多时
+   可重新评估切回 defineTool）。
+
+## 运行时教训（2026-11-25 安装验证实测）
+
+`ctx.tools.register` 对**手写对象**的 `output.schema` 直接执行
+`assertSupportedJsonSchema`（JsonSchemaNode 子集）：`required` 必须是
+**顶层数组**（`required: ['root', ...]`），而不是 parameters DSL 里的
+per-property `required: true`。官方包用 `defineTool` 时由后者统一编译
+两种形式，照抄其源码形态会触发 `JsonSchemaError: ... required is not
+supported on type "string"`，插件整行不激活。本 bundle 的两个工具
+schema 已按 JsonSchemaNode 形式修正。
+
+## 回滚方案
+
+将各 tool-*.js 的对象字面量改写为 defineTool({...}) 调用并在
+package.json 声明 peer 依赖，契约不变。

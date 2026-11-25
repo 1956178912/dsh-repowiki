@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "仓库 Wiki",
+    "description": "把仓库索引为可共享的符号级知识库（.dsh-repowiki），任意会话即可查询符号、文件与依赖。索引为确定性计算、不调用模型；当前提供 repowiki-index 与 repowiki-cards 两个工具。"
+  }
+}
