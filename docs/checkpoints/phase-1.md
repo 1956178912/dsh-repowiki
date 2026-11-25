@@ -40,6 +40,33 @@ session".
    conversation) is needed to call repowiki-index / repowiki-cards and finish
    the last step.
 
+## Root cause analysis (added 2026-11-25: why subagents cannot substitute for a new session)
+
+Two spawn-subagent verification runs both reported the tools as invisible.
+Findings:
+
+- `dsh-tools`' `register()` under a fiber ctx (scope=undefined) writes to the
+  **global layer**, and `view(scope)` is inherited by every agent — the
+  registration path is sound.
+- `dsh-agent-loop` does call `tools.resolve()` dynamically at every model step.
+- But per subagent.zh.md, a spawn subagent **joins the parent's active
+  composition** (omitting `agentPreset` inherits the parent's assembly). A
+  subagent therefore inherits the **parent session's (this session's)
+  startup-snapshotted tool table** rather than reassembling from the global
+  registry — the plugin was not yet installed when this session started, so
+  subagents necessarily cannot see repowiki-*.
+- This session itself is equally bound by the startup snapshot (the plugin was
+  installed and activated mid-session).
+- Neither the `subagent` nor the `workflow` tool exposes an `agentPreset`
+  parameter, so no "independent-preset" subagent can be constructed from this
+  session as a workaround.
+
+**Session-level verification therefore requires a genuinely new session**
+(refresh the page or start a new conversation). This is not a plugin defect:
+`fiberPhase: active` + `application: applied` + 32 tests (including the
+apply→register→execute full chain) constitute the registration and execution
+evidence chain.
+
 ## Decisions
 
 - ADR-0001: zero-dependency symbol parser (user-approved, replacing

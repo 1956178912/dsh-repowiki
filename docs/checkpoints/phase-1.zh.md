@@ -34,6 +34,25 @@
    子会话启动时插件尚未激活。需**新会话**（刷新页面或新开对话）调用
    repowiki-index / repowiki-cards 完成最后一步。
 
+## 根因分析（2026-11-25 追记：为何子代理无法替代新会话验证）
+
+两次 spawn 子代理验证均报告"工具不可见"。排查结论：
+
+- `dsh-tools` 的 `register()` 在 fiber ctx（scope=undefined）下写入**全局
+  层**，`view(scope)` 对所有 agent 继承——注册路径无问题。
+- `dsh-agent-loop` 的每个模型步骤确实调用 `tools.resolve()` 动态解析。
+- 但 subagent.zh.md 原文：spawn 子代理**加入父方的活跃组装**（省略
+  `agentPreset` 时继承父方组装）。子代理因此继承**父会话（本会话）启动
+  时快照的工具表**，而非从全局注册表重新组装——本会话启动时插件尚未
+  安装，故子代理必然看不到 repowiki-*。
+- 本会话自身同样受启动快照限制（插件在会话中途安装并激活）。
+- `subagent`/`workflow` 工具均不暴露 `agentPreset` 参数，无法在本会话内
+  构造"独立 preset"的子代理绕行。
+
+**因此会话级验证只能在真新会话完成**（刷新页面或新开对话）。这不是插件
+缺陷：`fiberPhase: active` + `application: applied` + 32 个测试（含
+apply→register→execute 全链路）已构成注册与执行证据链。
+
 ## 决策
 
 - ADR-0001：零依赖符号解析器（用户批准，不引入外部解析框架）。
