@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete + panel views + stability hardening (v0.17.0)
+## Current stage: Phases 1–4 complete + panel views + multi-workspace overview (v0.18.0)
 
 | Capability | Description |
 |---|---|
@@ -20,7 +20,7 @@ English | [中文](README.zh-CN.md)
 | `repowiki-export` tool | Copies the `.dsh-repowiki/` assets into a directory snapshot (backup or transfer; Markdown/JSON only, no model calls); a non-empty target is refused unless `overwrite` |
 | `repowiki-import` tool | Restores `.dsh-repowiki/` from a snapshot directory; existing assets are protected unless `overwrite`; verifies `index.json` compatibility afterwards |
 | `repowiki-edit` tool | Hand-edit knowledge cards: `create` adds a manual card (path may sit outside the index), `update` rewrites an existing card; both set `manuallyEdited` so `repowiki-extract` stops auto-refreshing the card |
-| `repowiki-memory` tool | Persists knowledge learned in a session into `.dsh-repowiki/memory/<locale>/` (default `pending`), then `list` / `accept` / `reject` closes the review loop; entries are Markdown with a JSON frontmatter and travel with Git || Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page: file/symbol/card/doc counts and latest update, an all/generated/pending/stale filter (pending = listed in `index.json` without a card; stale = card digest no longer matches the file), search, grid and list views, card details, and a Wiki tab that browses the generated pages — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
+| `repowiki-memory` tool | Persists knowledge learned in a session into `.dsh-repowiki/memory/<locale>/` (default `pending`), then `list` / `accept` / `reject` closes the review loop; entries are Markdown with a JSON frontmatter and travel with Git || Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page. **Overview mode (default)** lists every workspace with its status dot and stats; clicking a row drills into the single-workspace view: file/symbol/card/doc counts and latest update, an all/generated/pending/stale filter (pending = listed in `index.json` without a card; stale = card digest no longer matches the file), search, grid and list views, card details, and a Wiki tab that browses the generated pages — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
 
 Roadmap:
 - Phase 3 (done in v0.6.0): content-digest incremental reindexing, card refresh, manual-edit protection, orphan reporting, directory import/export
@@ -28,6 +28,7 @@ Roadmap:
 - Consolidation (v0.15.0): duplicated path helpers and frontmatter serialize/parse logic consolidated into `src/util.js` (net −139 lines); plan coverage audited in `docs/coverage.md`
 - Stability hardening (v0.16.0): real-corpus client regression test (this repo's own generated cards driven through the panel), event-handler guard so handler throws surface as a readable status line instead of a silent no-op, CI gate on Node 22/24
 - DOM integration (v0.17.0): real React 18 + jsdom suite driving the panel with real click/change/keydown events against the real corpus — closes the reproduction gap for the reported "card click does nothing" (the event-level wiring is verified healthy); dev-only test dependencies (react, react-dom, jsdom) do not change the zero-runtime-dependency posture
+- Multi-workspace overview (v0.18.0, ui-plan slice 2): every workspace as a row with status and stats, click to drill in; reuses each workspace's own session scope — no new host data plane needed
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights

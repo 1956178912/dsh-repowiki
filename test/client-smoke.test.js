@@ -33,7 +33,7 @@ await import('../client.js')
  * @param {object} overrides - 覆盖文件内容（键为相对路径）。
  * @returns {object} {wf, workspaces, startSession} 桩。
  */
-function makeFakeRemotes(overrides = {}) {
+function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
   const index = {
     schemaVersion: 2,
     generatedAt: '2026-11-26T08:00:00.000Z',
@@ -168,7 +168,7 @@ function makeFakeRemotes(overrides = {}) {
       subscribe: () => () => {},
     },
   }
-  return { wf, workspaces, startSession: () => {} }
+  return { wf, workspaces: workspacesOverride ?? workspaces, startSession: () => {} }
 }
 
 /** 冒烟所需的桩上下文：记录 effect/generator 与 slot 注入。 */
@@ -331,6 +331,62 @@ test('startSession 抛错时页面给出可读提示而非静默失败', async (
   const texts = collectTexts(hooks.root)
   assert.ok(texts.some(s => s.includes('failed')), 'startSession 抛错应渲染失败提示')
   assert.ok(!texts.some(s => s.includes('actionFailed')), 'run 自身的 try/catch 应先兜底，不应走到 guard')
+})
+
+test('总览模式：列出各工作区状态、点击行下钻单库视图', async () => {
+  const { wf } = makeFakeRemotes()
+  // 三个工作区：已生成（复用语料）/ 未生成（读一律 not-found）/ 无会话
+  const workspaces = {
+    list: {
+      getSnapshot: () => ({
+        items: [
+          { workspaceId: 'wa', path: '/tmp/wa', title: '已生成库', sessionIds: ['s1'], createdAt: '', updatedAt: '' },
+          { workspaceId: 'wb', path: '/tmp/wb', title: '空仓库', sessionIds: ['s2'], createdAt: '', updatedAt: '' },
+          { workspaceId: 'wc', path: '/tmp/wc', title: '新仓库', sessionIds: [], createdAt: '', updatedAt: '' },
+        ],
+      }),
+      subscribe: () => () => {},
+    },
+  }
+  const originalRead = wf.read.bind(wf)
+  wf.read = async (sessionId, rel, range, signal) => {
+    if (sessionId !== 's1') {
+      return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
+    }
+    return originalRead('s1', rel, range, signal)
+  }
+  const hooks = makeHooks()
+  const mod = captured.factory((name) => {
+    if (name !== 'react') throw new Error(`意外 require: ${name}`)
+    return reactFor(hooks)
+  })
+  mod.apply(makeStubCtx(wf))
+  hooks.mount(RepoWikiPageOf(mod), {
+    t: (key) => key,
+    workspaces,
+    startSession: () => {},
+    files: wf,
+    notice: null,
+  })
+  await flush()
+
+  // 初始即总览：三行状态齐备
+  const overviewTexts = collectTexts(hooks.root)
+  assert.ok(overviewTexts.some(s => s.includes('已生成库')), '总览行含工作区标题')
+  assert.ok(overviewTexts.some(s => s.includes('statFiles')), '已生成行含文件统计')
+  assert.ok(overviewTexts.some(s => s.includes('noAsset')), '空仓库行渲染"尚未生成"')
+  assert.ok(overviewTexts.some(s => s.includes('noSession')), '无会话行渲染提示')
+
+  // 点击已生成行 → 单库视图
+  const row = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.props['aria-label'] === 'string' && n.props['aria-label'].includes('已生成库'))
+  assert.ok(row, '应渲染可点击的总览行')
+  row.props.onClick()
+  await flush()
+  const singleTexts = collectTexts(hooks.root)
+  assert.ok(singleTexts.some(s => s.includes('statFiles')), '下钻后应渲染单库统计')
+  assert.ok(!singleTexts.some(s => s.includes('已生成库')) || singleTexts.some(s => s.includes('A 卡片')),
+    '单库视图应展示卡片内容')
 })
 
 /** 挂载页面（未选工作区），返回 hooks。 */

@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 + 面板视图 + 稳定性加固（v0.17.0）
+## 当前阶段：Phase 1–4 完成 + 面板视图 + 多工作区总览（v0.18.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -21,7 +21,7 @@
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
 | `repowiki-edit` 工具 | 人工修订知识卡片：`create` 新建人工卡（path 可为索引外路径），`update` 改写现有卡片；两者置 `manuallyEdited`，`repowiki-extract` 不再自动刷新该卡 |
 | `repowiki-memory` 工具 | 把本会话学到的知识沉淀到 `.dsh-repowiki/memory/<locale>/`（默认 `pending` 待审），再经 `list` / `accept` / `reject` 完成审核闭环；条目为带 JSON frontmatter 的 Markdown，随 Git 共享 |
-| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、搜索、网格与列表视图、卡片详情、以及浏览已生成页面的 Wiki 页签——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
+| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面。**默认总览模式**列出所有工作区的状态点与统计；点击行下钻单库视图：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、搜索、网格与列表视图、卡片详情、以及浏览已生成页面的 Wiki 页签——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
 路线图：
 - Phase 3（v0.6.0 完成）：内容摘要驱动的索引增量重建、卡片自动刷新、人工修订保护、孤儿卡片报告、目录导入导出
@@ -29,6 +29,7 @@
 - 巩固（v0.15.0）：重复的路径解析与 frontmatter 编解码逻辑收敛进 `src/util.js`（净 −139 行）；方案覆盖率见 `docs/coverage.md`
 - 稳定性加固（v0.16.0）：真实语料客户端回归测试（本仓库自产卡片灌入面板渲染路径）、事件处理器兜底（抛错转为可读状态行而非静默无反应）、Node 22/24 CI 门禁
 - DOM 集成（v0.17.0）：真实 React 18 + jsdom 测试套件用真实 click/change/keydown 事件驱动面板（语料同上）——闭合"用户点击无反应"的复现盲区（事件级接线已验证健康）；devOnly 测试依赖（react/react-dom/jsdom）不改变零运行时依赖形态
+- 多工作区总览（v0.18.0，ui-plan 切片 2）：每行一个工作区带状态与统计，点击下钻；复用各工作区自身的会话 scope，无需新的 Host 数据面
 - 可选语义索引按方案保持后置（YAGNI）
 - 会话记忆条目对后续会话可见，与知识卡片一同构成知识库
 

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.15.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.17.0，测试 97/97）
+- 核对对象：本仓库当前实现（v0.18.0，测试 99/99）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -61,7 +61,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 每次 push/PR 在 Node 22/24 装好 devOnly 依赖后跑 `node --test test/*.test.js`（97/97，含真实 React+jsdom 的 DOM 事件回归）。dsh 版本变更侧的回归仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 每次 push/PR 在 Node 22/24 装好 devOnly 依赖后跑 `node --test test/*.test.js`（99/99，含真实 React+jsdom 的 DOM 事件回归）。dsh 版本变更侧的回归仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -84,7 +84,7 @@
 ## 7. 遗留与结论
 
 - §10.3-8 自动化回归门禁已补 GitHub Actions（Node 22/24，push/PR 触发）；dsh 版本变更侧回归仍靠安装验证流程人工冒烟（无 CI 可跑 dsh 宿主）。
-- **后置项（有意不做，YAGNI）**：agentOptions 模型覆盖、模型下拉 UI、LSP 符号级传导、语义索引、多工作区总览（跨工作区读取受 per-session 授权限制，`docs/ui-plan.md` 切片 2）。
+- **后置项（有意不做，YAGNI）**：agentOptions 模型覆盖、模型下拉 UI、LSP 符号级传导、语义索引。（多工作区总览原列后置，v0.18.0 已实现——每工作区条目自带 `sessionIds`，跨工作区读取无需新的 Host 数据面。）
 - **结论**：修订版方案 Phase 1–4 全部明列项完成（Phase 4 的投影候选与语义索引两处为有据降级，决策记录在案）；升级韧性九条 8/9 落实；无静默偏离。
 
 一句话：**方案主干 100% 覆盖，三处有据降级（投影→显式写入、tree-sitter→手写解析器、state.json→frontmatter 标记），一处硬条款（CI 门禁）待用户决定是否补。**

@@ -53,6 +53,9 @@ const READ_MAX_PAGES = 12
 /** 并发读取卡片的最大请求数（避免一次性打出大量 Remote 调用）。 */
 const CARD_CONCURRENCY = 6
 
+/** 总览模式并发统计的工作区数（每工作区 3 次 Remote 调用，限流）。 */
+const OVERVIEW_CONCURRENCY = 3
+
 /** 客户端文案（中英）。 */
 const DICTS = {
   zh: {
@@ -61,6 +64,8 @@ const DICTS = {
     subtitle: '为工作区生成符号索引、知识卡片与 Wiki',
     workspace: '工作区',
     pickHint: '选择要生成知识库的工作区',
+    modeOverview: '总览',
+    modeSingle: '单库',
     empty: '暂无工作区。请先在侧栏添加工作区。',
     actionIndex: '生成索引',
     actionExtract: '生成知识卡片',
@@ -111,6 +116,8 @@ const DICTS = {
     subtitle: 'Generate a symbol index, knowledge cards, and a wiki for a workspace',
     workspace: 'Workspace',
     pickHint: 'Choose the workspace to build the knowledge base for',
+    modeOverview: 'Overview',
+    modeSingle: 'Workspace',
     empty: 'No workspaces yet. Add one from the sidebar first.',
     actionIndex: 'Build index',
     actionExtract: 'Extract cards',
@@ -250,6 +257,61 @@ window.__ModuleLoader__.load({
       const res = unwrapRemote(await wf.list(sessionId, rel, signal), 'workspace-file/bad-list')
       if (!res || !Array.isArray(res.entries)) throw { code: 'workspace-file/bad-list', message: 'bad list result' }
       return res.entries
+    }
+
+    /**
+     * 计资产目录某子目录（knowledge/wiki）在首个 locale 子目录下的
+     * Markdown 文件数；目录缺失或不可读返回 0（总览统计不阻断于坏目录）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} dir - 相对工作区根的目录（如 .dsh-repowiki/knowledge）。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<number>} Markdown 文件数。
+     */
+    async function countDirMd(wf, sessionId, dir, signal) {
+      try {
+        const subs = await listChildren(wf, sessionId, dir, signal)
+        const localeDir = subs.find(e => e.type === 'directory')?.name
+        if (!localeDir) return 0
+        const files = await listChildren(wf, sessionId, `${dir}/${localeDir}`, signal)
+        return files.filter(e => e.type === 'file' && e.name.endsWith('.md')).length
+      } catch {
+        return 0
+      }
+    }
+
+    /**
+     * 装载单个工作区的知识库统计（总览模式每行一调）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 该工作区的授权会话 id（sessionIds[0]）。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<{status:string, files:number, symbols:number, cards:number, docs:number, updatedAt:string}>}
+     *   status 为 'ready'（有索引）/ 'no-asset'（无索引）。
+     */
+    async function loadWorkspaceStats(wf, sessionId, signal) {
+      let idx = null
+      try {
+        idx = await readJson(wf, sessionId, `${ASSET_DIR}/index.json`, signal)
+      } catch (err) {
+        // 索引缺失按"尚未生成"呈现，不当作失败
+        const code = remoteErrorCode(err)
+        if (code !== 'workspace-file/not-found') throw err
+      }
+      if (!idx || !Array.isArray(idx.files)) {
+        return { status: 'no-asset', files: 0, symbols: 0, cards: 0, docs: 0, updatedAt: '' }
+      }
+      const [cards, docs] = await Promise.all([
+        countDirMd(wf, sessionId, `${ASSET_DIR}/knowledge`, signal),
+        countDirMd(wf, sessionId, `${ASSET_DIR}/wiki`, signal),
+      ])
+      return {
+        status: 'ready',
+        files: idx.stats?.files ?? idx.files.length,
+        symbols: idx.stats?.symbols ?? idx.files.reduce((a, f) => a + (Array.isArray(f.symbols) ? f.symbols.length : 0), 0),
+        cards,
+        docs,
+        updatedAt: typeof idx.generatedAt === 'string' ? idx.generatedAt : '',
+      }
     }
 
     /**
@@ -462,6 +524,9 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
       const [detail, setDetail] = useState(null)
+      const [overview, setOverview] = useState(true)
+      const [overviewRows, setOverviewRows] = useState([])
+      const [overviewStatus, setOverviewStatus] = useState('idle')
       const [message, setMessage] = useState('')
       const latestRequest = useRef(0)
 
@@ -553,6 +618,43 @@ window.__ModuleLoader__.load({
         load(ac.signal)
         return () => ac.abort()
       }, [load, current])
+
+      // 总览模式：并发统计各工作区（切片 2——每行一个工作区，点击下钻单库）
+      useEffect(() => {
+        if (!overview || items.length === 0) {
+          setOverviewRows([])
+          setOverviewStatus('idle')
+          return
+        }
+        const ac = new AbortController()
+        const requestId = ++latestRequest.current
+        setOverviewStatus('loading')
+        ;(async () => {
+          try {
+            const rows = await mapLimit(items, OVERVIEW_CONCURRENCY, async (ws) => {
+              const sessionId = ws.sessionIds?.[0]
+              const base = {
+                workspaceId: ws.workspaceId, title: ws.title || ws.path, path: ws.path,
+                files: 0, symbols: 0, cards: 0, docs: 0, updatedAt: '',
+              }
+              if (!sessionId) return { ...base, status: 'no-session' }
+              try {
+                return { ...base, ...await loadWorkspaceStats(files, sessionId, ac.signal) }
+              } catch (err) {
+                return { ...base, status: 'error', errorCode: remoteErrorCode(err) }
+              }
+            })
+            if (ac.signal.aborted || requestId !== latestRequest.current) return
+            setOverviewRows(rows)
+            setOverviewStatus('ready')
+          } catch {
+            if (!ac.signal.aborted && requestId === latestRequest.current) {
+              setOverviewStatus('error')
+            }
+          }
+        })()
+        return () => ac.abort()
+      }, [overview, items, files])
 
       // 回到页面时刷新一次（会话里生成完成后切回可见结果）
       useEffect(() => {
@@ -665,7 +767,8 @@ window.__ModuleLoader__.load({
       const primaryStyle = {
         ...buttonStyle,
         background: 'var(--dsw-alias-state-business-primary, #2563eb)',
-        borderColor: 'transparent',
+        // 与 buttonStyle 的 border 同为简写形态（避免 shorthand/longhand 混用导致重渲染时的样式警告）
+        border: '1px solid transparent',
         color: '#ffffff',
       }
       const inputStyle = {
@@ -696,7 +799,7 @@ window.__ModuleLoader__.load({
         h('h1', { style: { margin: '0 0 4px', fontSize: 22 } }, t('title')),
         h('p', { style: { margin: '0 0 20px', ...muted } }, t('subtitle')),
 
-        // 头部行：工作区下拉 + 刷新
+        // 头部行：工作区下拉 + 模式切换 + 刷新
         h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 } },
           h('label', { htmlFor: 'repowiki-workspace', style: { fontSize: 14 } }, t('workspace')),
           items.length === 0
@@ -704,7 +807,10 @@ window.__ModuleLoader__.load({
             : h('select', {
                 id: 'repowiki-workspace', value: current, inputMode: 'none',
                 style: inputStyle,
-                onChange: (e) => setSelected(e.target.value),
+                onChange: guard('pick-workspace', (e) => {
+                  setSelected(e.target.value)
+                  setOverview(false)
+                }),
                 'aria-label': t('pickHint'),
               },
                 h('option', { value: '' }, t('pickHint')),
@@ -712,26 +818,40 @@ window.__ModuleLoader__.load({
                   `${w.title || w.path} — ${w.path}`)),
               ),
           h('button', {
+            type: 'button', 'aria-pressed': overview,
+            style: overview ? primaryStyle : buttonStyle,
+            onClick: guard('mode-overview', () => setOverview(true)),
+          }, t('modeOverview')),
+          h('button', {
+            type: 'button', 'aria-pressed': !overview,
+            style: !overview ? primaryStyle : buttonStyle,
+            onClick: guard('mode-single', () => setOverview(false)),
+          }, t('modeSingle')),
+          h('button', {
             type: 'button', style: buttonStyle, onClick: guard('reload', () => {
-              if (!current) return
-              const ac = new AbortController()
-              load(ac.signal)
+              if (current) {
+                const ac = new AbortController()
+                load(ac.signal)
+              } else {
+                setOverviewRows([])
+                setOverviewStatus('idle')
+              }
             }),
             'aria-label': t('reload'),
           }, t('reload')),
         ),
 
-        // 生成动作
-        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 } },
+        // 生成动作（单库模式才需要选定工作区）
+        !overview && h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 } },
           h('button', { type: 'button', style: primaryStyle, onClick: guard('generate-all', () => run('all')) }, t('actionAll')),
           h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-index', () => run('index')) }, t('actionIndex')),
           h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-extract', () => run('extract')) }, t('actionExtract')),
           h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-wiki', () => run('generate')) }, t('actionGenerate')),
         ),
-        h('p', { style: { margin: '0 0 16px', fontSize: 13, ...muted } }, t('note')),
+        !overview && h('p', { style: { margin: '0 0 16px', fontSize: 13, ...muted } }, t('note')),
 
-        // 统计行（仅在数据就绪时渲染）
-        status === 'ready' && index && h('div', {
+        // 统计行（仅在单库模式、数据就绪时渲染）
+        !overview && status === 'ready' && index && h('div', {
           style: { display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 12, fontSize: 13, ...muted },
         },
           h('span', null, tt('statFiles', { n: index.stats?.files ?? rows.length })),
@@ -747,11 +867,11 @@ window.__ModuleLoader__.load({
           }, tt('staleHint', { n: staleSet.size })),
         ),
 
-        // 状态分支
-        status === 'no-session' && h('p', { role: 'status', style: { ...muted } }, t('noSession')),
-        status === 'no-asset' && h('p', { role: 'status', style: { ...muted } }, t('noAsset')),
-        status === 'loading' && h('p', { role: 'status', style: { ...muted } }, t('loading')),
-        status === 'error' && h('div', { role: 'alert' },
+        // 状态分支（单库模式）
+        !overview && status === 'no-session' && h('p', { role: 'status', style: { ...muted } }, t('noSession')),
+        !overview && status === 'no-asset' && h('p', { role: 'status', style: { ...muted } }, t('noAsset')),
+        !overview && status === 'loading' && h('p', { role: 'status', style: { ...muted } }, t('loading')),
+        !overview && status === 'error' && h('div', { role: 'alert' },
           h('p', { style: { margin: '0 0 8px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' } },
             tt('loadFailed', { code: errorCode })),
           h('button', {
@@ -764,8 +884,8 @@ window.__ModuleLoader__.load({
           }, t('retry')),
         ),
 
-        // 主区：卡片/Wiki 双页签 + 筛选 + 搜索 + 视图切换 + 列表
-        status === 'ready' && h('div', null,
+        // 主区：卡片/Wiki 双页签 + 筛选 + 搜索 + 视图切换 + 列表（单库模式）
+        !overview && status === 'ready' && h('div', null,
           h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
             h('button', {
               type: 'button', 'aria-pressed': tab === 'cards',
@@ -849,12 +969,85 @@ window.__ModuleLoader__.load({
             t, tt,
           }),
         ),
+        // 总览模式：每行一个工作区的生成状态（切片 2）
+        overview && h(OverviewPanel, {
+          rows: overviewRows, status: overviewStatus, t, tt,
+          onOpen: guard('open-workspace', (workspaceId) => {
+            setSelected(workspaceId)
+            setOverview(false)
+          }),
+        }),
+
         message && h('p', {
           role: 'status',
           style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-label-primary, #111827)' },
         }, message),
         notice,
       ),
+      )
+    }
+
+    /**
+     * 工作区总览面板（切片 2）：列出各工作区的知识库状态，
+     * 点击行下钻到单库视图。每行统计来自该工作区自己的会话 scope
+     * （sessionIds[0]），与单库视图同一数据通道。
+     * @param {object} props - { rows, status, t, tt, onOpen }。
+     * @returns {object} 面板元素。
+     */
+    function OverviewPanel({ rows, status, t, tt, onOpen }) {
+      if (status === 'loading' || status === 'idle') {
+        return h('p', { role: 'status', style: { ...mutedStyle() } }, t('loading'))
+      }
+      if (rows.length === 0) {
+        return h('p', { role: 'status', style: { ...mutedStyle() } }, t('empty'))
+      }
+      /** 行内状态文案（对齐单库视图的状态词汇）。 */
+      const statusText = (row) => {
+        if (row.status === 'ready') return null
+        if (row.status === 'no-session') return t('noSession')
+        if (row.status === 'no-asset') return t('noAsset')
+        return tt('loadFailed', { code: row.errorCode ?? 'unknown' })
+      }
+      return h('div', null,
+        ...rows.map((row) => h('button', {
+          key: row.workspaceId,
+          type: 'button',
+          onClick: () => onOpen(row.workspaceId),
+          style: {
+            ...cardChipStyle(),
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            width: '100%', marginBottom: 8, padding: '10px 14px', textAlign: 'left',
+          },
+          'aria-label': `${t('modeSingle')}: ${row.title}`,
+        },
+          statusDot(row.status === 'ready'),
+          h('span', {
+            style: { flex: 1, minWidth: 120, fontSize: 14, fontWeight: 600,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              color: 'var(--dsw-alias-label-primary, #111827)' },
+          }, row.title),
+          h('span', {
+            style: { fontSize: 12, flex: 'none', overflow: 'hidden', maxWidth: 260,
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          }, row.path),
+          row.status === 'ready'
+            ? h('span', {
+                style: { display: 'flex', gap: 10, flex: 'none', flexWrap: 'wrap',
+                  fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+              },
+              h('span', null, tt('statFiles', { n: row.files })),
+              h('span', null, tt('statSymbols', { n: row.symbols })),
+              h('span', null, tt('statCards', { n: row.cards })),
+              h('span', null, tt('statDocs', { n: row.docs })),
+              row.updatedAt
+                ? h('span', null, tt('updated', { when: row.updatedAt.slice(0, 10) }))
+                : h('span', null, t('never')),
+            )
+            : h('span', {
+                style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+              }, statusText(row)),
+        )),
       )
     }
 

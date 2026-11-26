@@ -73,8 +73,24 @@ const Page = pageComponentOf(
 )
 
 /** 挂载页面并选中工作区（真实 change 事件），等待语料装载完成。
- *  每次挂载用全新 container（重复对同一 container createRoot 会告警）。 */
-async function mountLoaded() {
+ *  每次挂载用全新 container（重复对同一 container createRoot 会告警）。
+ *  @param {{workspaces?:object, wrapRead?:(read:Function)=>Function, select?:string|false}} [opts]
+ *    workspaces 覆盖默认单工作区列表；wrapRead 包装 read 实现 per-session 行为；
+ *    select 为 false 时停留在初始视图（总览），默认 'w1'。 */
+async function mountLoaded(opts = {}) {
+  const wf = makeCorpusWf()
+  if (opts.wrapRead) wf.read = opts.wrapRead(wf.read.bind(wf))
+  const workspaces = opts.workspaces ?? {
+    list: {
+      getSnapshot: () => ({
+        items: [{
+          workspaceId: 'w1', path: '/repo', title: '本仓库',
+          sessionIds: ['s1'], createdAt: '', updatedAt: '',
+        }],
+      }),
+      subscribe: () => () => {},
+    },
+  }
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -84,13 +100,17 @@ async function mountLoaded() {
       workspaces, startSession: () => {}, files: wf, notice: null,
     }))
   })
-  // 真实 change 事件触发工作区选择（React 合成事件根委托）
+  // 真实 change 事件触发工作区选择（React 合成事件根委托）；
+  // select 为 false 时停留在初始视图（总览模式）
   const select = container.querySelector('#repowiki-workspace')
   assert.ok(select, '应渲染工作区下拉')
-  await act(async () => {
-    select.value = 'w1'
-    select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-  })
+  const selectValue = opts.select ?? 'w1'
+  if (selectValue !== false) {
+    await act(async () => {
+      select.value = selectValue
+      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+    })
+  }
   await act(async () => { await new Promise((r) => setTimeout(r, 150)) })
   return { container, root }
 }
@@ -148,4 +168,48 @@ test('DOM 集成：详情经 Escape（真实 keydown）关闭、guard 不误触�
   })
   assert.ok(!container.querySelector('[role="region"]'), 'Escape 后详情应关闭')
   assert.ok(!container.textContent.includes('actionFailed'), '全程不应出现事件兜底错误消息')
+})
+
+test('DOM 集成：总览行真实点击下钻到单库视图（多工作区）', async () => {
+  const workspaces = {
+    list: {
+      getSnapshot: () => ({
+        items: [
+          { workspaceId: 'wa', path: '/tmp/wa', title: '有库工作区', sessionIds: ['s1'], createdAt: '', updatedAt: '' },
+          { workspaceId: 'wb', path: '/tmp/wb', title: '空工作区', sessionIds: ['s2'], createdAt: '', updatedAt: '' },
+        ],
+      }),
+      subscribe: () => () => {},
+    },
+  }
+  const { container } = await mountLoaded({
+    select: false,
+    workspaces,
+    // s2 会话的读请求一律 not-found（空工作区）
+    wrapRead: (read) => async (sessionId, rel, range, signal) => {
+      if (sessionId === 's2') {
+        return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
+      }
+      return read(sessionId, rel, range, signal)
+    },
+  })
+  await act(async () => { await new Promise((r) => setTimeout(r, 150)) })
+
+  const text = container.textContent
+  assert.ok(text.includes('有库工作区'), '总览应列出工作区标题')
+  assert.ok(text.includes('noAsset'), '空工作区行应渲染"尚未生成"提示')
+
+  // 真实 click 总览行 → 下钻单库
+  const row = [...container.querySelectorAll('button[aria-label]')]
+    .find((b) => b.getAttribute('aria-label').includes('有库工作区'))
+  assert.ok(row, '应渲染总览行按钮')
+  await act(async () => {
+    row.click()
+    await new Promise((r) => setTimeout(r, 150))
+  })
+  const singleText = container.textContent
+  assert.ok(singleText.includes('statFiles'), '下钻后应渲染单库统计')
+  const stillOverview = [...container.querySelectorAll('button[aria-label]')]
+    .some((b) => b.getAttribute('aria-label').includes('有库工作区'))
+  assert.ok(!stillOverview, '总览行应被单库视图取代')
 })

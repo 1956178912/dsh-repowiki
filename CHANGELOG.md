@@ -3,6 +3,35 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.18.0] - 2026-11-26
+
+### Added
+
+- **Multi-workspace overview (ui-plan slice 2)**: the Repo Wiki panel now
+  defaults to an overview mode listing every workspace as a row — title,
+  path, a generated/not-generated status dot, per-workspace stats (files /
+  symbols / cards / docs / last index time), and the same status vocabulary
+  as the single view ("not generated yet", "no session"). Clicking a row
+  drills into the existing single-workspace panel; the header has
+  Overview/Workspace mode toggles and the workspace picker still works.
+  The plan's technical concern ("cross-workspace aggregation may need a
+  new host data plane") resolved itself: each workspace entry already
+  carries `sessionIds`, so `loadWorkspaceStats` reuses the same per-session
+  scope channel as the single view (3 concurrent workspaces, ~3 remote
+  calls each).
+
+### Fixed
+
+- Style warning on primary buttons (mixing shorthand `border` with
+  longhand `borderColor` during rerender) — primaryStyle now overrides
+  with the same shorthand form.
+
+### Changed
+
+- Test suite 97 → 99: stub test for the overview (three workspaces:
+  generated / empty / no-session, drill-in via picker) and a DOM test
+  driving the overview drill-in with a real click on two workspaces.
+
 ## [0.17.0] - 2026-11-26
 
 ### Added
