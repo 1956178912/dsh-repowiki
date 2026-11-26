@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete + panel views + multi-workspace overview (v0.20.0)
+## Current stage: Phases 1–4 complete + panel views + multi-workspace overview (v0.22.0)
 
 | Capability | Description |
 |---|---|
@@ -63,12 +63,21 @@ Or use `plugin_manager` with `install_bundle` and this directory's absolute path
 
 ```sh
 # Unit + integration tests (node's built-in test runner, zero dependencies)
-node --test test/*.test.js
+npm test
+
+# With coverage
+npm run test:coverage
+
+# Host drift check: parse the local app.asar and verify every
+# --dsw-alias-* token used by client.js is still defined by dsh's own CSS
+# (with a dark-mode override). Skips with exit code 3 when app.asar is not
+# present (CI). v0.22.0.
+npm run verify:host
 ```
 
 ## Upgrade operations (dsh is in rc; public seams change often)
 
-- This bundle declares **no** `@deepseek-ai/dsh-*` dependencies (shipped packages resolve from the dsh installation) — the cost is that **every dsh upgrade requires a regression pass**: run `node --test test/*.test.js`, plus a minimal in-session smoke of `repowiki-index` and `repowiki-cards`.
+- This bundle declares **no** `@deepseek-ai/dsh-*` dependencies (shipped packages resolve from the dsh installation) — the cost is that **every dsh upgrade requires a regression pass**: run `npm test`, then `npm run verify:host` (catches theme-token renaming/removal against the upgraded app's own bundled CSS), plus a minimal in-session smoke of `repowiki-index` and `repowiki-cards`.
 - `engines.dsh` is only a lower bound, not a compatibility proof.
 - `index.json` carries `schemaVersion`; on version mismatch the read side degrades to a "rebuild" prompt instead of crashing.
 
@@ -76,6 +85,7 @@ node --test test/*.test.js
 
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
+scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
 cordis.patch.yml       Loader patch (inserts the plugin row)
 src/schema.js          Constants and domain conventions (single source)
 src/symbols.js         Zero-dependency symbol extraction (JS/TS/Python)

@@ -95,4 +95,4 @@
 - **后置项（有意不做，YAGNI）**：agentOptions 模型覆盖、模型下拉 UI、LSP 符号级传导、语义索引。（多工作区总览原列后置，v0.18.0 已实现——每工作区条目自带 `sessionIds`，跨工作区读取无需新的 Host 数据面。）
 - **结论**：修订版方案 Phase 1–4 全部明列项完成（Phase 4 的投影候选与语义索引两处为有据降级，决策记录在案）；升级韧性九条 8/9 落实；无静默偏离。
 
-一句话：**方案主干 100% 覆盖，三处有据降级（投影→显式写入、tree-sitter→手写解析器、state.json→frontmatter 标记），一处硬条款（CI 门禁）待用户决定是否补。**
+一句话：**方案主干 100% 覆盖，三处有据降级（投影→显式写入、tree-sitter→手写解析器、state.json→frontmatter 标记）；CI 门禁已落地（GitHub Actions Node 22/24 绿）；宿主私有 API（主题令牌）已有本地漂移自检（`npm run verify:host`，v0.22.0）。**

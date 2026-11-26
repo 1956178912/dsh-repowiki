@@ -3,6 +3,27 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.22.0] - 2026-11-26
+
+### Added
+
+- **Host theme-token drift check** (`scripts/verify-host-tokens.mjs`,
+  `npm run verify:host`): parses the local `app.asar`, extracts dsh's own
+  bundled CSS, and verifies every `--dsw-alias-*` token referenced by
+  `client.js` is still defined by the theme package and has a dark-mode
+  (`body[data-ds-dark-theme]`) override. The token list is collected from
+  `client.js` itself, so it never goes stale. Exits 3 (skip, not fail) where
+  no `app.asar` exists — e.g. CI runners. Also wired as
+  `test/host-tokens.test.js`, which skips gracefully in CI and asserts
+  locally (122/122 locally, skips on GitHub Actions).
+- `npm scripts` (`test`, `test:coverage`, `verify:host`) — previously tests
+  were invoked with raw `node --test`.
+
+### Changed
+
+- README: development/testing and upgrade-operations sections now document
+  the drift check as part of the per-dsh-upgrade regression pass.
+
 ## [0.21.0] - 2026-11-26
 
 ### Changed
