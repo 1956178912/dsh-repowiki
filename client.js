@@ -182,19 +182,22 @@ window.__ModuleLoader__.load({
      */
     function RepoWikiIcon({ size }) {
       const edge = typeof size === 'number' ? size : 18
+      // 与官方产品图标集同款处理：currentColor 描边、无背景 tile，
+      // 颜色随侧栏按钮文字色在明暗主题自适应（见 docs/checkpoints/phase-13-icons.md）
       return h('svg', {
-        viewBox: '0 0 96 96', width: edge, height: edge,
+        viewBox: '0 0 24 24', width: edge, height: edge, fill: 'none',
+        stroke: 'currentColor', 'stroke-width': 1.7,
+        'stroke-linecap': 'round', 'stroke-linejoin': 'round',
         'aria-hidden': true,
         style: { display: 'block', pointerEvents: 'none' },
       },
-        h('rect', { x: 8, y: 20, width: 80, height: 60, rx: 10, fill: '#2563eb' }),
+        // 打开的书本：两页 + 书脊
         h('path', {
-          d: 'M16 32c10-6 22-6 32 0 10-6 22-6 32 0v40c-10-6-22-6-32 0-10-6-22-6-32 0z',
-          fill: '#ffffff',
+          d: 'M4 6.8C6.6 5.2 9.4 5.2 12 6.8c2.6-1.6 5.4-1.6 8 0V18c-2.6-1.6-5.4-1.6-8 0-2.6-1.6-5.4-1.6-8 0z',
         }),
-        h('circle', { cx: 34, cy: 48, r: 5, fill: '#93c5fd' }),
-        h('circle', { cx: 62, cy: 48, r: 5, fill: '#93c5fd' }),
-        h('path', { d: 'M37 62h22', stroke: '#2563eb', 'stroke-width': 4, 'stroke-dasharray': '6 5' }),
+        h('path', { d: 'M12 6.8V18' }),
+        // 页面上的符号行：符号级检索
+        h('path', { d: 'M6.6 10.2h3.2M14.2 10.2h3.2M6.6 13.4h3.2M14.2 13.4h3.2' }),
       )
     }
 

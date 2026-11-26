@@ -32,7 +32,7 @@
 
 ## 关键符号 / Key symbols
 
-- `RepoWikiIcon` (function): 侧栏入口图标，自绘 SVG（96x96 viewBox，蓝色书本+虚线笔触），size 缺省 18；aria-hidden 且 pointerEvents:none，纯装饰，点击导航由框架按 PANEL_KEY 关联。
+- `RepoWikiIcon` (function): 侧栏入口图标，自绘 SVG（24x24 viewBox，currentColor 描边的打开书本 + 符号行，无背景 tile，随侧栏文字色适配明暗主题），size 缺省 18；aria-hidden 且 pointerEvents:none，纯装饰，点击导航由框架按 PANEL_KEY 关联。
 - `RepoWikiPage` (function): 主页面组件，props 由 main slot 的 inject 提供（t/workspaces/startSession/notice）；useState 初始化自 workspaces.list.getSnapshot()，useEffect 订阅列表变更同步下拉，渲染工作区 select、四个动作按钮和 role=status 的状态消息。
 - `run` (function): RepoWikiPage 内部闭包：kind 为 index/extract/generate/all；未选工作区时提示并返回，否则调 buildPrompt 拼 prompt 后 startSession(current, { prompt, whenDraftExists: 'append' })，成功提示去会话看进度，同步异常进 catch 显示失败原因。
 - `buildPrompt` (function): 模块级函数：按 kind 组装分步执行 prompt（extract 含先建索引可跳过的说明、all 为三步全量），末尾要求模型报告文件数/符号数/卡片数/页面数；不显式传 root，依赖会话 cwd 即工作区目录的默认锚定。

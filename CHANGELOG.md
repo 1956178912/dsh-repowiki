@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.26.0] - 2026-11-26
+
+### Changed
+
+- **Icons aligned with the official product treatment** (audited against
+  `references/artwork.md` and two first-party samples extracted from
+  app.asar):
+  - `icon.svg`: was a 96×96 full-bleed blue rounded tile — artwork.md
+    says Plugin Manager draws the surrounding tile itself. Redrawn at the
+    official 36×36 canvas with a 22×22 gradient card (`#69B9FF`→`#324DE2`,
+    the same treatment as the shipped forge-bundle icon) carrying a white
+    open-book glyph with light-blue symbol rows.
+  - Client sidebar icon (`RepoWikiIcon`): was 96×96 with fixed blue/white
+    fills; redrawn as a 24×24 `currentColor` stroked glyph (open book +
+    symbol rows, `fill="none"`), matching the product icon set convention
+    where color rides currentColor and adapts to both themes.
+- Corpus fixture card describing the icon updated (it feeds the client
+  render regression).
+
+### Added
+
+- `test/icon.test.js`: guards both icons structurally — 36×36/24×24
+  canvases, no `<text>`/`<font>`/`<script>`/`<style>`/`<image>`/
+  foreignObject/animation/remote refs, unique local ids, currentColor on
+  the sidebar glyph, no residual fixed colors, ≤256 KiB (132/132).
+
 ## [0.25.0] - 2026-11-26
 
 ### Added

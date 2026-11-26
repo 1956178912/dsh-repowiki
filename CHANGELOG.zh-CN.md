@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.26.0] - 2026-11-26
+
+- **图标对齐官方处理**（按 dsh-doc artwork.md 与两个官方一级样本）：
+  - `icon.svg`：原为 96×96 全出血蓝色圆角 tile（官方明令 Plugin Manager
+    自绘外框，插件不要画背景）；重绘为 36×36 画布 + 22×22 渐变卡片
+    （#69B9FF→#324DE2，与官方 forge-bundle 图标同款）+ 白色书本字形。
+  - 侧栏图标 `RepoWikiIcon`：由 96×96 固定配色改为 24×24 currentColor
+    描边字形（fill=none），随侧栏文字色适配明暗主题。
+- 语料 fixture 中图标描述同步；新增 `test/icon.test.js` 结构守卫
+  （132/132）。图标渲染效果仍需用户在浏览器确认。
+
 ## [0.25.0] - 2026-11-26
 
 - 新增**插件管理页详情页**（按官方 plugin-details 约定）：`docs/detail/DETAIL.md`

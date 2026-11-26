@@ -1,12 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
-  <rect width="96" height="96" rx="20" fill="#2563eb"/>
-  <!-- 打开的书本：象征知识的仓库级沉淀 -->
-  <path d="M14 30c10-6 22-6 34 0 12-6 24-6 34 0v40c-10-6-22-6-34 0-12-6-24-6-34 0z" fill="#ffffff"/>
-  <path d="M48 30v40" stroke="#2563eb" stroke-width="2.5"/>
-  <!-- 卡片与符号连线：符号级检索 -->
-  <rect x="22" y="38" width="14" height="10" rx="2" fill="#93c5fd"/>
-  <rect x="60" y="38" width="14" height="10" rx="2" fill="#93c5fd"/>
-  <circle cx="29" cy="60" r="3" fill="#2563eb"/>
-  <circle cx="67" cy="60" r="3" fill="#2563eb"/>
-  <path d="M32 60h35" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 4"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <rect x="7" y="7" width="22" height="22" rx="4" fill="url(#repowiki-card)" fill-opacity="0.9" />
+  <path d="M11.6 14.4c2-1.3 4.4-1.3 6.4 0 2-1.3 4.4-1.3 6.4 0v9.2c-2-1.3-4.4-1.3-6.4 0-2-1.3-4.4-1.3-6.4 0z" fill="#ffffff"/>
+  <path d="M18 14.4v9.2" stroke="#324DE2" stroke-width="1.2"/>
+  <path d="M13.6 17.4h3m1.8 0h3" stroke="#9CC3FF" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M13.6 20h3m1.8 0h3" stroke="#9CC3FF" stroke-width="1.3" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="repowiki-card" x1="18" y1="7" x2="18" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#69B9FF" />
+      <stop offset="1" stop-color="#324DE2" />
+    </linearGradient>
+  </defs>
 </svg>
