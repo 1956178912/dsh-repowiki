@@ -3,6 +3,20 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.27.0] - 2026-11-26
+
+- **修复空结果文案 bug**（UI/UX 评审发现）：筛选或搜索为 0 行时面板固定
+  渲染“该文件尚未生成知识卡片”，在“已生成/待更新”筛选或搜索无匹配时
+  误导用户。现按上下文区分文案（emptySearch 带查询插值、按筛选的
+  emptyCards/emptyGenerated/emptyDone/emptyStale），并加回归测试。
+- 总览模式在页面重新可见时也刷新统计（此前只刷单库视图，生成完回来
+  看到旧数字）；单库未选工作区补引导文案。
+- 主按钮文字换官方 `--dsw-alias-label-on-color` 令牌（深色按钮底变浅时
+  对比度有对应重定义），漂移自检随之覆盖 9 个令牌。
+- test/icon.test.js 增加全出血 tile 断言（补评审指出的测试盲区；居中
+  22x22 卡片与官方 forge-bundle 样本一致，保留）。
+- 新增 `docs/checkpoints/phase-14-ux-review.md` 评审记录与保留观察项。
+
 ## [0.26.0] - 2026-11-26
 
 - **图标对齐官方处理**（按 dsh-doc artwork.md 与两个官方一级样本）：

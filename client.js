@@ -100,6 +100,11 @@ const DICTS = {
     never: '尚未生成卡片',
     pending: '未生成',
     pendingHint: '该文件尚未生成知识卡片。',
+    emptySearch: '没有匹配“{q}”的结果。',
+    emptyCards: '暂无知识卡片，用上方按钮生成。',
+    emptyGenerated: '还没有已生成的卡片。',
+    emptyDone: '所有索引文件都已生成卡片。',
+    emptyStale: '没有需要更新的卡片。',
     staleFilter: '待更新',
     staleHint: '{n} 张卡片待更新（源文件已变化）',
     viewCards: '卡片',
@@ -152,6 +157,11 @@ const DICTS = {
     never: 'No cards generated yet',
     pending: 'Pending',
     pendingHint: 'No knowledge card generated for this file yet.',
+    emptySearch: 'No results matching "{q}".',
+    emptyCards: 'No knowledge cards yet — generate them with the buttons above.',
+    emptyGenerated: 'No generated cards yet.',
+    emptyDone: 'Every indexed file has a card.',
+    emptyStale: 'No cards need updating.',
     staleFilter: 'Stale',
     staleHint: '{n} card(s) need an update (source changed)',
     viewCards: 'Cards',
@@ -534,6 +544,8 @@ window.__ModuleLoader__.load({
       const [overview, setOverview] = useState(true)
       const [overviewRows, setOverviewRows] = useState([])
       const [overviewStatus, setOverviewStatus] = useState('idle')
+      // 总览刷新节拍：页面重新可见时 +1，驱动总览 effect 重取各工作区统计
+      const [overviewTick, setOverviewTick] = useState(0)
       const [message, setMessage] = useState('')
       const latestRequest = useRef(0)
 
@@ -661,19 +673,21 @@ window.__ModuleLoader__.load({
           }
         })()
         return () => ac.abort()
-      }, [overview, items, files])
+      }, [overview, items, files, overviewTick])
 
-      // 回到页面时刷新一次（会话里生成完成后切回可见结果）
+      // 回到页面时刷新一次（会话里生成完成后切回可见结果）；总览模式同样刷新
       useEffect(() => {
         const onVisibility = () => {
-          if (!document.hidden && current) {
+          if (document.hidden) return
+          if (current) {
             const ac = new AbortController()
             load(ac.signal)
           }
+          if (overview) setOverviewTick((n) => n + 1)
         }
         document.addEventListener('visibilitychange', onVisibility)
         return () => document.removeEventListener('visibilitychange', onVisibility)
-      }, [load, current])
+      }, [load, current, overview])
 
       // Escape 关闭详情（卡片详情与记忆详情共用）
       useEffect(() => {
@@ -776,7 +790,8 @@ window.__ModuleLoader__.load({
         background: 'var(--dsw-alias-state-business-primary, #2563eb)',
         // 与 buttonStyle 的 border 同为简写形态（避免 shorthand/longhand 混用导致重渲染时的样式警告）
         border: '1px solid transparent',
-        color: '#ffffff',
+        // 官方"彩色底上的文字"令牌（深色模式按钮底变浅时亦有对应重定义，保证对比度）
+        color: 'var(--dsw-alias-label-on-color, #ffffff)',
       }
       const inputStyle = {
         flex: 1, padding: '8px 10px', borderRadius: 8, fontSize: 14,
@@ -875,6 +890,7 @@ window.__ModuleLoader__.load({
         ),
 
         // 状态分支（单库模式）
+        !overview && status === 'idle' && h('p', { role: 'status', style: { ...muted } }, t('pickHint')),
         !overview && status === 'no-session' && h('p', { role: 'status', style: { ...muted } }, t('noSession')),
         !overview && status === 'no-asset' && h('p', { role: 'status', style: { ...muted } }, t('noAsset')),
         !overview && status === 'loading' && h('p', { role: 'status', style: { ...muted } }, t('loading')),
@@ -937,7 +953,15 @@ window.__ModuleLoader__.load({
             }, t('viewList')),
           ),
           filtered.length === 0
-            ? h('p', { style: { ...muted } }, t('pendingHint'))
+            ? h('p', { style: { ...muted }, role: 'status' },
+                query
+                  ? tt('emptySearch', { q: query })
+                  : t({
+                      all: 'emptyCards',
+                      generated: 'emptyGenerated',
+                      pending: 'emptyDone',
+                      stale: 'emptyStale',
+                    }[filter]))
             : (view === 'grid'
                 ? h('div', {
                     style: {

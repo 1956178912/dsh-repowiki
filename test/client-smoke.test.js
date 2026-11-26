@@ -443,6 +443,26 @@ test('待更新检测：digest 不一致的卡片计入提示与待更新筛选'
   assert.ok(!filtered.some(s => s.includes('A 卡片')), '待更新筛选排除未变化卡片')
 })
 
+test('空结果文案按上下文区分（不再误用 pendingHint）', async () => {
+  const hooks = await mountReadyPage()
+  const search = findNode(hooks.root, (n) => n.type === 'input'
+    && n.props['aria-label'] === 'searchPlaceholder')
+  assert.ok(search, '应渲染搜索框')
+
+  // 搜索无匹配 → 空文案应是 emptySearch，而非"尚未生成卡片"这类误导文案
+  search.props.onChange({ target: { value: 'zzz-无匹配' } })
+  await flush()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some((s) => s.includes('emptySearch')), '空搜索应渲染 emptySearch 文案')
+  assert.ok(!texts.some((s) => s.trim() === 'pendingHint'), '空结果不得误用 pendingHint')
+
+  // 清空查询后回到正常列表
+  search.props.onChange({ target: { value: '' } })
+  await flush()
+  const back = collectTexts(hooks.root)
+  assert.ok(back.some((s) => s.includes('A 卡片')), '清空搜索后应恢复卡片列表')
+})
+
 test('Wiki 页签：页面列表与单页原文浏览', async () => {
   const hooks = await mountReadyPage()
   const wikiTab = findNode(hooks.root, (n) => n.type === 'button'

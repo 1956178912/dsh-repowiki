@@ -22,6 +22,17 @@ test('icon.svg 满足官方 artwork 约定', () => {
   const ids = [...svg.matchAll(/id="([^"]+)"/g)].map((m) => m[1])
   assert.equal(new Set(ids).size, ids.length, 'id 必须唯一')
   for (const id of ids) assert.ok(/^[-\w]+$/.test(id), `id 应为简单本地名: ${id}`)
+  // 不画全出血 tile：artwork.md 明令 "Plugin Manager … draws the surrounding tile,
+  // so do not draw a tile or background in the SVG"。官方样本（forge-bundle）的
+  // 主体是 22x22 居中主题形状，全出血（≥34x34 且起点贴近原点）才构成 tile。
+  const rects = [...svg.matchAll(/<rect\b[^>]*>/g)].map((m) => m[0])
+  assert.ok(rects.length > 0, '图标应有几何元素')
+  for (const r of rects) {
+    const num = (attr) => parseFloat((r.match(new RegExp(`\\b${attr}="(-?[\\d.]+)"`)) || [])[1] ?? 0)
+    const x = num('x'), y = num('y'), w = num('width'), h = num('height')
+    assert.ok(x > 1 || y > 1 || w < 34 || h < 34,
+      `rect(${x},${y},${w},${h}) 不得是全出血 tile 背景（外框由 Plugin Manager 绘制）`)
+  }
 })
 
 test('client.js 侧栏图标使用 currentColor 且无背景 tile', () => {

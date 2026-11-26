@@ -5,6 +5,42 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.27.0] - 2026-11-26
+
+### Fixed
+
+- **Empty-state copy bug** (found by the UI/UX review): when a filter or
+  search produced zero rows, the panel rendered the pending-file hint
+  ("no knowledge card generated for this file yet") unconditionally —
+  actively misleading under the generated/stale filters or a failed search.
+  The empty branch now chooses copy by context: `emptySearch` (with the
+  query interpolated) when a query is active, otherwise per filter
+  (`emptyCards` / `emptyGenerated` / `emptyDone` / `emptyStale`).
+  Regression test in `test/client-smoke.test.js`.
+
+### Changed
+
+- **Overview mode now refreshes when the page becomes visible** (the
+  visibilitychange handler previously only reloaded the single-workspace
+  view, so returning from a generation session showed stale overview
+  stats); driven by a new `overviewTick` state in the overview load
+  effect.
+- Single-workspace mode with no workspace selected now shows a guidance
+  line (`pickHint`) instead of an empty body.
+- Primary button text uses the official `--dsw-alias-label-on-color`
+  token instead of a hardcoded `#ffffff` (the button background lightens
+  in dark mode via `state-business-primary`; the on-color token has the
+  matching dark override). The drift checker now tracks 9 tokens.
+
+### Added
+
+- `test/icon.test.js`: full-bleed tile guard — the icon must not carry a
+  near-origin rect ≥34×34 (artwork.md: Plugin Manager draws the
+  surrounding tile; the centered 22×22 card matches the official
+  forge-bundle sample). Fills the blind spot the review flagged.
+- `docs/checkpoints/phase-14-ux-review.md`: the review transcript,
+  applied fixes, and retained observation items.
+
 ## [0.26.0] - 2026-11-26
 
 ### Changed
