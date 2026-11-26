@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.24.0] - 2026-11-26
+
+- 新增**打包完整性守卫**（`test/pack.test.js`）：跑 `npm pack --dry-run`
+  断言产物含全部运行时文件（入口、客户端、loader patch、图标、双 locale、
+  全部 `src/*.js`）并排除开发目录；`files` 字段手工维护，新增模块忘加时
+  CI 此前无法发现。
+- **漂移自检脚本自身被测试**（`test/verify-host-tokens.test.js`）：在临时
+  目录构造合成 asar（真实 header + offset 布局），用 `DSH_APP_ASAR` 指向
+  夹具，驱动 pass / 缺失 / 无深色三条路径——该脚本此前只在有真 asar 的
+  机器上运行（CI 永远跳过），解析逻辑零回归保护。
+
 ## [0.23.0] - 2026-11-26
 
 - **门面双语补齐**：新增 `CHANGELOG.zh-CN.md`（本文件，摘要式镜像并与英文版

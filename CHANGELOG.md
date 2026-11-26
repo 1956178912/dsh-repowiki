@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.24.0] - 2026-11-26
+
+### Added
+
+- **Pack completeness guard** (`test/pack.test.js`): runs `npm pack
+  --dry-run` and asserts the tarball contains every runtime file (entry
+  points, client, loader patch, icon, both locales, every `src/*.js`) and
+  excludes dev-only paths (`test/`, `scripts/`, `docs/`, `.github/`,
+  CHANGELOGs). The `files` field is hand-maintained — a new `src` module or
+  locale silently missing from the shipped bundle was previously
+  undetectable by CI. Also asserts `exports` targets are packed and
+  runtime dependencies stay empty.
+- **The drift checker is now tested itself** (`test/verify-host-tokens.test.js`):
+  builds synthetic asar archives (header + byte-offset file layout, the real
+  format) in a temp dir and drives `scripts/verify-host-tokens.mjs` through
+  its pass / missing-token / no-dark-variant paths with `DSH_APP_ASAR`
+  pointed at the fixture. Until now the script only ever ran on machines
+  with a real app.asar (CI always skips) — its header parsing and offset
+  arithmetic had zero regression protection.
+
 ## [0.23.0] - 2026-11-26
 
 ### Changed
