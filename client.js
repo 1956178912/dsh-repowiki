@@ -667,7 +667,7 @@ window.__ModuleLoader__.load({
         style: filter === value ? primaryStyle : buttonStyle,
       }, `${label}${count > 0 ? ` ${count}` : ''}`)
 
-      return h('div', {
+      return h(ErrorBoundary, null, h('div', {
         style: { padding: '24px 28px', maxWidth: 960, margin: '0 auto' },
         'aria-label': t('title'),
       },
@@ -832,7 +832,53 @@ window.__ModuleLoader__.load({
           style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-label-primary, #111827)' },
         }, message),
         notice,
+      ),
       )
+    }
+
+    /**
+     * 页面级错误边界：子树渲染抛错时展示可读错误文案而非空白 slot
+     * （ui-plugin.md："a throwing component blanks your slot entry"）。
+     * 不吞错——componentDidCatch 往 console 打印，便于现场诊断。
+     */
+    class ErrorBoundary extends React.Component {
+      /**
+       * @param {object} props - 子元素。
+       */
+      constructor(props) {
+        super(props)
+        this.state = { error: '' }
+      }
+
+      /**
+       * 渲染期错误转为状态（class field 形态兼容宿主 React 版本）。
+       * @param {Error} error - 捕获的错误。
+       * @returns {{error:string}} 新状态。
+       */
+      static getDerivedStateFromError(error) {
+        return { error: error?.message ?? String(error) }
+      }
+
+      /**
+       * 错误同时打到 console（slot entry crash 的诊断位置）。
+       * @param {Error} error - 捕获的错误。
+       */
+      componentDidCatch(error) {
+        console.error('repowiki: RepoWikiPanel error:', error)
+      }
+
+      render() {
+        if (this.state.error) {
+          return h('p', {
+            role: 'alert',
+            style: {
+              padding: 16, fontSize: 13, margin: 16,
+              color: 'var(--dsw-alias-state-error-primary, #dc2626)',
+            },
+          }, `Repo wiki panel error: ${this.state.error}`)
+        }
+        return this.props.children
+      }
     }
 
     /** 状态点：已生成（主色）/未生成（灰）。 */

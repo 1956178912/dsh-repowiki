@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.14.0] - 2026-11-26
+
+### Added
+
+- A page-level `ErrorBoundary` now wraps the Repo Wiki panel: a render-time
+  throw renders a readable inline error line ("Repo wiki panel error: …")
+  instead of blanking the whole `main` slot (per dsh-doc ui-plugin.md: "a
+  throwing component blanks your slot entry"). `componentDidCatch` logs to
+  the console with the `repowiki:` prefix for on-site diagnosis.
+
+### Tooling
+
+- The client smoke-test React stub now supports class components
+  (`isReactComponent` marker, `getDerivedStateFromError` error-boundary
+  simulation) so ErrorBoundary-shipping code paths are exercised (81/81).
+
 ## [0.13.1] - 2026-11-26
 
 ### Fixed

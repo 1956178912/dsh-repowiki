@@ -103,8 +103,37 @@ function makeHooks() {
   }
 }
 
+/** React.Component 的桩基类（ErrorBoundary 需要 Component/super/setState 语义）。 */
+class StubReactComponent {
+  constructor(props) {
+    this.props = props
+    this.state = {}
+  }
+
+  setState(partial) {
+    Object.assign(this.state, partial)
+  }
+}
+// 对齐真实 React：类组件靠 prototype.isReactComponent 判定
+StubReactComponent.prototype.isReactComponent = true
+
 function createElement(type, props, ...children) {
-  // 函数型组件：内联渲染（CardTile/CardRow/DetailPane 均不使用 hooks）
+  // 类组件：实例化 + 调 render（对齐真实 React 的 isReactComponent 判定；
+  // render 抛错时模拟 React 错误边界：getDerivedStateFromError + 重渲染）
+  if (typeof type === 'function' && type.prototype?.isReactComponent) {
+    const instance = new type({ ...(props || {}), children })
+    try {
+      const rendered = instance.render()
+      return Array.isArray(rendered) ? rendered[0] : rendered
+    } catch (err) {
+      const derived = type.getDerivedStateFromError?.(err)
+      if (!derived) throw err
+      instance.setState(derived)
+      const rendered = instance.render()
+      return Array.isArray(rendered) ? rendered[0] : rendered
+    }
+  }
+  // 函数型组件：内联渲染（CardTile/CardRow/DetailPane/WikiPanel/MemoryPanel）
   if (typeof type === 'function') {
     return type({ ...(props || {}), children })
   }
@@ -334,6 +363,7 @@ test('客户端模块按 ModuleLoader 约定注册并声明 remote 依赖', () =
     if (name === 'react') {
       return {
         createElement,
+        Component: StubReactComponent,
         useState: hooks.useState,
         useEffect: hooks.useEffect,
         useMemo: hooks.useMemo,
@@ -356,6 +386,7 @@ test('apply 注册侧栏与主页面，main 注入 face 提供 files', () => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
     return {
       createElement,
+      Component: StubReactComponent,
       useState: hooks.useState,
       useEffect: hooks.useEffect,
       useMemo: hooks.useMemo,
@@ -391,6 +422,7 @@ test('挂载页面：选中工作区后渲染统计、已生成卡片与未生�
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
     return {
       createElement,
+      Component: StubReactComponent,
       useState: hooks.useState,
       useEffect: hooks.useEffect,
       useMemo: hooks.useMemo,
@@ -430,6 +462,7 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
     return {
       createElement,
+      Component: StubReactComponent,
       useState: hooks.useState,
       useEffect: hooks.useEffect,
       useMemo: hooks.useMemo,
@@ -471,6 +504,7 @@ function mountPage() {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
     return {
       createElement,
+      Component: StubReactComponent,
       useState: hooks.useState,
       useEffect: hooks.useEffect,
       useMemo: hooks.useMemo,
