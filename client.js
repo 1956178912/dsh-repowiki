@@ -24,8 +24,9 @@
  *
  * 更新检测（ui-plan 切片 3）：卡片 frontmatter 的 sourceDigest 与索引
  * digest 不一致 → staleSet，驱动统计行的"待更新"提示与筛选页签。
- * Wiki 页签（切片 3）：列出 wiki/<locale>/ 页面并以原文呈现。
- *
+ * Wiki 页签（切片 3）：列出 wiki/<locale>/ 页面并以**排版文字**呈现
+ * （零依赖 Markdown 渲染器见下方 renderMarkdown：标题/列表/代码围栏/
+ * 引用/加粗/行内代码/链接；frontmatter 跳过）。**
  * 生成动作用 v0.3.0 已验证的 startSession(workspaceId, ...)（见
  * docs/checkpoints/phase-ui2.md 对 ui-plan startSession(undefined) 提案的
  * 取舍）：面板选择哪个工作区，生成就落在哪个工作区的新会话。
@@ -322,6 +323,7 @@ window.__ModuleLoader__.load({
             generatedAt: typeof parsed.meta.generatedAt === 'string' ? parsed.meta.generatedAt : '',
             sourceDigest: typeof parsed.meta.sourceDigest === 'string' ? parsed.meta.sourceDigest : '',
             summary: summaryFromBody(parsed.body),
+            body: parsed.body,
           }
         } catch {
           // 单张坏卡不阻断整批枚举
@@ -943,13 +945,15 @@ window.__ModuleLoader__.load({
                 }, tt('detailSymbols', { n: row.symbols })),
               ),
               h('div', {
-                style: { fontSize: 13, fontWeight: 600, marginBottom: 4,
+                style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
                   color: 'var(--dsw-alias-color-text, #111827)' },
               }, t('detailSummary')),
-              h('p', {
-                style: { margin: 0, fontSize: 13, lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-color-text, #111827)' },
-              }, card.summary || t('never')),
+              ...(card.body
+                ? renderMarkdown(card.body.replace(/^\s*#[^\n]*\n+/, ''))
+                : [h('p', {
+                    style: { margin: 0, fontSize: 13, lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-color-text, #111827)' },
+                  }, card.summary || t('never'))]),
             )
           : h('p', { style: { fontSize: 13, ...mutedStyle() } }, t('pendingHint')),
       )
@@ -970,16 +974,8 @@ window.__ModuleLoader__.load({
               style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-color-text, #111827)' },
             }, selected.title),
           ),
-          h('pre', {
-            style: {
-              padding: 14, borderRadius: 10, fontSize: 12, lineHeight: 1.6,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-              background: 'var(--dsw-alias-color-surface, #ffffff)',
-              color: 'var(--dsw-alias-color-text, #111827)',
-              maxHeight: 560, overflow: 'auto',
-            },
-          }, selected.text),
+          // 原文 Markdown 渲染为排版文字（frontmatter 由渲染器跳过）
+          h('div', { style: { maxHeight: 560, overflow: 'auto' } }, ...renderMarkdown(selected.text)),
         )
       }
       if (entries.length === 0) {
@@ -1027,16 +1023,8 @@ window.__ModuleLoader__.load({
               style: { ...statusPillStyle(selected.status), flex: 'none' },
             }, selected.status),
           ),
-          h('pre', {
-            style: {
-              padding: 14, borderRadius: 10, fontSize: 12, lineHeight: 1.6,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-              background: 'var(--dsw-alias-color-surface, #ffffff)',
-              color: 'var(--dsw-alias-color-text, #111827)',
-              maxHeight: 560, overflow: 'auto',
-            },
-          }, selected.text),
+          // 原文 Markdown 渲染为排版文字（frontmatter 由渲染器跳过）
+          h('div', { style: { maxHeight: 560, overflow: 'auto' } }, ...renderMarkdown(selected.text)),
         )
       }
       if (entries.length === 0) {
@@ -1080,6 +1068,170 @@ window.__ModuleLoader__.load({
         fontSize: 11, padding: '2px 8px', borderRadius: 999,
         border: `1px solid ${color}`, color,
       }
+    }
+
+    /**
+     * 极简 Markdown 渲染器（零依赖：practices 禁止引入第三方前端包，
+     * 手写解析器复用宿主 React）。支持：frontmatter 跳过、#~/##~/### 标题、
+     * 代码围栏、无序/有序列表、引用、分隔线、加粗、行内代码、链接。
+     * 不支持表格/图片/嵌套列表（资产文本不含这些形态）。
+     * @param {string} md - Markdown 文本。
+     * @returns {Array} React 元素数组。
+     */
+    function renderMarkdown(md) {
+      const lines = md.split('\n')
+      const blocks = []
+      let i = 0
+      let key = 0
+      const headingStyle = (level) => ({
+        margin: level === 1 ? '0 0 10px' : '14px 0 6px',
+        fontSize: level === 1 ? 18 : level === 2 ? 15 : 14,
+        fontWeight: 600,
+        color: 'var(--dsw-alias-color-text, #111827)',
+      })
+      const paragraphStyle = { margin: '0 0 10px', fontSize: 13, lineHeight: 1.6 }
+      while (i < lines.length) {
+        const line = lines[i]
+        // frontmatter（首行 --- 到下一个 ---）跳过不渲染
+        if (line === '---' && i === 0) {
+          const end = lines.indexOf('---', 1)
+          if (end > 0) { i = end + 1; continue }
+        }
+        // 代码围栏
+        if (line.startsWith('```')) {
+          const codeLines = []
+          i++
+          while (i < lines.length && !lines[i].startsWith('```')) {
+            codeLines.push(lines[i]); i++
+          }
+          i++ // 闭合围栏
+          blocks.push(h('pre', {
+            key: key++,
+            style: {
+              padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+              overflow: 'auto', margin: '0 0 10px',
+              background: 'var(--dsw-alias-color-subtle, #f3f4f6)',
+              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+            },
+          }, codeLines.join('\n')))
+          continue
+        }
+        // 标题（# ~ ###）
+        const heading = /^(#{1,3})\s+(.*)$/.exec(line)
+        if (heading) {
+          const level = heading[1].length
+          blocks.push(h(`h${level + 1}`, { key: key++, style: headingStyle(level) },
+            ...inlineText(heading[2])))
+          i++
+          continue
+        }
+        // 分隔线（独占一行的 ---）
+        if (/^-{3,}$/.test(line)) {
+          blocks.push(h('hr', {
+            key: key++,
+            style: { border: 0, margin: '12px 0', borderTop: '1px solid var(--dsw-alias-color-border, #d1d5db)' },
+          }))
+          i++
+          continue
+        }
+        // 引用
+        if (line.startsWith('> ')) {
+          const quoteLines = []
+          while (i < lines.length && lines[i].startsWith('> ')) {
+            quoteLines.push(lines[i].slice(2)); i++
+          }
+          blocks.push(h('blockquote', {
+            key: key++,
+            style: {
+              margin: '0 0 10px', padding: '6px 12px',
+              borderLeft: `3px solid var(--dsw-alias-color-border, #d1d5db)`,
+              color: 'var(--dsw-alias-color-muted, #6b7280)', fontSize: 13,
+            },
+          }, ...quoteLines.map((t, k) => h('div', { key: k }, ...inlineText(t)))))
+          continue
+        }
+        // 无序列表
+        if (/^[-*]\s+/.test(line)) {
+          const items = []
+          while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^[-*]\s+/, '')); i++
+          }
+          blocks.push(h('ul', {
+            key: key++, style: { margin: '0 0 10px', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 },
+          }, ...items.map((t, k) => h('li', { key: k }, ...inlineText(t)))))
+          continue
+        }
+        // 有序列表
+        if (/^\d+\.\s+/.test(line)) {
+          const items = []
+          while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\d+\.\s+/, '')); i++
+          }
+          blocks.push(h('ol', {
+            key: key++, style: { margin: '0 0 10px', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 },
+          }, ...items.map((t, k) => h('li', { key: k }, ...inlineText(t)))))
+          continue
+        }
+        // 空行
+        if (line.trim() === '') { i++; continue }
+        // 段落：连继行直到空行或块级起始
+        const paraLines = []
+        while (i < lines.length && lines[i].trim() !== ''
+          && !/^(#{1,3}\s|```|-{3,}$|>\s|[-*]\s|\d+\.\s)/.test(lines[i])) {
+          paraLines.push(lines[i]); i++
+        }
+        blocks.push(h('p', { key: key++, style: paragraphStyle },
+          ...inlineText(paraLines.join(' '))))
+      }
+      return blocks
+    }
+
+    /**
+     * 行内 Markdown：**加粗**、`代码`、[文本](链接) → h 数组。
+     * @param {string} text - 行内文本。
+     * @returns {Array} 字符串与元素混合数组。
+     */
+    function inlineText(text) {
+      const tokens = []
+      let rest = text
+      let key = 0
+      while (rest.length > 0) {
+        const link = /\[([^\]]+)\]\(([^)\s]+)\)/.exec(rest)
+        const bold = /\*\*([^*]+)\*\*/.exec(rest)
+        const code = /`([^`]+)`/.exec(rest)
+        const candidates = [
+          link ? {
+            index: link.index, end: link.index + link[0].length,
+            node: h('a', {
+              key: key++, href: link[2], target: '_blank', rel: 'noreferrer noopener',
+              style: { color: 'var(--dsw-alias-color-primary, #2563eb)' },
+            }, link[1]),
+          } : null,
+          bold ? {
+            index: bold.index, end: bold.index + bold[0].length,
+            node: h('strong', { key: key++ }, bold[1]),
+          } : null,
+          code ? {
+            index: code.index, end: code.index + code[0].length,
+            node: h('code', {
+              key: key++,
+              style: {
+                fontSize: 12, padding: '1px 4px', borderRadius: 4,
+                background: 'var(--dsw-alias-color-subtle, #f3f4f6)',
+              },
+            }, code[1]),
+          } : null,
+        ].filter(Boolean).sort((a, b) => a.index - b.index)
+        if (candidates.length === 0) {
+          tokens.push(rest)
+          break
+        }
+        const next = candidates[0]
+        if (next.index > 0) tokens.push(rest.slice(0, next.index))
+        tokens.push(next.node)
+        rest = rest.slice(next.end)
+      }
+      return tokens
     }
 
     /** 卡片瓦片/行共用外框样式。 */

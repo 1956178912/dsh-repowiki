@@ -3,6 +3,27 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.13.0] - 2026-11-26
+
+### Changed
+
+- Wiki and memory detail views now render the page as **formatted text
+  instead of raw Markdown source**. The web client ships a zero-dependency
+  Markdown renderer (`renderMarkdown` + `inlineText`) that parses headings,
+  code fences, unordered/ordered lists, blockquotes, rules, bold, inline
+  code, and links into host React elements; frontmatter blocks are skipped
+  (no third-party client packages, per the plugin stability rules).
+- Card details show the **full card body** (all sections: summary, purpose,
+  key symbols, pitfalls, related modules), rendered with the same renderer,
+  instead of only the summary line — the details no longer feel clipped.
+- `loadCards` keeps the full body alongside the summary.
+
+### Tests
+
+- A rendering test asserts formatted output: card details contain the
+  key-symbols section text, no `##` source markers, no frontmatter JSON;
+  wiki details show the body without frontmatter (81/81 green).
+
 ## [0.12.0] - 2026-11-26
 
 ### Added

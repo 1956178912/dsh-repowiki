@@ -199,6 +199,10 @@ function makeFakeRemotes(overrides = {}) {
     '',
     '职责正文',
     '',
+    '## 关键符号 / Key symbols',
+    '',
+    '- `fa` (function): 做某事',
+    '',
   ].join('\n')
   // c.js 的卡片：记录的 sourceDigest 与索引不一致 → 待更新
   const cardC = [
@@ -557,6 +561,36 @@ test('记忆页签：条目列表（状态徽章）与单条原文浏览', async
   assert.ok(pageTexts.some(s => s.includes('摘要驱动增量重建。')), '应呈现条目正文')
   const detailBack = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
   assert.ok(detailBack, '详情有返回控件')
+})
+
+test('卡片详情与 Wiki 详情以排版文字渲染（非 Markdown 源码）', async () => {
+  const hooks = await mountReadyPage()
+
+  // 打开 A 卡片详情：含关键符号章节正文，无残留源码标记
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  assert.ok(tile, '卡片可打开')
+  tile.props.onClick()
+  await flush()
+  const detailTexts = collectTexts(hooks.root)
+  assert.ok(detailTexts.some(s => s.includes('职责正文')), '详情渲染"职责"章节')
+  assert.ok(detailTexts.some(s => s.includes('做某事')), '详情渲染"关键符号"章节列表项')
+  assert.ok(!detailTexts.some(s => s.includes('## ')), '详情不应残留 Markdown 源码标题')
+  assert.ok(!detailTexts.some(s => s.includes('"schemaVersion"')), 'frontmatter 不应展示')
+  const headingNode = findNode(hooks.root, (n) => typeof n.type === 'string' && n.type.startsWith('h'))
+  assert.ok(headingNode, '详情含排版标题节点')
+
+  // Wiki 详情：正文渲染为排版文字
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  wikiTab.props.onClick()
+  await flush()
+  const entry = findNode(hooks.root, (n) => n.type === 'button'
+    && n.children?.some(c => Array.isArray(c?.children) && c.children.includes('概览')))
+  entry.props.onClick()
+  await flush()
+  const wikiTexts = collectTexts(hooks.root)
+  assert.ok(wikiTexts.some(s => s.includes('这是概览正文。')), 'Wiki 正文渲染')
+  assert.ok(!wikiTexts.some(s => s.includes('"generatedAt"')), 'Wiki frontmatter 不展示')
 })
 
 /**
