@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phase 3 complete + panel slices 1-3 (v0.7.0)
+## Current stage: Phase 3 complete + Phase 4 memory + panel slices 1-3 (v0.8.0)
 
 | Capability | Description |
 |---|---|
@@ -19,11 +19,13 @@ English | [中文](README.zh-CN.md)
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | `repowiki-export` tool | Copies the `.dsh-repowiki/` assets into a directory snapshot (backup or transfer; Markdown/JSON only, no model calls); a non-empty target is refused unless `overwrite` |
 | `repowiki-import` tool | Restores `.dsh-repowiki/` from a snapshot directory; existing assets are protected unless `overwrite`; verifies `index.json` compatibility afterwards |
+| `repowiki-memory` tool | Persists knowledge learned in a session into `.dsh-repowiki/memory/<locale>/` (default `pending`), then `list` / `accept` / `reject` closes the review loop; entries are Markdown with a JSON frontmatter and travel with Git |
 | Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page: file/symbol/card/doc counts and latest update, an all/generated/pending/stale filter (pending = listed in `index.json` without a card; stale = card digest no longer matches the file), search, grid and list views, card details, and a Wiki tab that browses the generated pages — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
 
 Roadmap:
 - Phase 3 (done in v0.6.0): content-digest incremental reindexing, card refresh, manual-edit protection, orphan reporting, directory import/export
-- Phase 4: session memory distillation, optional semantic index
+- Phase 4 (partly done in v0.8.0): the session-memory tool is landed; optional semantic index stays deferred (YAGNI per the plan)
+- Session memory entries are visible to later sessions and feed the knowledge base alongside cards
 
 ## Architecture highlights
 
@@ -90,6 +92,8 @@ src/tool-extract.js    repowiki-extract tool
 src/tool-generate.js   repowiki-generate tool
 src/tool-export.js     repowiki-export tool
 src/tool-import.js     repowiki-import tool
+src/memory.js          Session memory entries (write/list/status)
+src/tool-memory.js     repowiki-memory tool
 test/                  Unit and integration tests (52 cases)
 docs/adr/              Architecture decision records (Chinese)
 docs/checkpoints/      Phase checkpoints (Chinese)

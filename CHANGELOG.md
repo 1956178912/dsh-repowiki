@@ -3,6 +3,27 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.8.0] - 2026-11-26
+
+### Added
+
+- `repowiki-memory` tool (Phase 4, first step): persist knowledge learned in a
+  session into `.dsh-repowiki/memory/<locale>/` and review it. `write` saves an
+  entry (title, body, optional tags and related file path; status defaults to
+  `pending`, `accepted` trusts it immediately), `list` shows entries by status
+  (default pending), and `accept` / `reject` close the review loop. Entries are
+  plain Markdown with a JSON frontmatter, travel with Git, and are readable by
+  later sessions.
+- `src/memory.js`: `slugifyMemory` (pure-ASCII titles fall back to a timestamp
+  slug), `writeMemory` / `listMemory` / `setMemoryStatus` over `ctx.fs`.
+- Deviation from the plan recorded in `docs/checkpoints/phase-4a.md`: the
+  plan proposed auto-harvesting candidates by projecting the session log;
+  the implementation has the model write candidates explicitly (lower noise,
+  consistent with the tools-are-model-invoked architecture). The review loop
+  is unchanged.
+- Tests: storage unit tests and an end-to-end write → list → accept → reject
+  tool round trip (75/75 green).
+
 ## [0.7.0] - 2026-11-26
 
 ### Added

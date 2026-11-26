@@ -12,6 +12,15 @@
  */
 export const ASSET_DIR = '.dsh-repowiki'
 
+/** 会话记忆条目目录名（Phase 4：模型显式沉淀的会话知识候选）。 */
+export const MEMORY_DIR = 'memory'
+
+/** 记忆条目 frontmatter 的数据版本。 */
+export const MEMORY_SCHEMA_VERSION = 1
+
+/** 记忆条目的状态流转：pending（待审）→ accepted（采信）/ rejected（否决）。 */
+export const MEMORY_STATUS = ['pending', 'accepted', 'rejected']
+
 /** 索引文件相对资产目录的路径。 */
 export const INDEX_REL_PATH = `${ASSET_DIR}/index.json`
 

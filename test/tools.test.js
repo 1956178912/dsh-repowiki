@@ -12,6 +12,7 @@ import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiCardsTool } from '../src/tool-cards.js'
 import { repowikiExportTool } from '../src/tool-export.js'
 import { repowikiImportTool } from '../src/tool-import.js'
+import { repowikiMemoryTool } from '../src/tool-memory.js'
 import { cardIsFresh, cardIsProtected, countOrphaned } from '../src/tool-extract.js'
 
 /**
@@ -94,6 +95,7 @@ test('工具契约：name/description/output 契约完整（注册表最低要�
   for (const tool of [
     repowikiIndexTool({}), repowikiCardsTool({}),
     repowikiExportTool({}), repowikiImportTool({}),
+    repowikiMemoryTool({}),
   ]) {
     assert.equal(typeof tool.name, 'string')
     assert.equal(typeof tool.description, 'string')
@@ -208,4 +210,55 @@ test('repowiki-export/import execute：快照导出与恢复端到端', async ()
   // 源不存在给出可读提示
   const noSource = await importTool.execute({ source: 'nope' }, fakeExec)
   assert.match(noSource.hint, /does not exist or is empty/)
+})
+
+test('repowiki-memory execute：write/list/accept/reject 审核闭环', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-mem-tool-'))
+  const ctx = makeCtx(dir)
+  const tool = repowikiMemoryTool(ctx)
+
+  // 空目录 list
+  const empty = await tool.execute({ action: 'list', locale: 'zh' }, fakeExec)
+  assert.equal(empty.total, 0)
+
+  // write（显式 locale，避免依赖测试进程的 LANG）
+  const written = await tool.execute({
+    action: 'write', locale: 'zh',
+    title: 'Prefer Fail-Fast', body: '缺输入早返回。',
+    tags: ['convention'], path: 'src/assets.js',
+  }, fakeExec)
+  assert.equal(written.status, 'pending')
+  assert.ok(written.slug, '应生成 slug')
+  const rendered = tool.output.render({}, written)
+  assert.match(rendered[0].text, /Memory written/)
+
+  // write 缺 title/body 给出可读提示
+  const bad = await tool.execute({ action: 'write', locale: 'zh', title: 'x' }, fakeExec)
+  assert.equal(bad.status, 'invalid')
+  assert.match(bad.hint, /title and body are required/)
+
+  // list 默认 pending
+  const pending = await tool.execute({ action: 'list', locale: 'zh' }, fakeExec)
+  assert.equal(pending.total, 1)
+  assert.equal(pending.entries[0].slug, written.slug)
+  assert.equal(pending.entries[0].status, 'pending')
+
+  // accept 后 pending 为空、accepted 出现
+  const accepted = await tool.execute({ action: 'accept', locale: 'zh', slug: written.slug }, fakeExec)
+  assert.equal(accepted.status, 'accepted')
+  assert.equal(accepted.path, '.dsh-repowiki/memory/zh/prefer-fail-fast.md')
+  const afterAccept = await tool.execute({ action: 'list', locale: 'zh' }, fakeExec)
+  assert.equal(afterAccept.total, 0, 'pending 应为空')
+  const acceptedList = await tool.execute({ action: 'list', locale: 'zh', status: 'accepted' }, fakeExec)
+  assert.equal(acceptedList.total, 1)
+
+  // reject 路径与不存在条目
+  await tool.execute({ action: 'write', locale: 'zh', title: 'Drop Me', body: '否决候选。' }, fakeExec)
+  const rejected = await tool.execute({ action: 'reject', locale: 'zh', slug: 'drop-me' }, fakeExec)
+  assert.equal(rejected.status, 'rejected')
+  const rejectedList = await tool.execute({ action: 'list', locale: 'zh', status: 'rejected' }, fakeExec)
+  assert.equal(rejectedList.total, 1)
+
+  const missing = await tool.execute({ action: 'reject', locale: 'zh', slug: 'nope' }, fakeExec)
+  assert.match(missing.hint, /not found/)
 })
