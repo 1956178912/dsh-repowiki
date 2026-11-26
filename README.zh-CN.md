@@ -8,24 +8,27 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1
+## 当前阶段：Phase 2
 
 | 能力 | 说明 |
 |---|---|
 | `repowiki-index` 工具 | 确定性（零 LLM）重建索引：符号表、import 依赖边、技术栈识别，写入 `.dsh-repowiki/index.json` |
 | `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径过滤，返回文件+符号与项目技术栈 |
+| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/` |
+| `repowiki-generate` 工具 | 只读卡片集合 + 技术栈，凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
+| 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 
-后续阶段（见路线图）：
-- Phase 2：`repowiki-extract`（spawn 子代理提取卡片）+ `repowiki-generate`（Wiki 凝练）
+路线图（见设计依据）：
 - Phase 3：commit/diff 增量更新、导入导出、人工修订
-- Phase 4：会话记忆提炼、可选语义索引、可选 UI 触发
+- Phase 4：侧栏 UI 入口 + 独立页面（项目选择器、生成按钮）、会话记忆提炼
 
 ## 架构要点
 
 - **单 bundle、单插件条目、零 npm 运行时依赖、零构建工具**：纯 ES Module，手写 `ToolDefinition`（不 import `@deepseek-ai/dsh-tools`），安装目录即可运行。
-- **资产即文件**：索引写入 `<项目根>/.dsh-repowiki/index.json`，随 Git 共享；定位策略为"当前目录向上查找，退回当前目录"。
+- **资产即文件**：索引、卡片与 Wiki 全部落入 `<项目根>/.dsh-repowiki/`，随 Git 共享；定位策略为"当前目录向上查找，退回当前目录"。
 - **全部文件 IO 走 `ctx.fs`**（方案 §9.1），不经裸 node fs，保持策略一致性。
-- **`inject: ['fs', 'tools']`**：`ctx.fs` 为可选能力 seam，缺失时插件在该 profile 不激活而非抛错。
+- **LLM 子任务走 spawn 子代理**（ADR-0003）：`ctx.subagents.startActivation({provider:'spawn'})` 继承会话模型；结构化输出经 `outputSchema` 约束；取消走 `exec.signal`；Markdown 格式由插件渲染，模型不决定格式。
+- **`inject: ['fs', 'tools', 'subagents']`**：均为能力 seam，缺失时插件在该 profile 不激活而非抛错。
 - **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS/Python 的函数/类/方法/接口/类型/导入。
 
 ## 安装
@@ -52,7 +55,7 @@ node --test test/*.test.js
 ## 目录结构
 
 ```
-index.js               插件入口（apply + inject）
+index.js               插件入口（apply + inject: fs/tools/subagents）
 cordis.patch.yml       Loader patch（插入插件行）
 src/schema.js          常量与领域约定（单一来源）
 src/symbols.js         零依赖符号提取（JS/TS/Python）
@@ -60,9 +63,17 @@ src/deps.js            import/require 依赖边提取
 src/stack.js           技术栈识别（npm/pip/go/cargo）
 src/assets.js          资产定位与读写（ctx.fs 注入）
 src/indexer.js         索引编排（遍历+提取+边解析+组装）
+src/card-schema.js     卡片/Wiki 的 outputSchema（子代理契约）
+src/prompts.js         子代理 prompt 构造
+src/render.js          卡片/Wiki Markdown 渲染
+src/knowledge.js       knowledge/wiki 目录读写、frontmatter 解析
+src/config.js          repowiki-plan.json 读取与候选筛选
+src/spawn.js           spawn 子代理调用封装
 src/tool-index.js      repowiki-index 工具
 src/tool-cards.js      repowiki-cards 工具
-test/                  单元与集成测试（32 用例）
+src/tool-extract.js    repowiki-extract 工具
+src/tool-generate.js   repowiki-generate 工具
+test/                  单元与集成测试（52 用例）
 docs/adr/              架构决策记录（英文默认 + .zh 中文）
 docs/checkpoints/      阶段检查点（英文默认 + .zh 中文）
 ```

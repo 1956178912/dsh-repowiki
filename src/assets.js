@@ -160,5 +160,3 @@ export function searchIndex(index, opts = {}) {
   const truncated = total > limit
   return { matches: truncated ? matches.slice(0, limit) : matches, total, truncated }
 }
-
-export { DEFAULT_RESULT_LIMIT }

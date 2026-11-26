@@ -40,16 +40,16 @@ function makeRecordingCtx(dir) {
   }
 }
 
-test('apply：声明正确，注册两个工具，teardown 干净移除', async () => {
+test('apply：声明正确，注册全部工具，teardown 干净移除', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-plugin-'))
   const ctx = makeRecordingCtx(dir)
   await apply(ctx, {})
 
   assert.equal(name, 'repowiki')
-  assert.deepEqual(inject, ['fs', 'tools'], '依赖声明与设计一致')
+  assert.deepEqual(inject, ['fs', 'tools', 'subagents'], '依赖声明与设计一致')
   assert.deepEqual(
     ctx.tools.registered.map(t => t.name).sort(),
-    ['repowiki-cards', 'repowiki-index'],
+    ['repowiki-cards', 'repowiki-extract', 'repowiki-generate', 'repowiki-index'],
   )
   for (const def of ctx.tools.registered) {
     assert.ok(def.output?.schema && typeof def.output.render === 'function', '输出契约完整')

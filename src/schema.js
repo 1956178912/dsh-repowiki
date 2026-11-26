@@ -106,6 +106,38 @@ export const JS_PATH_CANDIDATES = ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
 export const PY_PATH_CANDIDATES = ['.py', '']
 
 /**
+ * 知识卡片文件的 schemaVersion（卡片 frontmatter 内）。
+ * 卡片结构变化必须 +1，读取侧校验后降级。
+ */
+export const CARD_SCHEMA_VERSION = 1
+
+/** 知识卡片目录名（相对资产目录）：knowledge/{locale}/。 */
+export const KNOWLEDGE_DIR = 'knowledge'
+
+/** Wiki 页面目录名（相对资产目录）：wiki/{locale}/。 */
+export const WIKI_DIR = 'wiki'
+
+/**
+ * 项目级配置文件名（相对资产目录）。JSON 格式、随 Git 共享。
+ * 承载项目级偏好（方案 §5.5：项目级配置随仓库走，不受 profile 影响）。
+ */
+export const PLAN_FILE = 'repowiki-plan.json'
+
+/**
+ * 卡片提取的默认阈值与上限（方案 §11.4 成本模型）：
+ * 符号数低于 threshold 的文件只产签名信息、不值得子代理提取；
+ * maxCards 限制单次提取的卡片数，超限分批。
+ */
+export const CARD_COMPLEXITY_THRESHOLD = 3
+export const MAX_CARDS_PER_RUN_DEFAULT = 40
+
+/** 嵌入提取 prompt 的源码截断上限（字符）。超限截断并在 prompt 中告知。 */
+export const MAX_SOURCE_CHARS = 20_000
+
+/** generate 一次喂入 prompt 的卡片摘要上限（防止 prompt 爆炸）。 */
+export const MAX_CARDS_IN_PROMPT = 200
+
+/**
  * 依赖边种类。Phase 1 只有模块 import 一种；Phase 3 增量更新会
  * 复用该字段表达更强的传导语义。
  */

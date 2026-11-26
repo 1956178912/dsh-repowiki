@@ -7,8 +7,9 @@
  */
 
 import {
-  resolveAssetRoot, readIndex, searchIndex, DEFAULT_RESULT_LIMIT,
+  resolveAssetRoot, readIndex, searchIndex,
 } from './assets.js'
+import { DEFAULT_RESULT_LIMIT } from './schema.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
