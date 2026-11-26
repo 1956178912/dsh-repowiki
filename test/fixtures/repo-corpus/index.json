@@ -1,0 +1,2100 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-26T08:13:21.449Z",
+  "root": ".",
+  "stats": {
+    "files": 30,
+    "symbols": 97,
+    "edges": 41,
+    "durationMs": 17,
+    "capped": false
+  },
+  "stack": {
+    "technologies": [],
+    "dependencyCounts": {
+      "npm": 0
+    },
+    "projectName": "dsh-repowiki",
+    "projectVersion": "0.3.0"
+  },
+  "files": [
+    {
+      "path": "client.js",
+      "lang": "javascript",
+      "sizeBytes": 9178,
+      "symbols": [
+        {
+          "name": "RepoWikiIcon",
+          "kind": "function",
+          "line": 76,
+          "endLine": 92,
+          "exported": false
+        },
+        {
+          "name": "RepoWikiPage",
+          "kind": "function",
+          "line": 101,
+          "endLine": 188,
+          "exported": false
+        },
+        {
+          "name": "run",
+          "kind": "function",
+          "line": 119,
+          "endLine": 132,
+          "exported": false
+        },
+        {
+          "name": "buildPrompt",
+          "kind": "function",
+          "line": 226,
+          "endLine": 238,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "react",
+          "line": 6,
+          "kind": "require",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "react",
+          "line": 67,
+          "kind": "require",
+          "relative": false,
+          "imported": []
+        }
+      ]
+    },
+    {
+      "path": "index.js",
+      "lang": "javascript",
+      "sizeBytes": 1607,
+      "symbols": [
+        {
+          "name": "name",
+          "kind": "variable",
+          "line": 24,
+          "endLine": 24,
+          "exported": true
+        },
+        {
+          "name": "inject",
+          "kind": "variable",
+          "line": 32,
+          "endLine": 32,
+          "exported": true
+        },
+        {
+          "name": "apply",
+          "kind": "function",
+          "line": 41,
+          "endLine": 53,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./src/tool-index.js",
+          "line": 19,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiIndexTool"
+          ]
+        },
+        {
+          "specifier": "./src/tool-cards.js",
+          "line": 20,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiCardsTool"
+          ]
+        },
+        {
+          "specifier": "./src/tool-extract.js",
+          "line": 21,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiExtractTool"
+          ]
+        },
+        {
+          "specifier": "./src/tool-generate.js",
+          "line": 22,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiGenerateTool"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/assets.js",
+      "lang": "javascript",
+      "sizeBytes": 4937,
+      "symbols": [
+        {
+          "name": "isDirectory",
+          "kind": "function",
+          "line": 33,
+          "endLine": 41,
+          "exported": false
+        },
+        {
+          "name": "resolveAssetRoot",
+          "kind": "function",
+          "line": 51,
+          "endLine": 73,
+          "exported": true
+        },
+        {
+          "name": "readIndex",
+          "kind": "function",
+          "line": 81,
+          "endLine": 94,
+          "exported": true
+        },
+        {
+          "name": "writeIndex",
+          "kind": "function",
+          "line": 103,
+          "endLine": 107,
+          "exported": true
+        },
+        {
+          "name": "listKnowledgeFiles",
+          "kind": "function",
+          "line": 118,
+          "endLine": 130,
+          "exported": true
+        },
+        {
+          "name": "searchIndex",
+          "kind": "function",
+          "line": 142,
+          "endLine": 162,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:path",
+          "line": 14,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/card-schema.js",
+      "lang": "javascript",
+      "sizeBytes": 4263,
+      "symbols": [
+        {
+          "name": "cardOutputSchema",
+          "kind": "function",
+          "line": 30,
+          "endLine": 72,
+          "exported": true
+        },
+        {
+          "name": "wikiOutputSchema",
+          "kind": "function",
+          "line": 88,
+          "endLine": 123,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./schema.js",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "CARD_SCHEMA_VERSION"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/config.js",
+      "lang": "javascript",
+      "sizeBytes": 4527,
+      "symbols": [
+        {
+          "name": "DEFAULT_PLAN",
+          "kind": "variable",
+          "line": 32,
+          "endLine": 32,
+          "exported": true
+        },
+        {
+          "name": "readPlan",
+          "kind": "function",
+          "line": 47,
+          "endLine": 78,
+          "exported": true
+        },
+        {
+          "name": "selectCandidates",
+          "kind": "function",
+          "line": 87,
+          "endLine": 111,
+          "exported": true
+        },
+        {
+          "name": "normalizePrefix",
+          "kind": "function",
+          "line": 118,
+          "endLine": 120,
+          "exported": false
+        },
+        {
+          "name": "arrayOfStrings",
+          "kind": "function",
+          "line": 127,
+          "endLine": 129,
+          "exported": false
+        },
+        {
+          "name": "nonNegativeInt",
+          "kind": "function",
+          "line": 137,
+          "endLine": 139,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:path",
+          "line": 14,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/deps.js",
+      "lang": "javascript",
+      "sizeBytes": 4936,
+      "symbols": [
+        {
+          "name": "isJsRelative",
+          "kind": "function",
+          "line": 25,
+          "endLine": 27,
+          "exported": false
+        },
+        {
+          "name": "jsImportedNames",
+          "kind": "function",
+          "line": 34,
+          "endLine": 37,
+          "exported": false
+        },
+        {
+          "name": "extractJsImports",
+          "kind": "function",
+          "line": 57,
+          "endLine": 113,
+          "exported": false
+        },
+        {
+          "name": "extractPythonImports",
+          "kind": "function",
+          "line": 120,
+          "endLine": 155,
+          "exported": false
+        },
+        {
+          "name": "extractImports",
+          "kind": "function",
+          "line": 163,
+          "endLine": 169,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "mod",
+          "line": 98,
+          "kind": "require",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "mod",
+          "line": 98,
+          "kind": "require",
+          "relative": false,
+          "imported": []
+        }
+      ]
+    },
+    {
+      "path": "src/indexer.js",
+      "lang": "javascript",
+      "sizeBytes": 6585,
+      "symbols": [
+        {
+          "name": "walk",
+          "kind": "function",
+          "line": 40,
+          "endLine": 68,
+          "exported": false
+        },
+        {
+          "name": "toRelative",
+          "kind": "function",
+          "line": 78,
+          "endLine": 84,
+          "exported": false
+        },
+        {
+          "name": "resolveJsSpecifier",
+          "kind": "function",
+          "line": 93,
+          "endLine": 102,
+          "exported": false
+        },
+        {
+          "name": "resolvePySpecifier",
+          "kind": "function",
+          "line": 111,
+          "endLine": 125,
+          "exported": false
+        },
+        {
+          "name": "buildIndex",
+          "kind": "function",
+          "line": 134,
+          "endLine": 207,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./symbols.js",
+          "line": 13,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractSymbols"
+          ]
+        },
+        {
+          "specifier": "./deps.js",
+          "line": 14,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractImports"
+          ]
+        },
+        {
+          "specifier": "./stack.js",
+          "line": 15,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "detectStack"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/knowledge.js",
+      "lang": "javascript",
+      "sizeBytes": 4242,
+      "symbols": [
+        {
+          "name": "cardSlug",
+          "kind": "function",
+          "line": 23,
+          "endLine": 31,
+          "exported": true
+        },
+        {
+          "name": "cardPath",
+          "kind": "function",
+          "line": 39,
+          "endLine": 41,
+          "exported": true
+        },
+        {
+          "name": "wikiPath",
+          "kind": "function",
+          "line": 49,
+          "endLine": 51,
+          "exported": true
+        },
+        {
+          "name": "writeCard",
+          "kind": "function",
+          "line": 62,
+          "endLine": 66,
+          "exported": true
+        },
+        {
+          "name": "writeWikiPage",
+          "kind": "function",
+          "line": 77,
+          "endLine": 81,
+          "exported": true
+        },
+        {
+          "name": "parseCard",
+          "kind": "function",
+          "line": 88,
+          "endLine": 100,
+          "exported": true
+        },
+        {
+          "name": "readExistingCards",
+          "kind": "function",
+          "line": 110,
+          "endLine": 135,
+          "exported": true
+        },
+        {
+          "name": "cardSummaryFromBody",
+          "kind": "function",
+          "line": 142,
+          "endLine": 146,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:path",
+          "line": 12,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/prompts.js",
+      "lang": "javascript",
+      "sizeBytes": 3908,
+      "symbols": [
+        {
+          "name": "extractPrompt",
+          "kind": "function",
+          "line": 17,
+          "endLine": 46,
+          "exported": true
+        },
+        {
+          "name": "generatePrompt",
+          "kind": "function",
+          "line": 56,
+          "endLine": 80,
+          "exported": true
+        },
+        {
+          "name": "fenceLang",
+          "kind": "function",
+          "line": 87,
+          "endLine": 94,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./schema.js",
+          "line": 9,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "MAX_SOURCE_CHARS"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/render.js",
+      "lang": "javascript",
+      "sizeBytes": 3009,
+      "symbols": [
+        {
+          "name": "frontmatter",
+          "kind": "function",
+          "line": 15,
+          "endLine": 17,
+          "exported": false
+        },
+        {
+          "name": "renderCardMarkdown",
+          "kind": "function",
+          "line": 26,
+          "endLine": 69,
+          "exported": true
+        },
+        {
+          "name": "renderWikiMarkdown",
+          "kind": "function",
+          "line": 77,
+          "endLine": 95,
+          "exported": true
+        },
+        {
+          "name": "isUsableCard",
+          "kind": "function",
+          "line": 104,
+          "endLine": 114,
+          "exported": true
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./schema.js",
+          "line": 8,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "CARD_SCHEMA_VERSION"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/schema.js",
+      "lang": "javascript",
+      "sizeBytes": 3128,
+      "symbols": [
+        {
+          "name": "ASSET_DIR",
+          "kind": "variable",
+          "line": 13,
+          "endLine": 13,
+          "exported": true
+        },
+        {
+          "name": "INDEX_REL_PATH",
+          "kind": "variable",
+          "line": 16,
+          "endLine": 16,
+          "exported": true
+        },
+        {
+          "name": "INDEX_SCHEMA_VERSION",
+          "kind": "variable",
+          "line": 20,
+          "endLine": 20,
+          "exported": true
+        },
+        {
+          "name": "DEFAULT_RESULT_LIMIT",
+          "kind": "variable",
+          "line": 26,
+          "endLine": 26,
+          "exported": true
+        },
+        {
+          "name": "MAX_FILES_DEFAULT",
+          "kind": "variable",
+          "line": 29,
+          "endLine": 29,
+          "exported": true
+        },
+        {
+          "name": "MAX_FILE_BYTES",
+          "kind": "variable",
+          "line": 32,
+          "endLine": 32,
+          "exported": true
+        },
+        {
+          "name": "EXCLUDE_DIRS",
+          "kind": "variable",
+          "line": 38,
+          "endLine": 38,
+          "exported": true
+        },
+        {
+          "name": "MANIFEST_FILES",
+          "kind": "variable",
+          "line": 70,
+          "endLine": 70,
+          "exported": true
+        },
+        {
+          "name": "EXTENSION_LANGS",
+          "kind": "variable",
+          "line": 83,
+          "endLine": 83,
+          "exported": true
+        },
+        {
+          "name": "SYMBOL_LANGUAGES",
+          "kind": "variable",
+          "line": 97,
+          "endLine": 97,
+          "exported": true
+        },
+        {
+          "name": "JS_PATH_CANDIDATES",
+          "kind": "variable",
+          "line": 103,
+          "endLine": 103,
+          "exported": true
+        },
+        {
+          "name": "PY_PATH_CANDIDATES",
+          "kind": "variable",
+          "line": 106,
+          "endLine": 106,
+          "exported": true
+        },
+        {
+          "name": "CARD_SCHEMA_VERSION",
+          "kind": "variable",
+          "line": 112,
+          "endLine": 112,
+          "exported": true
+        },
+        {
+          "name": "KNOWLEDGE_DIR",
+          "kind": "variable",
+          "line": 115,
+          "endLine": 115,
+          "exported": true
+        },
+        {
+          "name": "WIKI_DIR",
+          "kind": "variable",
+          "line": 118,
+          "endLine": 118,
+          "exported": true
+        },
+        {
+          "name": "PLAN_FILE",
+          "kind": "variable",
+          "line": 124,
+          "endLine": 124,
+          "exported": true
+        },
+        {
+          "name": "CARD_COMPLEXITY_THRESHOLD",
+          "kind": "variable",
+          "line": 131,
+          "endLine": 131,
+          "exported": true
+        },
+        {
+          "name": "MAX_CARDS_PER_RUN_DEFAULT",
+          "kind": "variable",
+          "line": 132,
+          "endLine": 132,
+          "exported": true
+        },
+        {
+          "name": "MAX_SOURCE_CHARS",
+          "kind": "variable",
+          "line": 135,
+          "endLine": 135,
+          "exported": true
+        },
+        {
+          "name": "MAX_CARDS_IN_PROMPT",
+          "kind": "variable",
+          "line": 138,
+          "endLine": 138,
+          "exported": true
+        },
+        {
+          "name": "EDGE_KIND_IMPORT",
+          "kind": "variable",
+          "line": 144,
+          "endLine": 144,
+          "exported": true
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "src/spawn.js",
+      "lang": "javascript",
+      "sizeBytes": 1919,
+      "symbols": [
+        {
+          "name": "runSubagent",
+          "kind": "function",
+          "line": 23,
+          "endLine": 47,
+          "exported": true
+        },
+        {
+          "name": "getLocale",
+          "kind": "function",
+          "line": 55,
+          "endLine": 58,
+          "exported": true
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "src/stack.js",
+      "lang": "javascript",
+      "sizeBytes": 10108,
+      "symbols": [
+        {
+          "name": "npmTechnologies",
+          "kind": "function",
+          "line": 103,
+          "endLine": 112,
+          "exported": false
+        },
+        {
+          "name": "pipTechnologies",
+          "kind": "function",
+          "line": 120,
+          "endLine": 133,
+          "exported": false
+        },
+        {
+          "name": "goRequires",
+          "kind": "function",
+          "line": 140,
+          "endLine": 153,
+          "exported": false
+        },
+        {
+          "name": "cargoDeps",
+          "kind": "function",
+          "line": 160,
+          "endLine": 177,
+          "exported": false
+        },
+        {
+          "name": "detectStack",
+          "kind": "function",
+          "line": 184,
+          "endLine": 228,
+          "exported": true
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "src/symbols.js",
+      "lang": "javascript",
+      "sizeBytes": 9070,
+      "symbols": [
+        {
+          "name": "toLines",
+          "kind": "function",
+          "line": 36,
+          "endLine": 38,
+          "exported": false
+        },
+        {
+          "name": "findBlockEnd",
+          "kind": "function",
+          "line": 48,
+          "endLine": 62,
+          "exported": false
+        },
+        {
+          "name": "matchDeclare",
+          "kind": "function",
+          "line": 69,
+          "endLine": 71,
+          "exported": false
+        },
+        {
+          "name": "extractJsLike",
+          "kind": "function",
+          "line": 78,
+          "endLine": 304,
+          "exported": false
+        },
+        {
+          "name": "extractPython",
+          "kind": "function",
+          "line": 210,
+          "endLine": 289,
+          "exported": false
+        },
+        {
+          "name": "indentOf",
+          "kind": "function",
+          "line": 220,
+          "endLine": 229,
+          "exported": false
+        },
+        {
+          "name": "blockEnd",
+          "kind": "function",
+          "line": 237,
+          "endLine": 244,
+          "exported": false
+        },
+        {
+          "name": "extractSymbols",
+          "kind": "function",
+          "line": 297,
+          "endLine": 303,
+          "exported": true
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "src/tool-cards.js",
+      "lang": "javascript",
+      "sizeBytes": 6116,
+      "symbols": [
+        {
+          "name": "repowikiCardsTool",
+          "kind": "function",
+          "line": 27,
+          "endLine": 166,
+          "exported": true
+        },
+        {
+          "name": "cwdOf",
+          "kind": "function",
+          "line": 169,
+          "endLine": 175,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./schema.js",
+          "line": 12,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "DEFAULT_RESULT_LIMIT"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/tool-extract.js",
+      "lang": "javascript",
+      "sizeBytes": 7882,
+      "symbols": [
+        {
+          "name": "repowikiExtractTool",
+          "kind": "function",
+          "line": 37,
+          "endLine": 192,
+          "exported": true
+        },
+        {
+          "name": "cwdOf",
+          "kind": "function",
+          "line": 195,
+          "endLine": 201,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./config.js",
+          "line": 16,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "readPlan",
+            "selectCandidates"
+          ]
+        },
+        {
+          "specifier": "./card-schema.js",
+          "line": 17,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "cardOutputSchema"
+          ]
+        },
+        {
+          "specifier": "./prompts.js",
+          "line": 18,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractPrompt"
+          ]
+        },
+        {
+          "specifier": "./render.js",
+          "line": 19,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "renderCardMarkdown",
+            "isUsableCard"
+          ]
+        },
+        {
+          "specifier": "./knowledge.js",
+          "line": 20,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "readExistingCards",
+            "writeCard",
+            "cardSlug"
+          ]
+        },
+        {
+          "specifier": "./spawn.js",
+          "line": 21,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "runSubagent",
+            "getLocale"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/tool-generate.js",
+      "lang": "javascript",
+      "sizeBytes": 5279,
+      "symbols": [
+        {
+          "name": "repowikiGenerateTool",
+          "kind": "function",
+          "line": 34,
+          "endLine": 143,
+          "exported": true
+        },
+        {
+          "name": "cwdOf",
+          "kind": "function",
+          "line": 146,
+          "endLine": 152,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./card-schema.js",
+          "line": 15,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "wikiOutputSchema"
+          ]
+        },
+        {
+          "specifier": "./prompts.js",
+          "line": 16,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "generatePrompt"
+          ]
+        },
+        {
+          "specifier": "./render.js",
+          "line": 17,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "renderWikiMarkdown"
+          ]
+        },
+        {
+          "specifier": "./knowledge.js",
+          "line": 18,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "readExistingCards",
+            "writeWikiPage"
+          ]
+        },
+        {
+          "specifier": "./spawn.js",
+          "line": 19,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "runSubagent",
+            "getLocale"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/tool-index.js",
+      "lang": "javascript",
+      "sizeBytes": 4376,
+      "symbols": [
+        {
+          "name": "repowikiIndexTool",
+          "kind": "function",
+          "line": 42,
+          "endLine": 116,
+          "exported": true
+        },
+        {
+          "name": "cwdOf",
+          "kind": "function",
+          "line": 119,
+          "endLine": 125,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "./indexer.js",
+          "line": 15,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "buildIndex"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/assets.test.js",
+      "lang": "javascript",
+      "sizeBytes": 4256,
+      "symbols": [
+        {
+          "name": "makeProject",
+          "kind": "function",
+          "line": 21,
+          "endLine": 25,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 7,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        },
+        {
+          "specifier": "../src/schema.js",
+          "line": 14,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "INDEX_SCHEMA_VERSION"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/config.test.js",
+      "lang": "javascript",
+      "sizeBytes": 3286,
+      "symbols": [
+        {
+          "name": "makeProject",
+          "kind": "function",
+          "line": 18,
+          "endLine": 25,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 7,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        },
+        {
+          "specifier": "../src/config.js",
+          "line": 11,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "readPlan",
+            "selectCandidates",
+            "DEFAULT_PLAN"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/deps.test.js",
+      "lang": "javascript",
+      "sizeBytes": 2503,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "../src/deps.js",
+          "line": 7,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractImports"
+          ]
+        },
+        {
+          "specifier": "./cjs",
+          "line": 18,
+          "kind": "require",
+          "relative": true,
+          "imported": []
+        },
+        {
+          "specifier": "./dyn",
+          "line": 19,
+          "kind": "require",
+          "relative": true,
+          "imported": []
+        }
+      ]
+    },
+    {
+      "path": "test/fake-fs.mjs",
+      "lang": "javascript",
+      "sizeBytes": 1892,
+      "symbols": [
+        {
+          "name": "makeFakeFs",
+          "kind": "function",
+          "line": 17,
+          "endLine": 61,
+          "exported": true
+        },
+        {
+          "name": "resolve",
+          "kind": "function",
+          "line": 18,
+          "endLine": 22,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:fs",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 10,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/indexer.test.js",
+      "lang": "javascript",
+      "sizeBytes": 4403,
+      "symbols": [
+        {
+          "name": "makeProject",
+          "kind": "function",
+          "line": 19,
+          "endLine": 27,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 7,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        },
+        {
+          "specifier": "../src/indexer.js",
+          "line": 11,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "buildIndex"
+          ]
+        },
+        {
+          "specifier": "../src/schema.js",
+          "line": 12,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "INDEX_SCHEMA_VERSION"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/knowledge.test.js",
+      "lang": "javascript",
+      "sizeBytes": 3516,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 7,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/plugin.test.js",
+      "lang": "javascript",
+      "sizeBytes": 2710,
+      "symbols": [
+        {
+          "name": "makeRecordingCtx",
+          "kind": "function",
+          "line": 22,
+          "endLine": 41,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 10,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 11,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 12,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 13,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 14,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        },
+        {
+          "specifier": "../index.js",
+          "line": 15,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "apply",
+            "inject",
+            "name"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/prompts.test.js",
+      "lang": "javascript",
+      "sizeBytes": 1485,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "../src/prompts.js",
+          "line": 7,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractPrompt",
+            "generatePrompt"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/render.test.js",
+      "lang": "javascript",
+      "sizeBytes": 2624,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "../src/render.js",
+          "line": 7,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "renderCardMarkdown",
+            "renderWikiMarkdown",
+            "isUsableCard"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/stack.test.js",
+      "lang": "javascript",
+      "sizeBytes": 2958,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "../src/stack.js",
+          "line": 7,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "detectStack"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/symbols.test.js",
+      "lang": "javascript",
+      "sizeBytes": 3811,
+      "symbols": [],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "../src/symbols.js",
+          "line": 7,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "extractSymbols"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "test/tools.test.js",
+      "lang": "javascript",
+      "sizeBytes": 3721,
+      "symbols": [
+        {
+          "name": "makeCtx",
+          "kind": "function",
+          "line": 19,
+          "endLine": 25,
+          "exported": false
+        }
+      ],
+      "imports": [
+        {
+          "specifier": "node:test",
+          "line": 5,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:assert/strict",
+          "line": 6,
+          "kind": "import",
+          "relative": false,
+          "imported": []
+        },
+        {
+          "specifier": "node:fs",
+          "line": 7,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:path",
+          "line": 8,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "node:os",
+          "line": 9,
+          "kind": "import",
+          "relative": false,
+          "imported": [
+            "*"
+          ]
+        },
+        {
+          "specifier": "./fake-fs.mjs",
+          "line": 10,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "makeFakeFs"
+          ]
+        },
+        {
+          "specifier": "../src/tool-index.js",
+          "line": 11,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiIndexTool"
+          ]
+        },
+        {
+          "specifier": "../src/tool-cards.js",
+          "line": 12,
+          "kind": "import",
+          "relative": true,
+          "imported": [
+            "repowikiCardsTool"
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "index.js",
+      "to": "src/tool-index.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiIndexTool"
+      ]
+    },
+    {
+      "from": "index.js",
+      "to": "src/tool-cards.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiCardsTool"
+      ]
+    },
+    {
+      "from": "index.js",
+      "to": "src/tool-extract.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiExtractTool"
+      ]
+    },
+    {
+      "from": "index.js",
+      "to": "src/tool-generate.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiGenerateTool"
+      ]
+    },
+    {
+      "from": "src/card-schema.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "CARD_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "from": "src/indexer.js",
+      "to": "src/symbols.js",
+      "kind": "import",
+      "symbols": [
+        "extractSymbols"
+      ]
+    },
+    {
+      "from": "src/indexer.js",
+      "to": "src/deps.js",
+      "kind": "import",
+      "symbols": [
+        "extractImports"
+      ]
+    },
+    {
+      "from": "src/indexer.js",
+      "to": "src/stack.js",
+      "kind": "import",
+      "symbols": [
+        "detectStack"
+      ]
+    },
+    {
+      "from": "src/prompts.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "MAX_SOURCE_CHARS"
+      ]
+    },
+    {
+      "from": "src/render.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "CARD_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "from": "src/tool-cards.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "DEFAULT_RESULT_LIMIT"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/config.js",
+      "kind": "import",
+      "symbols": [
+        "readPlan",
+        "selectCandidates"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/card-schema.js",
+      "kind": "import",
+      "symbols": [
+        "cardOutputSchema"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/prompts.js",
+      "kind": "import",
+      "symbols": [
+        "extractPrompt"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/render.js",
+      "kind": "import",
+      "symbols": [
+        "renderCardMarkdown",
+        "isUsableCard"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/knowledge.js",
+      "kind": "import",
+      "symbols": [
+        "readExistingCards",
+        "writeCard",
+        "cardSlug"
+      ]
+    },
+    {
+      "from": "src/tool-extract.js",
+      "to": "src/spawn.js",
+      "kind": "import",
+      "symbols": [
+        "runSubagent",
+        "getLocale"
+      ]
+    },
+    {
+      "from": "src/tool-generate.js",
+      "to": "src/card-schema.js",
+      "kind": "import",
+      "symbols": [
+        "wikiOutputSchema"
+      ]
+    },
+    {
+      "from": "src/tool-generate.js",
+      "to": "src/prompts.js",
+      "kind": "import",
+      "symbols": [
+        "generatePrompt"
+      ]
+    },
+    {
+      "from": "src/tool-generate.js",
+      "to": "src/render.js",
+      "kind": "import",
+      "symbols": [
+        "renderWikiMarkdown"
+      ]
+    },
+    {
+      "from": "src/tool-generate.js",
+      "to": "src/knowledge.js",
+      "kind": "import",
+      "symbols": [
+        "readExistingCards",
+        "writeWikiPage"
+      ]
+    },
+    {
+      "from": "src/tool-generate.js",
+      "to": "src/spawn.js",
+      "kind": "import",
+      "symbols": [
+        "runSubagent",
+        "getLocale"
+      ]
+    },
+    {
+      "from": "src/tool-index.js",
+      "to": "src/indexer.js",
+      "kind": "import",
+      "symbols": [
+        "buildIndex"
+      ]
+    },
+    {
+      "from": "test/assets.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/assets.test.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "INDEX_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "from": "test/config.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/config.test.js",
+      "to": "src/config.js",
+      "kind": "import",
+      "symbols": [
+        "readPlan",
+        "selectCandidates",
+        "DEFAULT_PLAN"
+      ]
+    },
+    {
+      "from": "test/deps.test.js",
+      "to": "src/deps.js",
+      "kind": "import",
+      "symbols": [
+        "extractImports"
+      ]
+    },
+    {
+      "from": "test/indexer.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/indexer.test.js",
+      "to": "src/indexer.js",
+      "kind": "import",
+      "symbols": [
+        "buildIndex"
+      ]
+    },
+    {
+      "from": "test/indexer.test.js",
+      "to": "src/schema.js",
+      "kind": "import",
+      "symbols": [
+        "INDEX_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "from": "test/knowledge.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/plugin.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/plugin.test.js",
+      "to": "index.js",
+      "kind": "import",
+      "symbols": [
+        "apply",
+        "inject",
+        "name"
+      ]
+    },
+    {
+      "from": "test/prompts.test.js",
+      "to": "src/prompts.js",
+      "kind": "import",
+      "symbols": [
+        "extractPrompt",
+        "generatePrompt"
+      ]
+    },
+    {
+      "from": "test/render.test.js",
+      "to": "src/render.js",
+      "kind": "import",
+      "symbols": [
+        "renderCardMarkdown",
+        "renderWikiMarkdown",
+        "isUsableCard"
+      ]
+    },
+    {
+      "from": "test/stack.test.js",
+      "to": "src/stack.js",
+      "kind": "import",
+      "symbols": [
+        "detectStack"
+      ]
+    },
+    {
+      "from": "test/symbols.test.js",
+      "to": "src/symbols.js",
+      "kind": "import",
+      "symbols": [
+        "extractSymbols"
+      ]
+    },
+    {
+      "from": "test/tools.test.js",
+      "to": "test/fake-fs.mjs",
+      "kind": "import",
+      "symbols": [
+        "makeFakeFs"
+      ]
+    },
+    {
+      "from": "test/tools.test.js",
+      "to": "src/tool-index.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiIndexTool"
+      ]
+    },
+    {
+      "from": "test/tools.test.js",
+      "to": "src/tool-cards.js",
+      "kind": "import",
+      "symbols": [
+        "repowikiCardsTool"
+      ]
+    }
+  ]
+}

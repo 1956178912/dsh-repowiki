@@ -6,9 +6,13 @@
  * 把卡片详情改为正文 Markdown 渲染后，曾出现现场"点击卡片无反应"
  * （渲染抛错会把整个 slot 打成空白，v0.14.0 才加错误边界）。
  *
- * 本测试把本仓库自身 .dsh-repowiki/ 的真实语料灌入同一渲染路径，
- * 回归"每张已生成卡片都可点击、详情渲染出富文本、无抛错无挂死"。
- * 语料随 Git 版本化，断言不依赖具体卡片数量。
+ * 本测试把真实 LLM 语料灌入同一渲染路径，回归"每张已生成卡片都可
+ * 点击、详情渲染出富文本、无抛错无挂死"。
+ *
+ * 语料来源：本仓库自身 .dsh-repowiki/ 的一次生成产出，原样固化为
+ * test/fixtures/repo-corpus/（被索引的插件仓库本身不随产物，见
+ * .gitignore；fixture 纳入版本控制以保证 CI 确定性）。断言不依赖
+ * 具体卡片数量。
  */
 
 import test from 'node:test'
@@ -21,9 +25,10 @@ import {
 } from './lib/stub-react.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const ASSET_ROOT = path.join(REPO_ROOT, '.dsh-repowiki')
+const FIXTURE_ROOT = path.join(REPO_ROOT, 'test', 'fixtures', 'repo-corpus')
+const KEY_PREFIX = '.dsh-repowiki/'
 
-/* 装载真实资产（.md/.json）为 flat 映射 + 目录集合 */
+/* 装载真实语料 fixture（.md/.json）为 flat 映射 + 目录集合（键带资产前缀） */
 const files = {}
 const dirs = new Set()
 const walk = (abs, rel) => {
@@ -31,14 +36,14 @@ const walk = (abs, rel) => {
     const childAbs = path.join(abs, name)
     const childRel = rel ? `${rel}/${name}` : name
     if (fs.statSync(childAbs).isDirectory()) {
-      dirs.add(childRel)
+      dirs.add(KEY_PREFIX + childRel)
       walk(childAbs, childRel)
     } else if (name.endsWith('.md') || name.endsWith('.json')) {
-      files[childRel] = fs.readFileSync(childAbs, 'utf8')
+      files[KEY_PREFIX + childRel] = fs.readFileSync(childAbs, 'utf8')
     }
   }
 }
-walk(ASSET_ROOT, '.dsh-repowiki')
+walk(FIXTURE_ROOT, '')
 
 let captured = null
 globalThis.window = { __ModuleLoader__: { load: (mod) => { captured = mod } } }
