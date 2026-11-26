@@ -1,7 +1,30 @@
 # Changelog
 
+English | [中文摘要](CHANGELOG.zh-CN.md)
+
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
+
+## [0.23.0] - 2026-11-26
+
+### Changed
+
+- **Bilingual facade completeness**: `CHANGELOG.zh-CN.md` added as a
+  Chinese summary mirror of this file (cross-linked from both headers);
+  `README.zh-CN.md` was stale at v0.20.0 and is now at parity
+  (token-evidence and host-drift-check sections, npm scripts, directory
+  layout, 122→123 test counts).
+- **Plugin metadata updated**: `locale/{en,zh}.json` meta descriptions
+  still described the Phase 1 state ("provides repowiki-index and
+  repowiki-cards") — now describe the full bundle (deterministic index,
+  LLM cards and wiki, cross-session query, import/export, memory review,
+  GUI panel) and list all eight tools by name.
+
+### Added
+
+- `test/locale.test.js`: facade-consistency guard — both locale files must
+  be valid JSON with meta title/description, and every tool name must
+  appear in both descriptions (123/123).
 
 ## [0.22.0] - 2026-11-26
 

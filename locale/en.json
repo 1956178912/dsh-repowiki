@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Repo wiki",
-    "description": "Index a repository into a shareable symbol-level knowledge base (.dsh-repowiki) and query symbols, files and dependencies from any session. Deterministic indexing, no model calls; Phase 1 provides repowiki-index and repowiki-cards tools."
+    "description": "Index a repository into a Git-shareable symbol-level knowledge base (.dsh-repowiki): deterministic symbol indexing, LLM knowledge cards and wiki synthesis, cross-session query, snapshot import/export, session-memory review, and a workspace-level GUI panel with a sidebar entry. Tools: repowiki-index, repowiki-cards, repowiki-extract, repowiki-generate, repowiki-edit, repowiki-export, repowiki-import, repowiki-memory."
   }
 }

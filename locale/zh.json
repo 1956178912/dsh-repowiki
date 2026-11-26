@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "仓库 Wiki",
-    "description": "把仓库索引为可共享的符号级知识库（.dsh-repowiki），任意会话即可查询符号、文件与依赖。索引为确定性计算、不调用模型；当前提供 repowiki-index 与 repowiki-cards 两个工具。"
+    "description": "把仓库索引为随 Git 共享的符号级知识库（.dsh-repowiki）：确定性符号索引、LLM 知识卡片与 Wiki 综合、跨会话检索、快照导入导出、会话记忆审核，以及带侧栏入口的工作区级 GUI 面板。工具：repowiki-index、repowiki-cards、repowiki-extract、repowiki-generate、repowiki-edit、repowiki-export、repowiki-import、repowiki-memory。"
   }
 }

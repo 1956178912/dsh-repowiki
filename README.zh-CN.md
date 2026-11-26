@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 + 面板视图 + 多工作区总览（v0.20.0）
+## 当前阶段：Phase 1–4 完成 + 面板视图 + 多工作区总览（v0.22.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -30,6 +30,8 @@
 - 稳定性加固（v0.16.0）：真实语料客户端回归测试（本仓库自产卡片灌入面板渲染路径）、事件处理器兜底（抛错转为可读状态行而非静默无反应）、Node 22/24 CI 门禁
 - DOM 集成（v0.17.0）：真实 React 18 + jsdom 测试套件用真实 click/change/keydown 事件驱动面板（语料同上）——闭合"用户点击无反应"的复现盲区（事件级接线已验证健康）；devOnly 测试依赖（react/react-dom/jsdom）不改变零运行时依赖形态
 - 多工作区总览（v0.18.0，ui-plan 切片 2）：每行一个工作区带状态与统计，点击下钻；复用各工作区自身的会话 scope，无需新的 Host 数据面
+- 主题令牌实证（v0.21.0）：解析 app.asar 提取官方主题 CSS——`design-platform.css` 定义全部 264 个 `--dsw-alias-*` 令牌（含深色重定义），主前端壳消费 348 处，本插件令牌全部命中；同时"已生成"状态点改用 `state-done-primary`（紫），解决灰蓝难区分
+- 宿主漂移自检（v0.22.0）：`npm run verify:host` 直接核对 client.js 引用的令牌在新版 dsh 自带 CSS 中是否仍存在且有深色变体；CI 无宿主时自动跳过
 - 可选语义索引按方案保持后置（YAGNI）
 - 会话记忆条目对后续会话可见，与知识卡片一同构成知识库
 
@@ -63,12 +65,20 @@ DSH Plugins > Add plugin > 选择本目录
 
 ```sh
 # 单元测试（node 内置 test runner，零依赖）
-node --test test/*.test.js
+npm test
+
+# 带覆盖率
+npm run test:coverage
+
+# 宿主漂移自检：解析本机 app.asar，核对 client.js 引用的每个
+# --dsw-alias-* 令牌在 dsh 自带 CSS 中仍有定义且有深色变体；
+# 找不到 app.asar（如 CI）时以 exit=3 跳过（v0.22.0）
+npm run verify:host
 ```
 
 ## 升级运维约定（dsh 处于 rc 阶段，公开 seam 高频变动）
 
-- 本 bundle **不声明** `@deepseek-ai/dsh-*` 依赖（shipped packages 从 dsh 安装目录解析）——代价是**每次 dsh 升级都必须回归**：跑一遍 `node --test test/*.test.js`，并在会话里执行 `repowiki-index` 与 `repowiki-cards` 的最小冒烟。
+- 本 bundle **不声明** `@deepseek-ai/dsh-*` 依赖（shipped packages 从 dsh 安装目录解析）——代价是**每次 dsh 升级都必须回归**：跑一遍 `npm test`，再跑 `npm run verify:host`（对照升级后 app 自带 CSS 抓主题令牌改名/删除），并在会话里执行 `repowiki-index` 与 `repowiki-cards` 的最小冒烟。
 - `engines.dsh` 只作版本下界，不是兼容性证明。
 - `index.json` 带 `schemaVersion`；版本不兼容时读取侧降级提示重建而非崩溃。
 
@@ -76,6 +86,7 @@ node --test test/*.test.js
 
 ```
 index.js               插件入口（apply + inject: fs/tools/subagents）
+scripts/verify-host-tokens.mjs  本地宿主漂移自检（令牌存活性，v0.22.0）
 cordis.patch.yml       Loader patch（插入插件行）
 src/schema.js          常量与领域约定（单一来源）
 src/symbols.js         零依赖符号提取（JS/TS/Python）
@@ -99,7 +110,7 @@ src/tool-import.js     repowiki-import 工具
 src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
-test/                  单元与集成测试（52 用例）
+test/                  单元与集成测试（122 用例）
 docs/adr/              架构决策记录（中文）
 docs/checkpoints/      阶段检查点（中文）
 ```
