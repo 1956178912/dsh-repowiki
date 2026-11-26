@@ -35,11 +35,16 @@ extraction) + `repowiki-generate` (Wiki synthesis) + project-level plan file
 
 ## Not verified (honest disclosure)
 
-- **In-session extraction smoke**: calling `repowiki-extract` /
-  `repowiki-generate` from a session requires a new session (the tool list is
-  snapshotted at session start — see Phase 1 checkpoint root cause). The LLM
-  chain (spawn activation + structured output) has only been exercised via
-  the code-level contract tests, not with a real model call yet.
+- ~~In-session smoke~~ → **completed by the user in a new session around
+  2026-11-26 15:00**: ran index → extract (paths=["src/"]) → generate on
+  this repository itself.
+  - Index: 29 files / 93 symbols / 41 edges, projectName=dsh-repowiki ✓
+  - Cards: 10 files under `knowledge/zh/` (all src modules); frontmatter
+    structured, tags and Chinese summaries accurate ("zero-LLM /
+    deterministic / pure functions / ctx.fs injection" traits were all
+    correctly inferred from the code) ✓
+  - Wiki: 4 pages under `wiki/zh/` (project-overview / indexing-and-parsing
+    / prompts-and-rendering / assets-and-config), all with mermaid ✓
 - Model-override layer is intentionally absent (ADR-0003).
 
 ## Decisions

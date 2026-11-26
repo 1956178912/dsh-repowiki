@@ -30,10 +30,14 @@
 
 ## 未验证（诚实披露）
 
-- **会话级提取冒烟**：在会话中调用 `repowiki-extract`/`repowiki-generate`
-  需要新会话（工具表在会话启动时快照——见 Phase 1 检查点根因分析）。
-  LLM 链路（spawn 激活 + 结构化输出）目前只经过代码级契约测试，尚未跑
-  真实模型调用。
+- ~~会话级冒烟~~ → **2026-11-26 15:00 前后由用户在新会话完成**：对本仓库
+  自身跑了 index → extract（paths=["src/"]）→ generate。
+  - 索引：29 文件 / 93 符号 / 41 边、projectName=dsh-repowiki ✓
+  - 卡片：`knowledge/zh/` 10 张（src 全部模块），frontmatter 结构化、
+    tags 与中文摘要准确（"零LLM/确定性/纯函数/ctx.fs 注入"等特性均
+    从代码正确归纳）✓
+  - Wiki：`wiki/zh/` 4 页（project-overview / indexing-and-parsing /
+    prompts-and-rendering / assets-and-config），4 页全带 mermaid ✓
 - 模型覆盖层有意缺失（ADR-0003）。
 
 ## 决策

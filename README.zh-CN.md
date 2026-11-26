@@ -17,10 +17,11 @@
 | `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/` |
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈，凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
+| 侧栏 UI（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开独立页面：选择项目目录后可生成索引 / 知识卡片 / Wiki（或一键全部）。生成在新会话中调用工具、作用于所选项目（ADR-0004） |
 
 路线图（见设计依据）：
 - Phase 3：commit/diff 增量更新、导入导出、人工修订
-- Phase 4：侧栏 UI 入口 + 独立页面（项目选择器、生成按钮）、会话记忆提炼
+- Phase 4：会话记忆提炼、可选语义索引
 
 ## 架构要点
 
@@ -31,7 +32,14 @@
 - **`inject: ['fs', 'tools', 'subagents']`**：均为能力 seam，缺失时插件在该 profile 不激活而非抛错。
 - **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS/Python 的函数/类/方法/接口/类型/导入。
 
-## 安装
+## 客户端 UI（web）
+
+`client.js` 是 bundle 的浏览器半边（经 `dsh.client.platform: web` 注册）：
+`sidebar.panellist` 侧栏入口 + `main`（key: 'repowiki'）独立页面。页面用
+官方 `ctx.uiWorkspace.pickDirectory()` 选目录、用
+`ctx.uiWorkspace.startSession(...)` 发起生成；图标为自绘 SVG（不 import
+`dsh-client-ui-primitives`，因其稳定性不受保证）。安装或升级后需刷新一次
+GUI 让客户端模块加载。
 
 ```
 DSH Plugins > Add plugin > 选择本目录

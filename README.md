@@ -17,10 +17,11 @@ English | [中文](README.zh-CN.md)
 | `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/` |
 | `repowiki-generate` tool | Reads only the cards + tech stack, synthesizes theme-grouped Wiki pages (Markdown + optional mermaid) into `.dsh-repowiki/wiki/<locale>/` |
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
+| Sidebar UI (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a standalone page: pick a project directory, then build the index / extract cards / generate the wiki (or all at once). Generation runs in a new session that calls the tools against the picked project (ADR-0004) |
 
 Roadmap (see the review document):
 - Phase 3: commit/diff incremental updates, import/export, manual edits
-- Phase 4: sidebar UI entry + independent page (project picker, generate buttons), session memory distillation
+- Phase 4: session memory distillation, optional semantic index
 
 ## Architecture highlights
 
@@ -31,7 +32,15 @@ Roadmap (see the review document):
 - **`inject: ['fs', 'tools', 'subagents']`**: optional capability seams; if absent in a profile the plugin stays inactive instead of throwing.
 - **Symbol extraction is a zero-dependency lightweight parser** (ADR-0001), with no external parsing framework: functions/classes/methods/interfaces/types/imports for JS/TS/Python.
 
-## Install
+## Client UI (web)
+
+`client.js` is the browser half of the bundle (registered via
+`dsh.client.platform: web`): a sidebar entry at `sidebar.panellist` and a
+keyed page at `main` (`key: 'repowiki'`). The page picks a directory through
+the official `ctx.uiWorkspace.pickDirectory()` and starts generation with
+`ctx.uiWorkspace.startSession(...)`; the icon is hand-drawn SVG (no
+`dsh-client-ui-primitives` import, per its stability rules). After installing
+or upgrading, refresh the GUI once for the client module to load.
 
 ```
 DSH Plugins > Add plugin > select this directory
