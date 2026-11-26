@@ -67,11 +67,12 @@ function readAsarFile(p, meta, base) {
   return buf.toString('utf8')
 }
 
-/** 从 client.js 收集实际引用的 --dsw-alias-* 令牌名（自维护，无需手工清单）。 */
+/** 从 client.js 收集实际引用的 --dsw-* 令牌名（自维护，无需手工清单）。 */
 function collectClientTokens() {
   const src = fs.readFileSync(CLIENT, 'utf8')
   const names = new Set()
-  for (const m of src.matchAll(/var\(\s*(--dsw-alias-[a-z0-9-]+)/g)) names.add(m[1])
+  // 令牌须以逗号/括号/空白收尾，避免把文档注释里的 var(--dsw-alias-*) 通配写法误当令牌
+  for (const m of src.matchAll(/var\(\s*(--dsw-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?=[,)\s])/g)) names.add(m[1])
   return [...names].sort()
 }
 
@@ -85,22 +86,26 @@ function main() {
   }
 
   const { base, files } = readAsarIndex(asarPath)
-  // 官方令牌定义源：主题包 design-platform.css（264 个 alias 令牌）
+  // 官方令牌定义源：主题包 src/styles（design-platform.css 的 264 个 alias
+  // 令牌 + base.css 的 radius 等尺寸令牌）
   const themeCss = files.filter((f) => /dsh-client-ui-theme\/src\/styles\/.*\.css$/.test(f.path))
   const allDefs = new Map() // 令牌名 -> 定义次数
   const darkSelector = 'body[data-ds-dark-theme]'
   let darkSeen = false
   for (const f of themeCss) {
     const text = readAsarFile(asarPath, f, base)
-    for (const m of text.matchAll(/(--dsw-alias-[a-z0-9-]+)\s*:/g)) {
+    for (const m of text.matchAll(/(--dsw-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*:/g)) {
       allDefs.set(m[1], (allDefs.get(m[1]) || 0) + 1)
     }
     if (text.includes(darkSelector)) darkSeen = true
   }
   const tokens = collectClientTokens()
   const missing = tokens.filter((t) => !allDefs.has(t))
-  // 每个被引用令牌应至少有 2 处定义（浅色 + 深色重定义）
-  const noDark = tokens.filter((t) => (allDefs.get(t) || 0) < 2)
+  // 两类规则：--dsw-alias-* 为颜色/语义令牌，需 ≥2 处定义（浅色 + 深色重定义）；
+  // 其余 --dsw-*（如 --dsw-radius-*）为主题无关尺寸令牌，存在即可。
+  const isAlias = (t) => t.startsWith('--dsw-alias-')
+  const noDark = tokens.filter((t) => isAlias(t) && (allDefs.get(t) || 0) < 2)
+  const flatTokens = tokens.filter((t) => !isAlias(t))
 
   if (asJson) {
     console.log(JSON.stringify({
@@ -112,17 +117,18 @@ function main() {
     console.log(`宿主：${asarPath}`)
     console.log(`主题 CSS：${themeCss.length} 个（dsh-client-ui-theme/src/styles）`)
     console.log(`深色选择器 ${darkSelector}：${darkSeen ? '存在' : '未发现'}`)
-    console.log(`client.js 引用令牌 ${tokens.length} 个`)
+    console.log(`client.js 引用令牌 ${tokens.length} 个（alias 颜色类 ${tokens.filter(isAlias).length} + 尺寸类 ${flatTokens.length}）`)
     for (const t of tokens) {
       const n = allDefs.get(t) || 0
-      const mark = n === 0 ? '✖ 缺失' : n < 2 ? '△ 无深色变体' : '✓'
+      const mark = n === 0 ? '✖ 缺失'
+        : (isAlias(t) && n < 2) ? '△ 无深色变体' : '✓'
       console.log(`  ${mark}  ${t}（${n} 处定义）`)
     }
     if (missing.length) console.log(`\n缺失令牌：${missing.join(', ')}`)
     if (noDark.length) console.log(`无深色变体：${noDark.join(', ')}`)
     if (!darkSeen) console.log('\n警告：未发现深色选择器，深色适配前提存疑')
     console.log(missing.length === 0 && noDark.length === 0
-      ? '\n结论：全部令牌存在且带深色重定义 ✓'
+      ? '\n结论：全部令牌存在；alias 令牌带深色重定义 ✓'
       : '\n结论：存在令牌漂移，需同步 client.js ✗')
   }
   return missing.length === 0 && noDark.length === 0 ? 0 : 1

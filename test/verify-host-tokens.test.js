@@ -15,10 +15,10 @@ const ROOT = path.join(__dirname, '..')
 const SCRIPT = path.join(ROOT, 'scripts', 'verify-host-tokens.mjs')
 const CLIENT = path.join(ROOT, 'client.js')
 
-/** 与脚本同法从 client.js 收集 --dsw-alias-* 令牌名（夹具自维护）。 */
+/** 与脚本同法从 client.js 收集 --dsw-* 令牌名（夹具自维护）。 */
 function clientTokens() {
   const src = fs.readFileSync(CLIENT, 'utf8')
-  return [...new Set([...src.matchAll(/var\(\s*(--dsw-alias-[a-z0-9-]+)/g)].map((m) => m[1]))].sort()
+  return [...new Set([...src.matchAll(/var\(\s*(--dsw-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?=[,)\s])/g)].map((m) => m[1]))].sort()
 }
 
 /** 构造最小 asar：[4][headerSize][headerJSON][文件内容拼接]。 */

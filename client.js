@@ -6,14 +6,15 @@
  * - React 来自浏览器模块表（require('react')），无重复安装；
  * - inject 声明客户端服务（slots/locale/uiWorkspace/workspaces/remote）；
  * - 注册随 ctx.effect 生命周期回收（generator effect 形态）；
- * - 主题一律用官方 --dsw-alias-* 令牌（label-primary/secondary
- *   文字、bg-layer-1/2 背景、border-l2 边框、state-business/done/error
- *   状态色）并带字面量回退。令牌名已经静态实证：dsh-client-ui-theme 的
- *   design-platform.css 定义全部 264 个 alias 令牌（含深色
- *   body[data-ds-dark-theme] 重定义），主前端壳 CSS 使用 var(--dsw-alias-*)
- *   348 处（v0.13.1 修正：此前 color-* 令牌名不存在，深色模式失效；
- *   v0.21.0 补实证并将状态点蓝色改为 state-done-primary 紫色，与灰色
- *   未生成点拉开色相）；
+ * - 主题一律用官方 --dsw-* 令牌（--dsw-alias-* 颜色/语义：label-primary/
+ *   secondary 文字、label-on-color 反色、bg-layer-1/2 背景、border-l2 边框、
+ *   state-business/done/error 状态色；--dsw-radius-sm/md/xs 圆角）并带字面量
+ *   回退。令牌名已经静态实证：dsh-client-ui-theme 的 design-platform.css
+ *   定义全部 264 个 alias 令牌（含深色 body[data-ds-dark-theme] 重定义），
+ *   base.css 定义 radius 尺寸令牌，主前端壳 CSS 使用 var(--dsw-*) 348+ 处
+ *   （v0.13.1 修正：此前 color-* 令牌名不存在，深色模式失效；v0.21.0 补
+ *   实证并将状态点蓝色改为 state-done-primary 紫色，与灰色未生成点拉开
+ *   色相；v0.28.0 圆角改用 --dsw-radius-* 令牌，与官方管理页行模式对齐）；
  * - 控件自绘（不 require dsh-client-ui-primitives，该包不保证稳定）。
  *
  * 注入点（官方已分配空间的 seat，见 docs/adr/0004）：
@@ -779,7 +780,7 @@ window.__ModuleLoader__.load({
 
       /* 样式（主题令牌 + 字面量回退） */
       const buttonStyle = {
-        padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+        padding: '8px 14px', borderRadius: 'var(--dsw-radius-sm, 8px)', cursor: 'pointer',
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         color: 'var(--dsw-alias-label-primary, #111827)',
@@ -794,7 +795,7 @@ window.__ModuleLoader__.load({
         color: 'var(--dsw-alias-label-on-color, #ffffff)',
       }
       const inputStyle = {
-        flex: 1, padding: '8px 10px', borderRadius: 8, fontSize: 14,
+        flex: 1, padding: '8px 10px', borderRadius: 'var(--dsw-radius-sm, 8px)', fontSize: 14,
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         color: 'var(--dsw-alias-label-primary, #111827)',
@@ -802,7 +803,7 @@ window.__ModuleLoader__.load({
       const muted = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
       const cardChip = {
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
-        borderRadius: 10, padding: 14, cursor: 'pointer',
+        borderRadius: 'var(--dsw-radius-md, 12px)', padding: 14, cursor: 'pointer',
         background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
       }
 
@@ -1208,7 +1209,7 @@ window.__ModuleLoader__.load({
       return h('div', {
         role: 'region', 'aria-label': card ? card.title : row.path,
         style: {
-          marginTop: 12, padding: 16, borderRadius: 10,
+          marginTop: 12, padding: 16, borderRadius: 'var(--dsw-radius-md, 12px)',
           border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
           background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         },
@@ -1405,7 +1406,7 @@ window.__ModuleLoader__.load({
           blocks.push(h('pre', {
             key: key++,
             style: {
-              padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+              padding: 12, borderRadius: 'var(--dsw-radius-sm, 8px)', fontSize: 12, lineHeight: 1.5,
               overflow: 'auto', margin: '0 0 10px',
               background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
               border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
@@ -1513,7 +1514,7 @@ window.__ModuleLoader__.load({
             node: h('code', {
               key: key++,
               style: {
-                fontSize: 12, padding: '1px 4px', borderRadius: 4,
+                fontSize: 12, padding: '1px 4px', borderRadius: 'var(--dsw-radius-xs, 4px)',
                 background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
               },
             }, code[1]),
@@ -1535,7 +1536,7 @@ window.__ModuleLoader__.load({
     function cardChipStyle() {
       return {
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
-        borderRadius: 10,
+        borderRadius: 'var(--dsw-radius-md, 12px)',
         background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         cursor: 'pointer',
       }
@@ -1553,7 +1554,7 @@ window.__ModuleLoader__.load({
     /** 小号按钮样式（详情关闭等）。 */
     function chipButtonStyle() {
       return {
-        width: 28, height: 28, borderRadius: 8, flex: 'none', cursor: 'pointer',
+        width: 28, height: 28, borderRadius: 'var(--dsw-radius-sm, 8px)', flex: 'none', cursor: 'pointer',
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         color: 'var(--dsw-alias-label-primary, #111827)', fontSize: 16, lineHeight: 1,

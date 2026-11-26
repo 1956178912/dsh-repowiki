@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.28.0] - 2026-11-26
+
+### Changed
+
+- **Border radii now use the host's tokens** (practices.md: "Copy spacing,
+  type sizes, and row patterns from an existing host page of the same
+  kind"). Audited the official Plugin Manager page CSS: it uses
+  `--dsw-radius-sm/md` (8/12px, defined in `dsh-client-ui-theme/src/styles/
+  base.css`) for its controls and cards. The panel's hardcoded radii are
+  now tokenized: buttons/inputs/code blocks → `--dsw-radius-sm` (was 8),
+  card tiles/detail panes/page containers → `--dsw-radius-md` (was 10,
+  matching the host page's card radius), small pills → `--dsw-radius-xs`
+  (was 4); status dots (50%) and tag pills (999) keep their fully-rounded
+  form. Literal fallbacks preserve the old values if a token is missing.
+- **The drift checker now covers every `--dsw-*` token**, not just
+  `--dsw-alias-*` (9 alias + 3 radius = 12 tokens currently). Two rule
+  classes: alias (color/semantic) tokens must have a dark-mode override;
+  size tokens (radius etc.) need only exist. The collection regex also
+  stops mistreating documentation wildcards (`var(--dsw-alias-*)` in
+  comments) as tokens.
+
 ## [0.27.0] - 2026-11-26
 
 ### Fixed

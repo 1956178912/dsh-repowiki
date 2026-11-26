@@ -17,5 +17,5 @@ test('宿主主题令牌自检：client.js 引用的令牌在官方 CSS 有定�
     return
   }
   assert.equal(res.status, 0, `自检失败（exit=${res.status}）\n${res.stdout}\n${res.stderr}`)
-  assert.match(res.stdout, /结论：全部令牌存在且带深色重定义/)
+  assert.match(res.stdout, /全部令牌存在；alias 令牌带深色重定义/)
 })
