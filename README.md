@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete + panel views + multi-workspace overview (v0.19.0)
+## Current stage: Phases 1–4 complete + panel views + multi-workspace overview (v0.20.0)
 
 | Capability | Description |
 |---|---|

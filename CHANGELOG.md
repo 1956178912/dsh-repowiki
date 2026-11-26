@@ -3,6 +3,38 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.20.0] - 2026-11-26
+
+### Added
+
+- **Fault-injection DOM suite** (`test/client-faults.test.js`, 8 tests) —
+  the degradation chain was previously only proven on the happy path:
+  - **The ErrorBoundary is now positively verified under real React**:
+    injecting a render-time-throwing element (via the page's `notice` slot)
+    yields the inline "Repo wiki panel error: …" message instead of a
+    blanked slot, and `componentDidCatch` logs with the `repowiki:` console
+    prefix. Before this, the v0.14.0 boundary had never actually fired —
+    a wrong class signature would have made it silently useless exactly in
+    the failure mode it was built for (the user's "click does nothing").
+  - Load failure → error state with the error code interpolated into the
+    message + a working retry button.
+  - Single-view no-session / no-asset branches; per-workspace failure rows
+    in the overview.
+  - A corrupt remote result (structural anomaly) skips one card without
+    failing the whole enumeration; multi-page reads with a lying `eof`
+    still paginate correctly.
+  - List view (CardRow render path) now covered.
+- DOM test machinery extracted to `test/lib/dom-harness.mjs` (shared by
+  the normal-path and fault suites; supports `notice`, `t`, `wrapRead`
+  injection points).
+
+### Changed
+
+- Coverage again: overall 94.7% → **96.1%** lines, `client.js`
+  91.1% → 95.4% (85.8% functions). Remaining uncovered client lines are
+  the sidebar icon (rendered only in the sidebar slot) and defensive
+  abort branches.
+
 ## [0.19.0] - 2026-11-26
 
 ### Fixed
