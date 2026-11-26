@@ -81,9 +81,10 @@ export async function writeMemory(fs, root, entry) {
  * @param {string} locale - 语言代码。
  * @param {string} [status] - 过滤状态（'pending'/'accepted'/'rejected'），
  *   省略列出全部。
- * @returns {Promise<object[]>} 条目摘要数组（slug/title/status/tags/createdAt/path?）。
+ * @param {boolean} [withBody=false] - 返回值附带正文（去掉标题行）。
+ * @returns {Promise<object[]>} 条目摘要数组（slug/title/status/tags/createdAt/path?/body?）。
  */
-export async function listMemory(fs, root, locale, status) {
+export async function listMemory(fs, root, locale, status, withBody = false) {
   const dir = path.posix.join(ASSET_DIR, MEMORY_DIR, locale)
   let entries
   try {
@@ -103,7 +104,7 @@ export async function listMemory(fs, root, locale, status) {
       if (!parsed) continue
       if (status && parsed.meta.status !== status) continue
       const slug = entry.name.replace(/\.md$/, '')
-      out.push({
+      const item = {
         slug,
         title: parsed.meta.title ?? slug,
         status: MEMORY_STATUS.includes(parsed.meta.status) ? parsed.meta.status : 'pending',
@@ -111,7 +112,12 @@ export async function listMemory(fs, root, locale, status) {
         createdAt: typeof parsed.meta.createdAt === 'string' ? parsed.meta.createdAt : '',
         ...(typeof parsed.meta.path === 'string' && parsed.meta.path
           ? { path: parsed.meta.path } : {}),
-      })
+      }
+      if (withBody) {
+        // 正文去掉 frontmatter、前导空行与一级标题行，供消费方（如 wiki 生成）取摘要
+        item.body = parsed.body.replace(/^\s*#[^\n]*\n+/, '').trim()
+      }
+      out.push(item)
     } catch {
       // 单条坏条目不阻断枚举
     }

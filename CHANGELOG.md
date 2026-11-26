@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.10.0] - 2026-11-26
+
+### Added
+
+- Memory consumption side: `repowiki-generate` now reads accepted session
+  memory entries (`listMemory(status: 'accepted', withBody: true)`) and folds
+  them into the synthesis prompt as authoritative project conventions and
+  decisions (title + first body line, capped at `MAX_MEMORIES_IN_PROMPT`).
+  The output adds `memoriesRead` so runs report how much memory was used.
+- `listMemory` gained an optional `withBody` flag returning the entry body
+  (frontmatter and heading stripped).
+- `generatePrompt` accepts an optional `memories` argument; the empty case
+  renders `(none)` so prompts stay stable.
+- Tests: prompt injection and withBody branches (78/78 green).
+
 ## [0.9.0] - 2026-11-26
 
 ### Added

@@ -51,14 +51,19 @@ export function extractPrompt(file, locale) {
  *   卡片摘要（由 knowledge 层读取并裁剪）。
  * @param {{technologies:{name:string,ecosystem:string}[], projectName?:string}} stack - 技术栈与项目名。
  * @param {string} locale - 页面语言。
+ * @param {Array<{title:string, summary:string}>} [memories] - 已审核采信的会话
+ *   记忆条目（Phase 4 消费侧），组织进 Wiki 的约定/决策相关页面。
  * @returns {string} prompt 文本。
  */
-export function generatePrompt(cards, stack, locale) {
+export function generatePrompt(cards, stack, locale, memories = []) {
   const langName = locale === 'zh' ? '中文' : 'English'
   const cardLines = cards.map(c =>
     `- ${c.path} — ${c.title}\n  summary: ${c.summary}\n  symbols: ${c.keySymbols.map(s => `${s.name} (${s.note})`).join('; ') || '(none)'}\n  tags: ${c.tags.join(', ') || '(none)'}`)
     .join('\n')
   const techs = stack.technologies.map(t => `${t.name} (${t.ecosystem})`).join(', ') || '(none detected)'
+  const memoryLines = memories.length > 0
+    ? memories.map(m => `- ${m.title} — ${m.summary}`).join('\n')
+    : '(none)'
   return [
     `You are synthesizing a repository wiki from knowledge cards.`,
     `Write all content (titles, overviews, section bodies) in ${langName}.`,
@@ -69,11 +74,15 @@ export function generatePrompt(cards, stack, locale) {
     `Knowledge cards (${cards.length}):`,
     cardLines,
     ``,
+    `Reviewed session knowledge (${memories.length}):`,
+    memoryLines,
+    ``,
     `Task:`,
     `1. Group the cards into a small number of wiki pages (e.g. overview, core modules, data flow). Do not produce one page per card.`,
     `2. Each page: title, ascii kebab slug, 1-2 sentence overview, sections with Markdown bodies that reference the actual file paths and symbol names from the cards.`,
     `3. Where a page describes relationships or flows, add a mermaid diagram in the mermaid field (mermaid syntax only, no fences); otherwise leave mermaid empty.`,
     `4. Only use facts present in the cards; do not invent modules, symbols, or behavior.`,
+    `5. The reviewed session knowledge above is authoritative project convention and decision context. Weave it into the relevant pages (e.g. a conventions or decisions section) and keep each memory title traceable in the prose.`,
     ``,
     `Return the JSON object matching the requested schema. Do not include markdown fences or extra text.`,
   ].join('\n')

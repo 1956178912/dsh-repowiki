@@ -39,3 +39,18 @@ test('generatePrompt：卡片摘要、技术栈与分组指令', () => {
   assert.match(p, /Do not produce one page per card/)
   assert.match(p, /English/)
 })
+
+test('generatePrompt：已采信记忆注入约定/决策指令', () => {
+  const withMem = generatePrompt(
+    [{ path: 'src/a.js', title: 'A', summary: 's', keySymbols: [], tags: [] }],
+    { technologies: [] },
+    'zh',
+    [{ title: '索引前先建清单', summary: '变更传导按文件级为主。' }],
+  )
+  assert.match(withMem, /Reviewed session knowledge \(1\):/)
+  assert.match(withMem, /索引前先建清单 — 变更传导按文件级为主。/)
+  assert.match(withMem, /authoritative project convention and decision context/)
+
+  const withoutMem = generatePrompt([], { technologies: [] }, 'zh')
+  assert.match(withoutMem, /Reviewed session knowledge \(0\):\n\(none\)/)
+})

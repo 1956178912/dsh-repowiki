@@ -21,6 +21,9 @@ export const MEMORY_SCHEMA_VERSION = 1
 /** 记忆条目的状态流转：pending（待审）→ accepted（采信）/ rejected（否决）。 */
 export const MEMORY_STATUS = ['pending', 'accepted', 'rejected']
 
+/** 单次 Wiki 生成 prompt 中携带的已采信记忆条目上限（Phase 4 消费侧）。 */
+export const MAX_MEMORIES_IN_PROMPT = 20
+
 /** 索引文件相对资产目录的路径。 */
 export const INDEX_REL_PATH = `${ASSET_DIR}/index.json`
 

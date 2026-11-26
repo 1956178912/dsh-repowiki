@@ -42,7 +42,18 @@
 - 审核状态仅本地（Git 共享），多人协作时审核冲突未处理（写时覆盖）。
 - GUI 面板未展示记忆条目（切片未覆盖）。
 
+## 消费侧（v0.10.0）：记忆进入 Wiki 生成
+
+- `repowiki-generate` 读 accepted 记忆（标题 + 正文首行，上限
+  `MAX_MEMORIES_IN_PROMPT = 20`），注入生成 prompt 的 "Reviewed session
+  knowledge" 段与任务第 5 条（作为项目约定/决策上下文组织进页面、保持
+  标题可追溯）；输出新增 `memoriesRead`。
+- `listMemory` 增 `withBody` 可选参数（去 frontmatter 与标题行的正文）；
+  `generatePrompt` 增可选 `memories` 参数（空时渲染 (none)）。
+- 测试：prompt 注入与 withBody 分支（78/78 全绿）。
+
 ## 下一步
 
-- 记忆消费侧（generate 汇总 / cards 检索 / 面板展示）按优先级排入。
-- Phase 4 剩余"可选语义索引"按方案保持后置（YAGNI）。
+- 记忆面板展示（Wiki/卡片之外的第三种视图）与 cards 检索纳入记忆，
+  按需排入。
+- 切片 2（多工作区总览）受跨工作区读取限制，需真实环境验证。

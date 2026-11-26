@@ -76,6 +76,18 @@ test('setMemoryStatus：审核闭环与不存在条目', async () => {
   assert.equal(missing, null, '不存在条目返回 null')
 })
 
+test('listMemory：withBody 返回正文（去标题行）', async () => {
+  const dir = makeDir()
+  const fs = makeFakeFs(dir)
+  await writeMemory(fs, dir, { slug: 'm1', locale: 'zh', title: 'M1', body: '正文首行。\n\n第二段。', status: 'accepted' })
+
+  const plain = await listMemory(fs, dir, 'zh', 'accepted')
+  assert.equal(plain[0].body, undefined, '默认不返回正文')
+
+  const withBody = await listMemory(fs, dir, 'zh', 'accepted', true)
+  assert.equal(withBody[0].body, '正文首行。\n\n第二段。', '去标题行后的完整正文')
+})
+
 test('memoryPath：路径形态', () => {
   assert.equal(memoryPath('foo-bar', 'zh'), '.dsh-repowiki/memory/zh/foo-bar.md')
   assert.equal(memoryPath('foo-bar', 'en'), '.dsh-repowiki/memory/en/foo-bar.md')
