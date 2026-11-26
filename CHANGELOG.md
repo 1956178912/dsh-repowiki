@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.29.0] - 2026-11-26
+
+### Added
+
+- **Release-consistency guard** (`test/pack.test.js`): asserts
+  `package.json`'s version equals the newest version heading in both
+  CHANGELOG.md and CHANGELOG.zh-CN.md — a version bump without the
+  matching changelog entry is now a test failure instead of a silent
+  drift. (It caught its own first use: I bumped the version before
+  writing this entry and the suite went red until the entry existed.)
+
+### Changed
+
+- README (both languages): test count refreshed to 133 (was stale at
+  122 from v0.23.0).
+
 ## [0.28.0] - 2026-11-26
 
 ### Changed

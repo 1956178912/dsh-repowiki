@@ -58,3 +58,13 @@ test('package.json 声明的导出均指向包内已打包文件', () => {
   assert.deepEqual(pkg.dependencies || {}, {}, '运行时应保持零 npm 依赖')
   assert.equal(files.has('package.json'), true)
 })
+
+test('版本一致性：package.json 与两份 CHANGELOG 最新条目一致', () => {
+  const v = pkg.version
+  for (const f of ['CHANGELOG.md', 'CHANGELOG.zh-CN.md']) {
+    const text = fs.readFileSync(path.join(ROOT, f), 'utf8')
+    const m = text.match(/^## \[([^\]]+)\] -/m)
+    assert.ok(m, `${f} 应含 ## [x.y.z] 版本条目`)
+    assert.equal(m[1], v, `${f} 最新条目应为 ${v}（发布前 CHANGELOG 漏更新是真实漂移源）`)
+  }
+})
