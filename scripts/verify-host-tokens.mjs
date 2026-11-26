@@ -139,9 +139,14 @@ function main() {
   return missing.length === 0 && noDark.length === 0 ? 0 : 1
 }
 
-try {
-  process.exit(main())
-} catch (e) {
-  console.error(`verify-host-tokens 失败：${e && e.message}`)
-  process.exit(1)
+// 仅作为脚本直接运行时执行（被测试 import 时不副作用退出——否则会在
+// 测试进程里 process.exit，本地假通过、CI 整文件失败）
+const isEntry = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (isEntry) {
+  try {
+    process.exit(main())
+  } catch (e) {
+    console.error(`verify-host-tokens 失败：${e && e.message}`)
+    process.exit(1)
+  }
 }
