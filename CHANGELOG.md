@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.8.1] - 2026-11-26
+
+### Fixed
+
+- Panel data reads (web client): `remote.workspaceFiles.read` / `list` return
+  a `RemoteResult` — `{ok: true, value}` on success and `{ok: false, error}` on
+  failure, and the call **never rejects** (dsh-api-remotes' RemoteResult
+  contract, confirmed in the dsh-api-workspace-files README and
+  RemoteResult type). The client previously consumed the payload directly, so
+  every load failed with a spurious `workspace-file/bad-read`. The client now
+  unwraps `.value` and carries `error.code` into the panel's failure branch
+  (so "not yet generated" still degrades to its own hint). Smoke-test fakes
+  now use the same RemoteResult shape.
+
 ## [0.8.0] - 2026-11-26
 
 ### Added

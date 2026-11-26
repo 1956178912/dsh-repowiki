@@ -247,23 +247,30 @@ function makeFakeRemotes(overrides = {}) {
   })
 
   const wf = {
+    // RemoteResult 契约：成功值在 .value；失败 {ok:false, error} 且不抛
     async read(sessionId, rel, range, signal) {
       const text = files[rel]
       if (text === undefined) {
-        throw Object.assign(new Error(`not found: ${rel}`), { code: 'workspace-file/not-found' })
+        return {
+          ok: false,
+          error: { code: 'workspace-file/not-found', message: `not found: ${rel}`, details: { path: rel } },
+        }
       }
       const lines = text.split('\n')
       const offset = range?.offset ?? 1
       const limit = range?.limit ?? 5000
       const slice = lines.slice(offset - 1, offset - 1 + limit)
       return {
-        absolutePath: `/ws/${rel}`, version: 'v1', offset,
-        text: slice.join('\n'), lines: slice.length,
-        eof: offset - 1 + slice.length >= lines.length,
+        ok: true,
+        value: {
+          absolutePath: `/ws/${rel}`, version: 'v1', offset,
+          text: slice.join('\n'), lines: slice.length,
+          eof: offset - 1 + slice.length >= lines.length,
+        },
       }
     },
     async list(sessionId, rel) {
-      return { path: rel, entries: entriesOf(rel), truncated: false }
+      return { ok: true, value: { path: rel, entries: entriesOf(rel), truncated: false } }
     },
   }
   const workspaces = {
@@ -413,11 +420,11 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
     }
   })
   mod.apply(makeStubCtx(wf))
-  // 包装 read 让 index.json 抛 not-found（保留其余文件）
+  // 包装 read 让 index.json 返回 not-found 失败（保留其余文件）
   const originalRead = wf.read.bind(wf)
   wf.read = async (sessionId, rel, range, signal) => {
     if (rel === '.dsh-repowiki/index.json') {
-      throw Object.assign(new Error('not found'), { code: 'workspace-file/not-found' })
+      return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
     }
     return originalRead(sessionId, rel, range, signal)
   }

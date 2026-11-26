@@ -49,7 +49,20 @@
 - 详情列在刷新后保留旧引用（小数据量下可接受）。
 - theme 令牌名仍走 `--dsw-alias-*` + 字面量回退，未经 Theme 查询验证。
 
-## 下一步
+## 实测修正：RemoteResult 契约（v0.8.1，GUI 首次真实加载发现）
 
-- 用户确认 GUI 渲染后，按需进入切片 2（多工作区总览）/切片 3（Wiki 浏览与
-  更新检测）；Phase 3（commit/diff 增量、导入导出）另行排期。
+- 症状：刷新 GUI 后面板读取失败，错误码 `workspace-file/bad-read`。
+- 根因：`remote.workspaceFiles.read/list` 返回 `RemoteResult`
+  （`{ok:true, value}` / `{ok:false, error}`，**失败不抛**），而客户端
+  直接消费 payload（`res.text` / `res.entries`），结构不符触发兜底错误。
+- 依据：dsh-api-workspace-files README（"A Remote call does not reject"）、
+  dsh-typert-protocol 的 `RemoteResult<T>` 类型、ui-sidebar-documentpreview
+  的 `rpc.ts` 消费形态。
+- 修复：客户端新增 `unwrapRemote` 解包并把 `error.code` 透传至面板错误
+  分支；not-found 降级逻辑保持工作；冒烟测试 fake 改为 RemoteResult 形态
+  （75/75 全绿）。此教训已回写进 client.js 头部注释的数据通道段。
+
+## 下一步（修正后）
+
+- 用户再次刷新 GUI 验证面板数据渲染（统计/筛选/卡片/Wiki）。
+- 记忆消费侧（generate 汇总 / cards 检索 / 面板展示）与切片 2 待排。

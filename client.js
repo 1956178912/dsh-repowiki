@@ -180,6 +180,22 @@ window.__ModuleLoader__.load({
     /* ── 数据层：workspaceFiles 远程读取（全部相对工作区根） ── */
 
     /**
+     * 解包 RemoteResult：成功取出 .value；失败（ok:false）按 error.code
+     * 抛错，由调用方 catch 后转为面板错误码。
+     * @param {{ok:boolean, value?:*, error?:{code:string, message?:string}}|null} result - 远程调用结果。
+     * @param {string} fallback - 结构异常时的兜底错误码。
+     * @returns {*} 业务值。
+     */
+    function unwrapRemote(result, fallback) {
+      if (result && result.ok === true) return result.value
+      if (result && result.ok === false && result.error) {
+        const code = typeof result.error.code === 'string' ? result.error.code : fallback
+        throw { code, message: result.error.message ?? code }
+      }
+      throw { code: fallback, message: fallback }
+    }
+
+    /**
      * 读取一个文本文件，翻页拼接至 eof（或达页数上限按截断返回）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id（工作区成员会话）。
@@ -191,8 +207,8 @@ window.__ModuleLoader__.load({
       const parts = []
       let offset = 1
       for (let page = 0; page < READ_MAX_PAGES; page++) {
-        const res = await wf.read(sessionId, rel, { offset, limit: READ_PAGE_LINES }, signal)
-        if (!res || typeof res.text !== 'string') throw new Error('workspace-file/bad-read')
+        const res = unwrapRemote(await wf.read(sessionId, rel, { offset, limit: READ_PAGE_LINES }, signal), 'workspace-file/bad-read')
+        if (!res || typeof res.text !== 'string') throw { code: 'workspace-file/bad-read', message: 'bad read result' }
         parts.push(res.text)
         if (res.eof || !res.lines) break
         offset += res.lines
@@ -221,8 +237,8 @@ window.__ModuleLoader__.load({
      * @returns {Promise<object[]>} WorkspaceDirectoryEntry 数组（name/type/size?）。
      */
     async function listChildren(wf, sessionId, rel, signal) {
-      const res = await wf.list(sessionId, rel, signal)
-      if (!res || !Array.isArray(res.entries)) throw new Error('workspace-file/bad-list')
+      const res = unwrapRemote(await wf.list(sessionId, rel, signal), 'workspace-file/bad-list')
+      if (!res || !Array.isArray(res.entries)) throw { code: 'workspace-file/bad-list', message: 'bad list result' }
       return res.entries
     }
 
