@@ -15,9 +15,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
-import React from 'react'
+import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { act } from 'react-dom/test-utils'
 import { makeCorpusWf } from './lib/corpus-fixture.mjs'
 
 /* jsdom 全局：须在导入 client.js 前就绪（client.js 顶层注册 ModuleLoader） */
@@ -73,10 +72,11 @@ const Page = pageComponentOf(
   }),
 )
 
-/** 挂载页面并选中工作区（真实 change 事件），等待语料装载完成。 */
+/** 挂载页面并选中工作区（真实 change 事件），等待语料装载完成。
+ *  每次挂载用全新 container（重复对同一 container createRoot 会告警）。 */
 async function mountLoaded() {
-  const container = document.getElementById('root')
-  container.innerHTML = ''
+  const container = document.createElement('div')
+  document.body.appendChild(container)
   const root = createRoot(container)
   await act(async () => {
     root.render(React.createElement(Page, {
