@@ -3,6 +3,26 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.6.0] - 2026-11-26
+
+### Added
+
+- `repowiki-export` tool: copies the whole `.dsh-repowiki/` knowledge base
+  into a directory snapshot (Markdown and JSON assets only, no archive
+  format, no model calls). Relative targets resolve against the session
+  directory; a non-empty target is refused unless `overwrite=true`.
+- `repowiki-import` tool: restores `.dsh-repowiki/` from a snapshot
+  directory (symmetric with export). Existing assets are protected unless
+  `overwrite=true`; the imported `index.json` is verified for schema
+  compatibility and a mismatch is reported as a rebuild hint.
+- `src/transfer.js`: `copyTree` / `dirHasContent` — pure `ctx.fs` copying
+  with per-file fault tolerance (unreadable files are counted as skipped,
+  never abort the transfer).
+- Tests: transfer unit tests plus an end-to-end export → wipe → import
+  round trip through the real tools (68/68 green).
+- Phase 3 is now complete: incremental reindexing, card refresh,
+  manual-edit protection, orphan reporting, import/export.
+
 ## [0.5.1] - 2026-11-26
 
 ### Added

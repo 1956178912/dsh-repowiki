@@ -14,12 +14,16 @@
  * - repowiki-cards：只读检索（Phase 1）
  * - repowiki-extract：spawn 子代理生成知识卡片（Phase 2）
  * - repowiki-generate：卡片凝练为 Wiki 页面（Phase 2）
+ * - repowiki-export：资产导出为目录快照（Phase 3）
+ * - repowiki-import：从目录快照恢复资产（Phase 3）
  */
 
 import { repowikiIndexTool } from './src/tool-index.js'
 import { repowikiCardsTool } from './src/tool-cards.js'
 import { repowikiExtractTool } from './src/tool-extract.js'
 import { repowikiGenerateTool } from './src/tool-generate.js'
+import { repowikiExportTool } from './src/tool-export.js'
+import { repowikiImportTool } from './src/tool-import.js'
 
 export const name = 'repowiki'
 
@@ -44,6 +48,8 @@ export async function apply(ctx, _config) {
     ctx.tools.register(repowikiCardsTool(ctx)),
     ctx.tools.register(repowikiExtractTool(ctx)),
     ctx.tools.register(repowikiGenerateTool(ctx)),
+    ctx.tools.register(repowikiExportTool(ctx)),
+    ctx.tools.register(repowikiImportTool(ctx)),
   ]
   // 注册本归 apply ctx 回收；按 practices 规则 2，disposer 同时登记进自有
   // effect，保证任一侧 teardown 都能干净移除。

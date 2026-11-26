@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phase 3 incremental core + panel slice 1 (v0.5.0)
+## Current stage: Phase 3 complete + panel slice 1 (v0.6.0)
 
 | Capability | Description |
 |---|---|
@@ -17,10 +17,12 @@ English | [中文](README.zh-CN.md)
 | `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/`; a card is refreshed when its recorded source digest no longer matches the file, unless it is marked `manuallyEdited`; cards whose source file disappeared are reported as orphaned |
 | `repowiki-generate` tool | Reads only the cards + tech stack, synthesizes theme-grouped Wiki pages (Markdown + optional mermaid) into `.dsh-repowiki/wiki/<locale>/` |
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
+| `repowiki-export` tool | Copies the `.dsh-repowiki/` assets into a directory snapshot (backup or transfer; Markdown/JSON only, no model calls); a non-empty target is refused unless `overwrite` |
+| `repowiki-import` tool | Restores `.dsh-repowiki/` from a snapshot directory; existing assets are protected unless `overwrite`; verifies `index.json` compatibility afterwards |
 | Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page: file/symbol/card/doc counts and latest update, an all/generated/pending filter (pending = listed in `index.json` without a card), search, grid and list views, and a card details pane — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
 
 Roadmap:
-- Phase 3 (partly done in v0.5.1): content-digest incremental reindexing, card refresh, manual-edit protection and orphan reporting are landed; directory import/export remains
+- Phase 3 (done in v0.6.0): content-digest incremental reindexing, card refresh, manual-edit protection, orphan reporting, directory import/export
 - Phase 4: session memory distillation, optional semantic index
 
 ## Architecture highlights
@@ -81,10 +83,13 @@ src/render.js          Card / Wiki Markdown rendering
 src/knowledge.js       knowledge + wiki directory read/write, frontmatter
 src/config.js          repowiki-plan.json reading and candidate filtering
 src/spawn.js           spawn subagent invocation wrapper
+src/transfer.js        Snapshot copy for export/import (ctx.fs injected)
 src/tool-index.js      repowiki-index tool
 src/tool-cards.js      repowiki-cards tool
 src/tool-extract.js    repowiki-extract tool
 src/tool-generate.js   repowiki-generate tool
+src/tool-export.js     repowiki-export tool
+src/tool-import.js     repowiki-import tool
 test/                  Unit and integration tests (52 cases)
 docs/adr/              Architecture decision records (Chinese)
 docs/checkpoints/      Phase checkpoints (Chinese)

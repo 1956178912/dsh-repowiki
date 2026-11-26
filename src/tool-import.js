@@ -1,0 +1,141 @@
+/**
+ * repowiki-import 工具：从目录快照恢复知识库资产。
+ *
+ * 数据流：定位资产根 → 校验源目录非空 → 默认在目标资产已存在时拒绝
+ * （overwrite=true 才覆盖）→ 把源目录内容原样复制回 .dsh-repowiki/。
+ * 与 repowiki-export 对称：导出产生的目录快照可直接作为导入源。
+ * 纯文件操作：无 LLM、无模型调用。
+ */
+
+import * as path from 'node:path'
+import { resolveAssetRoot, readIndex } from './assets.js'
+import { copyTree, dirHasContent } from './transfer.js'
+
+/** 工具描述。 */
+const DESCRIPTION = [
+  'Import the .dsh-repowiki/ knowledge base of the current project from a directory',
+  'snapshot (the output of repowiki-export: index.json, knowledge/, wiki/, plan file).',
+  'Restores into .dsh-repowiki/ of the current project. The import is refused while',
+  'existing assets are present unless overwrite=true. Pure file copy with no model calls.',
+  'After import, index.json compatibility is verified and reported.',
+].join(' ')
+
+/**
+ * 构造 repowiki-import 工具定义。
+ * @param {object} ctx - 插件上下文（提供 ctx.fs）。
+ * @returns {object} ToolDefinition。
+ */
+export function repowikiImportTool(ctx) {
+  return {
+    name: 'repowiki-import',
+    description: DESCRIPTION,
+    parameters: {
+      root: {
+        type: 'string',
+        description: 'Optional project root to import into. Defaults to the current directory; the asset root is found by walking up for .dsh-repowiki.',
+      },
+      source: {
+        type: 'string',
+        description: 'Source directory of the snapshot (required). Relative paths resolve against the session directory.',
+      },
+      overwrite: {
+        type: 'boolean',
+        description: 'Overwrite an existing .dsh-repowiki/ in the project. Default false (the import is refused while existing assets are present).',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          root: { type: 'string' },
+          source: { type: 'string' },
+          files: { type: 'integer' },
+          dirs: { type: 'integer' },
+          skipped: { type: 'integer' },
+          indexOk: { type: 'boolean' },
+          durationMs: { type: 'integer' },
+        },
+        required: ['root', 'source', 'files', 'dirs', 'skipped', 'indexOk', 'durationMs'],
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: [
+          `Imported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.source} in ${value.durationMs}ms.`,
+          value.indexOk ? 'index.json is present and compatible.' : 'Warning: index.json is missing or its schema version is incompatible — run repowiki-index.',
+        ].join('\n'),
+      }],
+    },
+    timeoutMs: 120_000,
+    async execute(args, _exec) {
+      const fs = ctx.fs
+      if (!fs) throw new Error('repowiki-import requires the ctx.fs capability')
+      const startedAt = Date.now()
+      const startDir = typeof args.root === 'string' && args.root.trim() ? args.root : cwdOf(ctx)
+      const { root, assetDir } = await resolveAssetRoot(fs, startDir)
+
+      if (typeof args.source !== 'string' || !args.source.trim()) {
+        return {
+          root, source: '', files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+          hint: 'source is required: the snapshot directory to import from.',
+        }
+      }
+      const sourceAbs = resolveTarget(args.source, cwdOf(ctx))
+      if (!(await dirHasContent(fs, sourceAbs))) {
+        return {
+          root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+          hint: `Source ${sourceAbs} does not exist or is empty. Nothing to import.`,
+        }
+      }
+      if (!args.overwrite && (await dirHasContent(fs, assetDir))) {
+        return {
+          root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+          hint: `${assetDir} already holds assets. Pass overwrite=true to replace them.`,
+        }
+      }
+      const counts = await copyTree(fs, sourceAbs, assetDir)
+      // 导入后校验索引可读性（版本不兼容时提示重建而非失败）
+      const indexOk = (await readIndex(fs, root)) !== null
+      return {
+        root,
+        source: sourceAbs,
+        files: counts.files,
+        dirs: counts.dirs,
+        skipped: counts.skipped,
+        indexOk,
+        durationMs: Date.now() - startedAt,
+      }
+    },
+    presentCall: (args) => ({
+      card: 'generic',
+      title: 'Import knowledge base snapshot',
+      kind: 'execute',
+      rawInput: { source: args.source ?? '(unset)', overwrite: args.overwrite ?? false },
+    }),
+  }
+}
+
+/**
+ * 把源参数解析为绝对路径（相对路径相对会话 cwd）。
+ * @param {string} source - 源路径参数。
+ * @param {string} cwd - 会话当前目录绝对路径。
+ * @returns {string} 绝对路径（POSIX 分隔符）。
+ */
+function resolveTarget(source, cwd) {
+  const trimmed = source.trim()
+  const abs = path.isAbsolute(trimmed) ? trimmed : path.join(cwd, trimmed)
+  return abs.split(path.sep).join('/')
+}
+
+/**
+ * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
+ * @param {object} ctx - 插件上下文。
+ * @returns {string} 当前目录绝对路径。
+ */
+function cwdOf(ctx) {
+  const wd = ctx.workingDirectory
+  if (wd && typeof wd.get === 'function') {
+    try { return wd.get() } catch { /* 降级到 process.cwd */ }
+  }
+  return process.cwd()
+}

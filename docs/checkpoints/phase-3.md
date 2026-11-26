@@ -57,8 +57,23 @@
   的显式清理流程。
 - 测试：两函数的分支单测（63/63 全绿）。
 
+## 补充：导入导出（v0.6.0，Phase 3 完成）
+
+- `repowiki-export`：把 `.dsh-repowiki/**` 复制为目录快照（仅 .md/.json
+  文本资产，无归档格式、无模型调用）。目标目录默认不得已存在且非空，
+  `overwrite=true` 才合并覆盖。
+- `repowiki-import`：与导出对称，从快照目录恢复资产；目标资产已存在
+  时默认拒绝（`overwrite=true` 才覆盖），导入后校验 index.json 可读性
+  并按降级提示报告。
+- `src/transfer.js`：`copyTree` / `dirHasContent` 纯 ctx.fs 实现，单文件
+  失败计 skipped 不中止整体。
+- 路径策略：相对路径相对会话 cwd（落在工作区内最安全）；绝对路径按
+  fs 后端策略尝试，越界写由后端拒绝并经错误码上浮为可读提示。
+- 测试：transfer 单测 + export→清空→import 的真实工具端到端往返
+  （68/68 全绿）。plugin.test 注册名更新为 6 个工具。
+
 ## 下一步
 
 - 面板侧"有可用更新"提示（切片 3）可直接消费 digest 差异，等用户确认
   v0.4.0 GUI 渲染后排入。
-- Phase 3 剩余：导入导出；孤儿卡片显式清理；Phase 4 会话记忆提炼另议。
+- Phase 3 完成。剩余：孤儿卡片显式清理；Phase 4 会话记忆提炼另议。

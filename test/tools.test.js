@@ -10,6 +10,8 @@ import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiCardsTool } from '../src/tool-cards.js'
+import { repowikiExportTool } from '../src/tool-export.js'
+import { repowikiImportTool } from '../src/tool-import.js'
 import { cardIsFresh, cardIsProtected, countOrphaned } from '../src/tool-extract.js'
 
 /**
@@ -89,7 +91,10 @@ test('repowiki-cards execute：有索引时按 query 过滤并给出 search 视�
 })
 
 test('工具契约：name/description/output 契约完整（注册表最低要求）', () => {
-  for (const tool of [repowikiIndexTool({}), repowikiCardsTool({})]) {
+  for (const tool of [
+    repowikiIndexTool({}), repowikiCardsTool({}),
+    repowikiExportTool({}), repowikiImportTool({}),
+  ]) {
     assert.equal(typeof tool.name, 'string')
     assert.equal(typeof tool.description, 'string')
     assert.ok(tool.description.length > 20, '描述说明用途')
@@ -152,4 +157,55 @@ test('countOrphaned：源文件已消失的卡片计数（不删除）', () => {
   assert.equal(countOrphaned(existing, [{ path: 'a.ts' }, { path: 'b.ts' }, { path: 'c.ts' }]), 0)
   assert.equal(countOrphaned(existing, []), 3)
   assert.equal(countOrphaned(new Map(), []), 0)
+})
+
+test('repowiki-export/import execute：快照导出与恢复端到端', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-xfer-tool-'))
+  nodefs.writeFileSync(path.join(dir, 'app.ts'), 'export function main() {}\n')
+  const ctx = makeCtx(dir)
+
+  // 先建索引，让 .dsh-repowiki/ 有真实资产
+  const indexValue = await repowikiIndexTool(ctx).execute({}, fakeExec)
+  assert.equal(indexValue.files, 1)
+
+  // 导出到工作区内相对目录
+  const exportTool = repowikiExportTool(ctx)
+  const exported = await exportTool.execute({ target: 'snapshot' }, fakeExec)
+  assert.equal(exported.files, 1, '快照含 index.json')
+  assert.ok(nodefs.existsSync(path.join(dir, 'snapshot', 'index.json')))
+
+  const rendered = exportTool.output.render({}, exported)
+  assert.match(rendered[0].text, /Exported 1 file\(s\)/)
+
+  // 目标已存在且非空：默认拒绝
+  const refused = await exportTool.execute({ target: 'snapshot' }, fakeExec)
+  assert.equal(refused.files, 0)
+  assert.match(refused.hint, /overwrite=true/)
+
+  // overwrite=true 合并覆盖
+  const merged = await exportTool.execute({ target: 'snapshot', overwrite: true }, fakeExec)
+  assert.ok(merged.files >= 1)
+
+  // 缺 target 参数给出可读提示
+  const noTarget = await exportTool.execute({}, fakeExec)
+  assert.match(noTarget.hint, /target is required/)
+
+  // 清空资产后从快照恢复
+  nodefs.rmSync(path.join(dir, '.dsh-repowiki'), { recursive: true, force: true })
+  const importTool = repowikiImportTool(ctx)
+  const imported = await importTool.execute({ source: 'snapshot' }, fakeExec)
+  assert.equal(imported.files, 1)
+  assert.equal(imported.indexOk, true, '导入的索引版本可读')
+  assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki', 'index.json')))
+  const impRendered = importTool.output.render({}, imported)
+  assert.match(impRendered[0].text, /index.json is present and compatible/)
+
+  // 资产已存在且无 overwrite：导入被拒
+  const impRefused = await importTool.execute({ source: 'snapshot' }, fakeExec)
+  assert.equal(impRefused.files, 0)
+  assert.match(impRefused.hint, /overwrite=true/)
+
+  // 源不存在给出可读提示
+  const noSource = await importTool.execute({ source: 'nope' }, fakeExec)
+  assert.match(noSource.hint, /does not exist or is empty/)
 })
