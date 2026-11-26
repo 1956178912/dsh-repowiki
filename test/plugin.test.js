@@ -49,7 +49,7 @@ test('apply：声明正确，注册全部工具，teardown 干净移除', async 
   assert.deepEqual(inject, ['fs', 'tools', 'subagents'], '依赖声明与设计一致')
   assert.deepEqual(
     ctx.tools.registered.map(t => t.name).sort(),
-    ['repowiki-cards', 'repowiki-export', 'repowiki-extract', 'repowiki-generate', 'repowiki-import', 'repowiki-index', 'repowiki-memory'],
+    ['repowiki-cards', 'repowiki-edit', 'repowiki-export', 'repowiki-extract', 'repowiki-generate', 'repowiki-import', 'repowiki-index', 'repowiki-memory'],
   )
   for (const def of ctx.tools.registered) {
     assert.ok(def.output?.schema && typeof def.output.render === 'function', '输出契约完整')

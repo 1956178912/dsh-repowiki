@@ -3,6 +3,26 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.9.0] - 2026-11-26
+
+### Added
+
+- `repowiki-edit` tool (completes the plan's Phase 3 list): hand-edit
+  knowledge cards. `create` adds a manual card whose `path` may sit outside
+  the index (an orphan manual card — it survives export/import because the
+  whole asset tree is copied, and `repowiki-extract` never refreshes it since
+  it is marked `manuallyEdited` and, when outside the index, not even a
+  candidate). `update` rewrites an existing card (title/tags override when
+  given; body replaces the text when given, otherwise the text is kept) and
+  sets `manuallyEdited: true` so auto-refresh stops touching it. Pure file
+  operations over `ctx.fs`, no model calls.
+- `knowledge.js` exports `cardFrontmatter` so manual edits reuse the exact
+  frontmatter shape of generated cards.
+- The plan's `state.json` marker for manual edits is folded into the card
+  frontmatter itself (recorded in `docs/checkpoints/phase-3b.md`).
+- Tests: create/update end-to-end round trip with the failure hints
+  (76/76 green).
+
 ## [0.8.1] - 2026-11-26
 
 ### Fixed

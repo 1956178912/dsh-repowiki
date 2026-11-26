@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 3 完成 + Phase 4 记忆工具 + 面板切片 1-3（v0.8.0）
+## 当前阶段：Phase 3 完成（含 repowiki-edit）+ Phase 4 记忆 + 面板切片 1-3（v0.9.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -19,6 +19,7 @@
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；目标非空时默认拒绝，除非 `overwrite` |
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
+| `repowiki-edit` 工具 | 人工修订知识卡片：`create` 新建人工卡（path 可为索引外路径），`update` 改写现有卡片；两者置 `manuallyEdited`，`repowiki-extract` 不再自动刷新该卡 |
 | `repowiki-memory` 工具 | 把本会话学到的知识沉淀到 `.dsh-repowiki/memory/<locale>/`（默认 `pending` 待审），再经 `list` / `accept` / `reject` 完成审核闭环；条目为带 JSON frontmatter 的 Markdown，随 Git 共享 |
 | Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、搜索、网格与列表视图、卡片详情、以及浏览已生成页面的 Wiki 页签——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
@@ -92,6 +93,7 @@ src/tool-export.js     repowiki-export 工具
 src/tool-import.js     repowiki-import 工具
 src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
+src/tool-edit.js       repowiki-edit 工具
 test/                  单元与集成测试（52 用例）
 docs/adr/              架构决策记录（中文）
 docs/checkpoints/      阶段检查点（中文）

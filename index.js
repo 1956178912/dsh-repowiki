@@ -16,6 +16,7 @@
  * - repowiki-generate：卡片凝练为 Wiki 页面（Phase 2）
  * - repowiki-export：资产导出为目录快照（Phase 3）
  * - repowiki-import：从目录快照恢复资产（Phase 3）
+ * - repowiki-edit：人工修订知识卡片（Phase 3）
  * - repowiki-memory：会话知识沉淀与审核（Phase 4）
  */
 
@@ -25,6 +26,7 @@ import { repowikiExtractTool } from './src/tool-extract.js'
 import { repowikiGenerateTool } from './src/tool-generate.js'
 import { repowikiExportTool } from './src/tool-export.js'
 import { repowikiImportTool } from './src/tool-import.js'
+import { repowikiEditTool } from './src/tool-edit.js'
 import { repowikiMemoryTool } from './src/tool-memory.js'
 
 export const name = 'repowiki'
@@ -52,6 +54,7 @@ export async function apply(ctx, _config) {
     ctx.tools.register(repowikiGenerateTool(ctx)),
     ctx.tools.register(repowikiExportTool(ctx)),
     ctx.tools.register(repowikiImportTool(ctx)),
+    ctx.tools.register(repowikiEditTool(ctx)),
     ctx.tools.register(repowikiMemoryTool(ctx)),
   ]
   // 注册本归 apply ctx 回收；按 practices 规则 2，disposer 同时登记进自有

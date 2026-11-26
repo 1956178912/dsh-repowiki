@@ -12,6 +12,7 @@ import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiCardsTool } from '../src/tool-cards.js'
 import { repowikiExportTool } from '../src/tool-export.js'
 import { repowikiImportTool } from '../src/tool-import.js'
+import { repowikiEditTool } from '../src/tool-edit.js'
 import { repowikiMemoryTool } from '../src/tool-memory.js'
 import { cardIsFresh, cardIsProtected, countOrphaned } from '../src/tool-extract.js'
 
@@ -95,7 +96,7 @@ test('工具契约：name/description/output 契约完整（注册表最低要�
   for (const tool of [
     repowikiIndexTool({}), repowikiCardsTool({}),
     repowikiExportTool({}), repowikiImportTool({}),
-    repowikiMemoryTool({}),
+    repowikiEditTool({}), repowikiMemoryTool({}),
   ]) {
     assert.equal(typeof tool.name, 'string')
     assert.equal(typeof tool.description, 'string')
@@ -261,4 +262,62 @@ test('repowiki-memory execute：write/list/accept/reject 审核闭环', async ()
 
   const missing = await tool.execute({ action: 'reject', locale: 'zh', slug: 'nope' }, fakeExec)
   assert.match(missing.hint, /not found/)
+})
+
+test('repowiki-edit execute：人工卡 create/update 闭环', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-edit-tool-'))
+  const ctx = makeCtx(dir)
+  const tool = repowikiEditTool(ctx)
+
+  // create：索引外路径（孤儿人工卡）
+  const created = await tool.execute({
+    action: 'create', locale: 'zh', path: 'docs/decisions.md',
+    title: '为什么不用重量级解析框架',
+    body: '# 为什么不用重量级解析框架\n\n## 概要 / Summary\n\nADR-0001 的决策。\n',
+    tags: ['decision'],
+  }, fakeExec)
+  assert.equal(created.slug, 'docs-decisions')
+  const cardPath = path.join(dir, '.dsh-repowiki', 'knowledge', 'zh', 'docs-decisions.md')
+  assert.ok(nodefs.existsSync(cardPath), '人工卡写入知识目录')
+  const cardText = nodefs.readFileSync(cardPath, 'utf8')
+  assert.match(cardText, /"manuallyEdited": true/)
+  assert.match(cardText, /"path": "docs\/decisions.md"/)
+  assert.match(cardText, /"sourceDigest": ""/)
+  assert.match(cardText, /# 为什么不用重量级解析框架/)
+
+  // create 缺 title/body 给出可读提示
+  const bad = await tool.execute({ action: 'create', locale: 'zh', path: 'x.md' }, fakeExec)
+  assert.match(bad.hint, /title and body are required/)
+
+  // update 不存在的卡片 → 提示走 create
+  const notFound = await tool.execute({ action: 'update', locale: 'zh', path: 'nope.ts' }, fakeExec)
+  assert.match(notFound.hint, /Use action=create/)
+
+  // 造一张自动卡用于 update
+  const auto = '---\n' + JSON.stringify({
+    schemaVersion: 1, path: 'src/a.ts', lang: 'typescript', locale: 'zh',
+    sourceDigest: 'dig-a', title: '旧标题', tags: ['旧'],
+    manuallyEdited: false, generatedAt: '2026-01-01T00:00:00.000Z',
+  }, null, 2) + '\n---\n# 旧标题\n\n旧正文\n'
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki', 'knowledge', 'zh'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki', 'knowledge', 'zh', 'src-a.md'), auto)
+
+  // update 覆盖标题/正文/标签并置 manuallyEdited
+  const updated = await tool.execute({
+    action: 'update', locale: 'zh', path: 'src/a.ts',
+    title: '新标题', tags: ['新'],
+    body: '# 新标题\n\n新正文（人工修订）\n',
+  }, fakeExec)
+  assert.equal(updated.slug, "src-a")
+  const updatedText = nodefs.readFileSync(path.join(dir, '.dsh-repowiki', 'knowledge', 'zh', 'src-a.md'), 'utf8')
+  assert.match(updatedText, /"manuallyEdited": true/)
+  assert.match(updatedText, /"title": "新标题"/)
+  assert.match(updatedText, /"path": "src\/a.ts"/, 'frontmatter path 字段保留')
+  assert.match(updatedText, /新正文（人工修订）/)
+
+  // update 未给 body 时保留原正文
+  await tool.execute({ action: 'update', locale: 'zh', path: 'src/a.ts', tags: ['保留'] }, fakeExec)
+  const kept = nodefs.readFileSync(path.join(dir, '.dsh-repowiki', 'knowledge', 'zh', 'src-a.md'), 'utf8')
+  assert.match(kept, /新正文（人工修订）/, '未提供 body 时保留原正文')
+  assert.match(kept, /"保留"/)
 })
