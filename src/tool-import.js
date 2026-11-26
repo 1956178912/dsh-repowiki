@@ -56,6 +56,7 @@ export function repowikiImportTool(ctx) {
           files: { type: 'integer' },
           dirs: { type: 'integer' },
           skipped: { type: 'integer' },
+          failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] }, description: 'Bounded list (first 20) of items that could not be copied.' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
@@ -66,6 +67,7 @@ export function repowikiImportTool(ctx) {
         type: 'text',
         text: [
           `Imported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.source} in ${value.durationMs}ms.`,
+          ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
           value.indexOk ? 'index.json is present and compatible.' : 'Warning: index.json is missing or its schema version is incompatible — run repowiki-index.',
         ].join('\n'),
       }],
@@ -106,6 +108,7 @@ export function repowikiImportTool(ctx) {
         files: counts.files,
         dirs: counts.dirs,
         skipped: counts.skipped,
+        failed: counts.failed,
         indexOk,
         durationMs: Date.now() - startedAt,
       }

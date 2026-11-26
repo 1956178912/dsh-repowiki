@@ -24,10 +24,17 @@ const TEXT_EXTENSIONS = new Set(['.md', '.json'])
  * @param {object} fs - ctx.fs 服务。
  * @param {string} srcAbs - 源目录绝对路径。
  * @param {string} dstAbs - 目标目录绝对路径。
- * @returns {Promise<{files:number, dirs:number, skipped:number}>} 复制计数。
+ * @returns {Promise<{files:number, dirs:number, skipped:number, failed:Array}>} 复制计数。
+ * failed 为失败明细（path+reason，最多 20 条），满 20 条后只累计 skipped
+ * 不再收集明细——用户不必猜"N skipped"到底是哪些文件、为什么。
  */
 export async function copyTree(fs, srcAbs, dstAbs) {
-  const counts = { files: 0, dirs: 0, skipped: 0 }
+  const counts = { files: 0, dirs: 0, skipped: 0, failed: [] }
+  /** 记一条失败明细（有界收集，skipped 同步递增）。 */
+  const noteFailed = (item, reason) => {
+    counts.skipped++
+    if (counts.failed.length < 20) counts.failed.push({ path: item, reason })
+  }
   // 目录深度上限（与 indexer 一致）：用户提供的快照可能含超深树或环，
   // 无上限递归会栈溢出
   const MAX_DEPTH = 24
@@ -39,13 +46,13 @@ export async function copyTree(fs, srcAbs, dstAbs) {
    * @param {number} depth - 当前深度。
    */
   const walk = async (srcDir, dstDir, depth = 0) => {
-    if (depth > MAX_DEPTH) { counts.skipped++; return }
+    if (depth > MAX_DEPTH) { noteFailed(srcDir, `max depth ${MAX_DEPTH} exceeded`); return }
     let entries
     try {
       const target = await fs.resolve(srcDir)
       entries = await fs.listDir(target)
-    } catch {
-      counts.skipped++
+    } catch (err) {
+      noteFailed(srcDir, err?.message ?? 'unreadable directory')
       return // 不可读目录跳过，不阻断整体复制
     }
     for (const entry of entries) {
@@ -63,8 +70,8 @@ export async function copyTree(fs, srcAbs, dstAbs) {
           const outTarget = await fs.resolve(path.posix.join(dstDir, entry.name))
           await fs.writeText(outTarget, text)
           counts.files++
-        } catch {
-          counts.skipped++ // 单文件失败（不可读/越界写）不阻断
+        } catch (err) {
+          noteFailed(`${dstDir}/${entry.name}`, err?.message ?? 'copy failed') // 不阻断
         }
       }
     }

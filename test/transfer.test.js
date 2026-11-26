@@ -64,6 +64,20 @@ test('copyTree：不可读源目录计 skipped 不抛错', async () => {
   assert.ok(counts.skipped >= 1)
 })
 
+test('copyTree：失败明细有界上报（O2——不再只有匿名 skipped 计数）', async () => {
+  const dir = makeDir({ 'src/a.md': 'a', 'src/b.md': 'b' })
+  const fs = makeFakeFs(dir)
+  // b.md 不可读（权限）→ 应进 failed 明细（path + reason），a.md 正常复制
+  nodefs.chmodSync(path.join(dir, 'src', 'b.md'), 0o000)
+  const counts = await copyTree(fs, path.join(dir, 'src'), path.join(dir, 'out'))
+  assert.equal(counts.files, 1)
+  assert.equal(counts.skipped, 1)
+  assert.equal(counts.failed.length, 1, '失败明细应有 1 条')
+  assert.match(counts.failed[0].path, /b\.md$/)
+  assert.ok(counts.failed[0].reason.length > 0, '失败原因非空')
+  nodefs.chmodSync(path.join(dir, 'src', 'b.md'), 0o644)
+})
+
 test('dirHasContent：存在且非空判定', async () => {
   const dir = makeDir({ 'full/a.md': 'a' })
   nodefs.mkdirSync(path.join(dir, 'empty'))

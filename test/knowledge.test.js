@@ -104,6 +104,33 @@ test('parseCard：坏 frontmatter 与版本不符返回 null', () => {
   assert.equal(parseCard('---\n{"schemaVersion": 0}\n---\nbody'), null)
 })
 
+test('writeCard：归一碰撞时不静默覆盖（O7——源路径哈希后缀）', async () => {
+  // 'src/a b.js' 与 'src/a-b.js' 的 cardSlug 均为 'src-a-b'：第二张卡若
+  // 直接写同一路径会覆盖第一张。writeCard 读目标文件 frontmatter，发现
+  // meta.path 不同则改用源路径 8 位哈希后缀。
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-collision-'))
+  const fs = makeFakeFs(dir)
+  const card = (rel) => [
+    '---',
+    JSON.stringify({ schemaVersion: 1, path: rel, lang: 'javascript', locale: 'zh', title: 'T', tags: [], manuallyEdited: false, sourceDigest: 'd', generatedAt: '2026-11-27T00:00:00.000Z' }),
+    '---',
+    `# ${rel}`,
+    '',
+  ].join('\n')
+  await writeCard(fs, dir, 'src/a b.js', 'zh', card('src/a b.js'))
+  await writeCard(fs, dir, 'src/a-b.js', 'zh', card('src/a-b.js'))
+  const knowledge = path.join(dir, '.dsh-repowiki/knowledge/zh')
+  const names = nodefs.readdirSync(knowledge).sort()
+  assert.equal(names.length, 2, '两张卡应各自落盘，而非互相覆盖')
+  assert.ok(names.some(n => n.startsWith('src-a-b-') && n.endsWith('.md')), '碰撞卡应带哈希后缀')
+  const second = nodefs.readFileSync(path.join(knowledge, names.find(n => n.includes('-'))), 'utf8')
+  assert.ok(second.includes('src/a-b.js'), '带后缀的卡应以自己的源路径为键')
+  // 再次写入同一源路径（增量刷新）：后缀稳定，不漂移
+  await writeCard(fs, dir, 'src/a-b.js', 'zh', card('src/a-b.js'))
+  const after = nodefs.readdirSync(knowledge).sort()
+  assert.deepStrictEqual(after, names, '同源重写应落在同一文件（后缀稳定）')
+})
+
 test('readExistingCards：目录不存在返回空映射，坏卡不阻断枚举', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-knowledge-'))
   const fs = makeFakeFs(dir)

@@ -53,6 +53,7 @@ export function repowikiExportTool(ctx) {
           files: { type: 'integer' },
           dirs: { type: 'integer' },
           skipped: { type: 'integer' },
+          failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] }, description: 'Bounded list (first 20) of items that could not be copied.' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
@@ -60,7 +61,10 @@ export function repowikiExportTool(ctx) {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Exported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.assetDir} to ${value.target} in ${value.durationMs}ms.`,
+        text: [
+          `Exported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.assetDir} to ${value.target} in ${value.durationMs}ms.`,
+          ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
+        ].join('\n'),
       }],
     },
     timeoutMs: 120_000,
@@ -98,6 +102,7 @@ export function repowikiExportTool(ctx) {
         files: counts.files,
         dirs: counts.dirs,
         skipped: counts.skipped,
+        failed: counts.failed,
         durationMs: Date.now() - startedAt,
       }
     },

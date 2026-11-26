@@ -10,10 +10,16 @@
  */
 
 import * as path from 'node:path'
+import { createHash } from 'node:crypto'
 import {
   ASSET_DIR, KNOWLEDGE_DIR, WIKI_DIR, CARD_SCHEMA_VERSION,
 } from './schema.js'
 import { parseFrontmatter } from './util.js'
+
+/** 源路径的 8 位 sha256 前缀（碰撞保护后缀；稳定可复现）。 */
+function HASH8(s) {
+  return createHash('sha256').update(s).digest('hex').slice(0, 8)
+}
 
 /**
  * 把源文件相对路径 slug 化为卡片文件名。
@@ -35,10 +41,11 @@ export function cardSlug(relPath) {
  * 卡片文件相对资产根的路径。
  * @param {string} relPath - 源文件相对路径。
  * @param {string} locale - 语言代码。
+ * @param {string} [suffix] - slug 后缀（碰撞保护用）。
  * @returns {string} 形如 '.dsh-repowiki/knowledge/zh/src-indexer.md'。
  */
-export function cardPath(relPath, locale) {
-  return path.posix.join(ASSET_DIR, KNOWLEDGE_DIR, locale, `${cardSlug(relPath)}.md`)
+export function cardPath(relPath, locale, suffix = '') {
+  return path.posix.join(ASSET_DIR, KNOWLEDGE_DIR, locale, `${cardSlug(relPath)}${suffix}.md`)
 }
 
 /**
@@ -68,7 +75,9 @@ export function wikiPath(slug, locale) {
 }
 
 /**
- * 写入一张卡片。
+ * 写入一张卡片。碰撞保护：若目标文件已存在且其 frontmatter 记录的源路径
+ * 与本卡不同（两个不同源路径归一到同一 slug，如 'src/a b.js' 与
+ * 'src/a-b.js'），改用源路径 8 位哈希后缀写盘，避免静默覆盖。
  * @param {object} fs - ctx.fs 服务。
  * @param {string} root - 资产根。
  * @param {string} relPath - 源文件相对路径。
@@ -77,7 +86,18 @@ export function wikiPath(slug, locale) {
  * @returns {Promise<string>} 写入文件 displayPath。
  */
 export async function writeCard(fs, root, relPath, locale, markdown) {
-  const target = await fs.resolve(cardPath(relPath, locale), { cwd: root })
+  let rel = cardPath(relPath, locale)
+  try {
+    const existing = await fs.readText(await fs.resolve(rel, { cwd: root }))
+    const parsed = parseCard(existing)
+    if (parsed && parsed.meta.path !== relPath) {
+      // 归一碰撞且非同源：加后缀（同一 relPath 后缀稳定，重跑不漂移）
+      rel = cardPath(relPath, locale, '-' + HASH8(relPath))
+    }
+  } catch {
+    // 目标不存在或不可读：无碰撞，按原路径写
+  }
+  const target = await fs.resolve(rel, { cwd: root })
   await fs.writeText(target, markdown)
   return target.displayPath
 }

@@ -28,17 +28,18 @@
 
 ## 观察项处理
 
-- O1 copyTree 深度上限 24（防超深树/环栈溢出）✓
-- O2 复制失败原因丢失（skipped 计数）——延后：需 output schema 加 bounded
-  failed 列表，独立小迭代
+- O1 copyTree 深度上限 24（防超深树/环栈溢出）✓（v0.32.0）
+- **O2 复制失败原因上报** ✓（v0.33.0）：copyTree 返回有界 failed 列表
+  （{path,reason} 前 20 条），export/import schema 透传 + render 列出
 - O3 TOCTOU/半成品状态——观察：export 半途中断留部分快照，无回滚（与
   纯文件复制设计自洽，文档已说明）
-- O4 sizeBytes 语义——注释更正为字符数（字段名保留，兼容既有语料）✓
+- O4 sizeBytes 语义——注释更正为字符数（字段名保留，兼容既有语料）✓（v0.32.0）
 - O5 并发无保护——观察：单会话顺序调用假设下可接受
-- O6 maxFiles/limit 下界钳制 ✓
-- O7 cardSlug 碰撞——延后：低频，需 8 位内容哈希后缀
-- O8 提取 prompt 四反引号围栏 ✓
-- O9 listKnowledgeFiles 死代码删除 ✓（writeIndex 未用变量同删）
+- O6 maxFiles/limit 下界钳制 ✓（v0.32.0）
+- **O7 cardSlug 碰撞保护** ✓（v0.33.0）：writeCard 读目标 frontmatter，
+  非同源碰撞时改用源路径 8 位哈希后缀（稳定可复现）
+- O8 提取 prompt 四反引号围栏 ✓（v0.32.0）
+- O9 listKnowledgeFiles 死代码删除 ✓（v0.32.0）
 
 ## 验证
 

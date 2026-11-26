@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.33.0] - 2026-11-27
+
+### Fixed
+
+- **O7 — card slug collisions no longer silently overwrite** (deferred from
+  the v0.32.0 code review): `cardSlug` normalizes both `src/a b.js` and
+  `src/a-b.js` to `src-a-b`, so the second card overwrote the first
+  without any report. `writeCard` now reads the target file's frontmatter
+  when it exists; if its recorded source path differs, the card is written
+  with a stable 8-character hash suffix derived from the source path
+  (deterministic across reruns — a refresh of the same file lands on the
+  same path). Regression: two colliding paths produce two distinct files
+  and the suffixed card keys on its own path.
+- **O2 — copy failures carry reasons, not just a count** (also deferred):
+  `copyTree` returns a bounded `failed` list ({path, reason}, first 20)
+  for unreadable files/directories and depth-capped subtrees; the export
+  and import tools pass it through their output schemas and render the
+  items, so "50 skipped" no longer means "guess which and why".
+
 ## [0.32.0] - 2026-11-27
 
 ### Fixed
