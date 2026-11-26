@@ -12,6 +12,7 @@ import {
 import { DEFAULT_RESULT_LIMIT } from './schema.js'
 import { listMemory } from './memory.js'
 import { getLocale } from './spawn.js'
+import { cwdOf } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -207,13 +208,4 @@ export function repowikiCardsTool(ctx) {
       }
     },
   }
-}
-
-/** 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。 */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

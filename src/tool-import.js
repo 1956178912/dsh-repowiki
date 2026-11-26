@@ -7,9 +7,9 @@
  * 纯文件操作：无 LLM、无模型调用。
  */
 
-import * as path from 'node:path'
 import { resolveAssetRoot, readIndex } from './assets.js'
 import { copyTree, dirHasContent } from './transfer.js'
+import { cwdOf, toAbsPath } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -80,7 +80,7 @@ export function repowikiImportTool(ctx) {
           hint: 'source is required: the snapshot directory to import from.',
         }
       }
-      const sourceAbs = resolveTarget(args.source, cwdOf(ctx))
+      const sourceAbs = toAbsPath(args.source, cwdOf(ctx))
       if (!(await dirHasContent(fs, sourceAbs))) {
         return {
           root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
@@ -113,29 +113,4 @@ export function repowikiImportTool(ctx) {
       rawInput: { source: args.source ?? '(unset)', overwrite: args.overwrite ?? false },
     }),
   }
-}
-
-/**
- * 把源参数解析为绝对路径（相对路径相对会话 cwd）。
- * @param {string} source - 源路径参数。
- * @param {string} cwd - 会话当前目录绝对路径。
- * @returns {string} 绝对路径（POSIX 分隔符）。
- */
-function resolveTarget(source, cwd) {
-  const trimmed = source.trim()
-  const abs = path.isAbsolute(trimmed) ? trimmed : path.join(cwd, trimmed)
-  return abs.split(path.sep).join('/')
-}
-
-/**
- * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
- * @param {object} ctx - 插件上下文。
- * @returns {string} 当前目录绝对路径。
- */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

@@ -6,15 +6,7 @@
  */
 
 import { CARD_SCHEMA_VERSION } from './schema.js'
-
-/**
- * 卡片 frontmatter 用 JSON（零依赖解析，Git diff 清晰）。
- * @param {object} meta - 元数据。
- * @returns {string} frontmatter 文本（含首尾分隔符行）。
- */
-function frontmatter(meta) {
-  return `---\n${JSON.stringify(meta, null, 2)}\n---\n`
-}
+import { encodeFrontmatter } from './util.js'
 
 /**
  * 单张知识卡片 JSON → Markdown。
@@ -31,7 +23,7 @@ export function renderCardMarkdown(card, meta) {
   const related = card.relatedModules.length > 0
     ? card.relatedModules.map(r => `- ${r}`).join('\n')
     : '- (none)'
-  return frontmatter({
+  return encodeFrontmatter({
     schemaVersion: CARD_SCHEMA_VERSION,
     path: meta.path,
     lang: meta.lang,
@@ -80,7 +72,7 @@ export function renderWikiMarkdown(page, meta) {
   const mermaid = page.mermaid && page.mermaid.trim().length > 0
     ? `\n\n\`\`\`mermaid\n${page.mermaid.trim()}\n\`\`\``
     : ''
-  return frontmatter({
+  return encodeFrontmatter({
     schemaVersion: 1,
     title: page.title,
     slug: page.slug,

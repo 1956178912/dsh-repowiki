@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phase 3 complete + Phase 4 memory + panel views (v0.12.0)
+## Current stage: Phases 1–4 complete + panel views + DRY consolidation (v0.15.0)
 
 | Capability | Description |
 |---|---|
@@ -24,8 +24,9 @@ English | [中文](README.zh-CN.md)
 
 Roadmap:
 - Phase 3 (done in v0.6.0): content-digest incremental reindexing, card refresh, manual-edit protection, orphan reporting, directory import/export
-- Phase 4 (partly done in v0.8.0): the session-memory tool is landed; optional semantic index stays deferred (YAGNI per the plan)
-- Session memory entries are visible to later sessions and feed the knowledge base alongside cards
+- Phase 4 (done in v0.12.0): the session-memory tool with a full review loop, its three consumption outlets (generation summary, search visibility, panel tab), and the Repo Wiki panel
+- Consolidation (v0.15.0): duplicated path helpers and frontmatter serialize/parse logic consolidated into `src/util.js` (net −139 lines); plan coverage audited in `docs/coverage.md`
+- Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights
 

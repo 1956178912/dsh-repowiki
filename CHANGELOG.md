@@ -3,6 +3,30 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.15.0] - 2026-11-26
+
+### Changed
+
+- DRY refactor: the `cwdOf` helper (session cwd with `workingDirectory`
+  fallback) duplicated across 8 tool files, the `resolveTarget` helper
+  duplicated in repowiki-export/-import, and the JSON frontmatter
+  serialize/parse logic triplicated in `render.js` / `knowledge.js` /
+  `memory.js` (parse also duplicated with a different schema constant) are
+  now consolidated in `src/util.js` (`cwdOf`, `toAbsPath`,
+  `encodeFrontmatter`, `parseFrontmatter`). Behavior is byte-identical
+  (same regex, same JSON formatting, same POSIX separator normalization);
+  net −139 lines of duplicated source.
+- `knowledge.cardFrontmatter` is removed (it was a thin wrapper over the
+  now-shared `encodeFrontmatter`); `tool-edit` calls `encodeFrontmatter`
+  directly. `parseCard` and `parseMemoryText` delegate to the shared
+  `parseFrontmatter` with their own schema constant.
+
+### Added
+
+- `test/util.test.js`: 9 tests pinning the extracted helpers (cwd fallback
+  paths, relative/absolute resolution, frontmatter round-trip, schema
+  mismatch and malformed-input nulls). Suite now 90/90.
+
 ## [0.14.0] - 2026-11-26
 
 ### Added

@@ -18,6 +18,7 @@ import { renderWikiMarkdown } from './render.js'
 import { readExistingCards, writeWikiPage } from './knowledge.js'
 import { listMemory } from './memory.js'
 import { runSubagent, getLocale } from './spawn.js'
+import { cwdOf } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -153,13 +154,4 @@ export function repowikiGenerateTool(ctx) {
       rawInput: { root: args.root ?? '(current)', locale: args.locale ?? 'auto' },
     }),
   }
-}
-
-/** 取当前工作目录。 */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

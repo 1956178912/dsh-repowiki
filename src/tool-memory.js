@@ -18,6 +18,7 @@ import {
   slugifyMemory, writeMemory, listMemory, setMemoryStatus,
 } from './memory.js'
 import { getLocale } from './spawn.js'
+import { cwdOf } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -201,17 +202,4 @@ export function repowikiMemoryTool(ctx) {
       rawInput: { action: args.action ?? 'list', slug: args.slug ?? '', status: args.status ?? 'pending' },
     }),
   }
-}
-
-/**
- * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
- * @param {object} ctx - 插件上下文。
- * @returns {string} 当前目录绝对路径。
- */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

@@ -14,9 +14,10 @@
 import { CARD_SCHEMA_VERSION, EXTENSION_LANGS } from './schema.js'
 import { resolveAssetRoot } from './assets.js'
 import {
-  cardSlug, cardPath, cardFrontmatter, writeCard, parseCard, readExistingCards,
+  cardSlug, cardPath, writeCard, parseCard, readExistingCards,
 } from './knowledge.js'
 import { getLocale } from './spawn.js'
+import { cwdOf, encodeFrontmatter } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -131,7 +132,7 @@ export function repowikiEditTool(ctx) {
           manuallyEdited: true,
           generatedAt: new Date().toISOString(),
         }
-        const markdown = `${cardFrontmatter(meta)}\n${body}`
+        const markdown = `${encodeFrontmatter(meta)}\n${body}`
         const cardRel = await writeCard(fs, root, rel, locale, markdown)
         return {
           action, locale, path: rel, slug, card: cardRel,
@@ -173,8 +174,8 @@ export function repowikiEditTool(ctx) {
         tags: Array.isArray(args.tags) ? args.tags : oldMeta.tags,
         manuallyEdited: true,
       }
-      // cardFrontmatter 已含尾换行；update 时 body 为完整正文（含标题行）
-      const markdown = `${cardFrontmatter(meta)}${body.startsWith('\n') ? body : `\n${body}`}`
+      // encodeFrontmatter 已含尾换行；update 时 body 为完整正文（含标题行）
+      const markdown = `${encodeFrontmatter(meta)}${body.startsWith('\n') ? body : `\n${body}`}`
       const cardRel = await writeCard(fs, root, rel, locale, markdown)
       return {
         action, locale, path: rel, slug, card: cardRel,
@@ -188,17 +189,4 @@ export function repowikiEditTool(ctx) {
       rawInput: { action: args.action ?? 'create', path: args.path ?? '(unset)' },
     }),
   }
-}
-
-/**
- * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
- * @param {object} ctx - 插件上下文。
- * @returns {string} 当前目录绝对路径。
- */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

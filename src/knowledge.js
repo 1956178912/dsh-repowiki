@@ -13,16 +13,7 @@ import * as path from 'node:path'
 import {
   ASSET_DIR, KNOWLEDGE_DIR, WIKI_DIR, CARD_SCHEMA_VERSION,
 } from './schema.js'
-
-/**
- * 卡片 frontmatter 块（JSON + --- 分隔，与 render.js 同构；供人工编辑
- * 工具复用，避免 render.js 的结构化渲染假设）。
- * @param {object} meta - 元数据。
- * @returns {string} frontmatter 文本（含首尾分隔符行）。
- */
-export function cardFrontmatter(meta) {
-  return `---\n${JSON.stringify(meta, null, 2)}\n---\n`
-}
+import { parseFrontmatter } from './util.js'
 
 /**
  * 把源文件相对路径 slug 化为卡片文件名。
@@ -96,17 +87,7 @@ export async function writeWikiPage(fs, root, slug, locale, markdown) {
  * @returns {{meta:object, body:string}|null} 解析失败（无 frontmatter / 非 JSON / 版本不符）返回 null。
  */
 export function parseCard(text) {
-  const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text)
-  if (!m) return null
-  let meta
-  try {
-    meta = JSON.parse(m[1])
-  } catch {
-    return null
-  }
-  if (typeof meta !== 'object' || meta === null) return null
-  if (meta.schemaVersion !== CARD_SCHEMA_VERSION) return null
-  return { meta, body: m[2] }
+  return parseFrontmatter(text, CARD_SCHEMA_VERSION)
 }
 
 /**

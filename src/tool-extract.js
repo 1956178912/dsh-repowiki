@@ -19,6 +19,7 @@ import { extractPrompt } from './prompts.js'
 import { renderCardMarkdown, isUsableCard } from './render.js'
 import { readExistingCards, writeCard, cardSlug } from './knowledge.js'
 import { runSubagent, getLocale } from './spawn.js'
+import { cwdOf } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -189,6 +190,8 @@ export function repowikiExtractTool(ctx) {
         }
       }
 
+      // 孤儿卡片：源文件已不在索引中（删除/重命名后残留），只报告不删除
+      const orphaned = countOrphaned(existing, index.files)
       return {
         root,
         cardsDir: `${root}/.dsh-repowiki/knowledge/${locale}`,
@@ -209,15 +212,6 @@ export function repowikiExtractTool(ctx) {
       rawInput: { root: args.root ?? '(current)', locale: args.locale ?? 'auto', paths: args.paths ?? [] },
     }),
   }
-}
-
-/** 取当前工作目录（与 tool-index 相同的降级策略）。 */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }
 
 /**

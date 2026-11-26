@@ -6,9 +6,9 @@
  * overwrite=true 才合并覆盖。纯文件操作：无 LLM、无模型调用。
  */
 
-import * as path from 'node:path'
 import { resolveAssetRoot } from './assets.js'
 import { copyTree, dirHasContent } from './transfer.js'
+import { cwdOf, toAbsPath } from './util.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -82,7 +82,7 @@ export function repowikiExportTool(ctx) {
           hint: 'No .dsh-repowiki assets found. Run repowiki-index (and repowiki-extract) first.',
         }
       }
-      const targetAbs = resolveTarget(args.target, cwdOf(ctx))
+      const targetAbs = toAbsPath(args.target, cwdOf(ctx))
       if (!args.overwrite && (await dirHasContent(fs, targetAbs))) {
         return {
           root, assetDir, target: targetAbs, files: 0, dirs: 0, skipped: 0, durationMs: 0,
@@ -107,29 +107,4 @@ export function repowikiExportTool(ctx) {
       rawInput: { target: args.target ?? '(unset)', overwrite: args.overwrite ?? false },
     }),
   }
-}
-
-/**
- * 把目标参数解析为绝对路径（相对路径相对会话 cwd）。
- * @param {string} target - 目标路径参数。
- * @param {string} cwd - 会话当前目录绝对路径。
- * @returns {string} 绝对路径（POSIX 分隔符）。
- */
-function resolveTarget(target, cwd) {
-  const trimmed = target.trim()
-  const abs = path.isAbsolute(trimmed) ? trimmed : path.join(cwd, trimmed)
-  return abs.split(path.sep).join('/')
-}
-
-/**
- * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
- * @param {object} ctx - 插件上下文。
- * @returns {string} 当前目录绝对路径。
- */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

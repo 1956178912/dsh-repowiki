@@ -13,6 +13,7 @@ import {
   resolveAssetRoot, writeIndex, readIndex,
 } from './assets.js'
 import { buildIndex } from './indexer.js'
+import { cwdOf } from './util.js'
 
 /**
  * 工具结果（与 output.schema 一一对应）。
@@ -126,13 +127,4 @@ export function repowikiIndexTool(ctx) {
       rawInput: { root: args.root ?? '(current directory)', incremental: args.incremental ?? true },
     }),
   }
-}
-
-/** 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。 */
-function cwdOf(ctx) {
-  const wd = ctx.workingDirectory
-  if (wd && typeof wd.get === 'function') {
-    try { return wd.get() } catch { /* 降级到 process.cwd */ }
-  }
-  return process.cwd()
 }

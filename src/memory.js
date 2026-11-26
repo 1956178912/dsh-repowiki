@@ -13,6 +13,7 @@
 
 import * as path from 'node:path'
 import { ASSET_DIR, MEMORY_DIR, MEMORY_SCHEMA_VERSION, MEMORY_STATUS } from './schema.js'
+import { encodeFrontmatter, parseFrontmatter } from './util.js'
 
 /** slug 的最大长度（长标题截断，避免文件名失控）。 */
 const SLUG_MAX = 48
@@ -48,7 +49,7 @@ export function memoryPath(slug, locale) {
  * @returns {string} Markdown 文本。
  */
 export function renderMemoryMarkdown(meta, body) {
-  return `---\n${JSON.stringify(meta, null, 2)}\n---\n\n# ${meta.title}\n\n${body}\n`
+  return `${encodeFrontmatter(meta)}\n# ${meta.title}\n\n${body}\n`
 }
 
 /**
@@ -158,14 +159,5 @@ export async function setMemoryStatus(fs, root, locale, slug, status) {
  * @returns {{meta:object, body:string}|null} 失败返回 null。
  */
 function parseMemoryText(text) {
-  const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text)
-  if (!m) return null
-  try {
-    const meta = JSON.parse(m[1])
-    if (typeof meta !== 'object' || meta === null) return null
-    if (meta.schemaVersion !== MEMORY_SCHEMA_VERSION) return null
-    return { meta, body: m[2] }
-  } catch {
-    return null
-  }
+  return parseFrontmatter(text, MEMORY_SCHEMA_VERSION)
 }
