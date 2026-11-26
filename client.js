@@ -542,20 +542,33 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
       const [detail, setDetail] = useState(null)
-      // 打开详情前的焦点元素；关闭详情时归还焦点（无障碍：详情打开聚焦其内控件，
-      // 关闭后回到触发它的瓦片，键盘用户不必重新定位）
+      // 焦点管理（详情类视图通用，无障碍）：打开前记录当前焦点，关闭时归还。
+      // 注意：卡片详情为内联面板（列表不卸载，直接归还触发瓦片）；记忆/Wiki
+      // 详情是整面板切换（触发条目被卸载），归还前须检查节点是否仍挂载，
+      // 失联回退到对应页签按钮，避免 focus() 打在分离节点上。
       const prevFocusRef = useRef(null)
-      const openDetail = (row) => {
+      const memoryTabRef = useRef(null)
+      const wikiTabRef = useRef(null)
+      const openWithFocus = (setter) => (value) => {
         // 鸭子类型判断（不依赖全局 HTMLElement，测试环境可能未导出该类）
         const active = typeof document !== 'undefined' ? document.activeElement : null
         if (active && typeof active.focus === 'function') prevFocusRef.current = active
-        setDetail(row)
+        setter(value)
       }
-      const closeDetail = () => {
-        setDetail(null)
-        prevFocusRef.current?.focus?.()
+      const closeWithFocus = (setter, fallbackRef) => () => {
+        setter(null)
+        const prev = prevFocusRef.current
         prevFocusRef.current = null
+        if (prev?.isConnected) prev.focus?.()
+        else fallbackRef?.current?.focus?.()
       }
+      // 卡片详情 / 记忆详情 / Wiki 页面详情共用同一焦点归还通道
+      const openDetail = openWithFocus(setDetail)
+      const closeDetail = closeWithFocus(setDetail)
+      const openMemory = openWithFocus(setMemorySelected)
+      const closeMemory = closeWithFocus(setMemorySelected, memoryTabRef)
+      const openWiki = openWithFocus(setWikiSelected)
+      const closeWiki = closeWithFocus(setWikiSelected, wikiTabRef)
       const [overview, setOverview] = useState(true)
       const [overviewRows, setOverviewRows] = useState([])
       const [overviewStatus, setOverviewStatus] = useState('idle')
@@ -710,7 +723,7 @@ window.__ModuleLoader__.load({
         const onKey = (e) => {
           if (e.key !== 'Escape') return
           if (detail) closeDetail()
-          if (memorySelected) setMemorySelected(null)
+          if (memorySelected) closeMemory()
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
@@ -931,11 +944,13 @@ window.__ModuleLoader__.load({
               onClick: guard('tab-cards', () => setTab('cards')),
             }, t('viewCards')),
             h('button', {
+              ref: wikiTabRef,
               type: 'button', 'aria-pressed': tab === 'wiki',
               style: tab === 'wiki' ? primaryStyle : buttonStyle,
               onClick: guard('tab-wiki', () => setTab('wiki')),
             }, `${t('viewWiki')} ${wikis.length}`),
             h('button', {
+              ref: memoryTabRef,
               type: 'button', 'aria-pressed': tab === 'memory',
               style: tab === 'memory' ? primaryStyle : buttonStyle,
               onClick: guard('tab-memory', () => setTab('memory')),
@@ -1002,16 +1017,16 @@ window.__ModuleLoader__.load({
           tab === 'wiki' && h(WikiPanel, {
             entries: wikis,
             selected: wikiSelected,
-            onSelect: guard('open-wiki', (entry) => setWikiSelected(entry)),
-            onClose: guard('close-wiki', () => setWikiSelected(null)),
+            onSelect: guard('open-wiki', (entry) => openWiki(entry)),
+            onClose: guard('close-wiki', () => closeWiki()),
             t, tt,
           }),
           // 记忆页签：条目列表（状态徽章）与单条原文浏览（Phase 4）
           tab === 'memory' && h(MemoryPanel, {
             entries: memories,
             selected: memorySelected,
-            onSelect: guard('open-memory', (entry) => setMemorySelected(entry)),
-            onClose: guard('close-memory', () => setMemorySelected(null)),
+            onSelect: guard('open-memory', (entry) => openMemory(entry)),
+            onClose: guard('close-memory', () => closeMemory()),
             t, tt,
           }),
         ),
@@ -1275,13 +1290,17 @@ window.__ModuleLoader__.load({
     }
 
     /** Wiki 面板：页面列表与单页原文浏览（切片 3，无 Markdown 渲染器，暂以原文呈现）。 */
+    /** Wiki 面板：页面列表与单页原文浏览；打开页面时聚焦返回按钮。 */
     function WikiPanel({ entries, selected, onSelect, onClose, t }) {
+      const backRef = useRef(null)
+      useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
       if (selected) {
         return h('div', null,
           h('div', {
             style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
           },
             h('button', {
+              ref: backRef,
               type: 'button', style: chipButtonStyle(), onClick: onClose,
               'aria-label': t('wikiBack'),
             }, '←'),
@@ -1320,14 +1339,17 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 记忆面板：条目列表（状态徽章）与单条原文浏览（Phase 4 面板视图）。 */
+    /** 记忆面板：条目列表（状态徽章）与单条原文浏览；打开条目时聚焦返回按钮。 */
     function MemoryPanel({ entries, selected, onSelect, onClose, t }) {
+      const backRef = useRef(null)
+      useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
       if (selected) {
         return h('div', null,
           h('div', {
             style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
           },
             h('button', {
+              ref: backRef,
               type: 'button', style: chipButtonStyle(), onClick: onClose,
               'aria-label': t('wikiBack'),
             }, '←'),

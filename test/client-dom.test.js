@@ -97,6 +97,38 @@ test('DOM 集成：详情打开聚焦关闭按钮、Escape 关闭后焦点归还
   assert.equal(document.activeElement, tile, '关闭后焦点应归还触发的瓦片')
 })
 
+test('DOM 集成：记忆详情焦点与卡片详情一致（打开聚焦返回钮、Escape 归还）', async () => {
+  const { container } = await mountLoaded({ Page })
+  // 切到记忆页签（stub locale 返回 key，标签形如 "viewMemory 1"）
+  const memoryTab = [...container.querySelectorAll('button[aria-pressed]')]
+    .find((b) => b.textContent.startsWith('viewMemory'))
+  assert.ok(memoryTab, '应渲染 Memory 页签')
+  await act(async () => {
+    memoryTab.click()
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  const entry = [...container.querySelectorAll('button[aria-label]')]
+    .find((b) => !['reload', 'viewGrid', 'viewList', 'wikiBack'].includes(b.getAttribute('aria-label'))
+      && b.textContent.includes('面板状态分支'))
+  assert.ok(entry, '记忆列表应渲染语料条目（真实 corpus fixture 的 memory/zh）')
+  entry.focus()
+  await act(async () => {
+    entry.click()
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  const backBtn = container.querySelector('button[aria-label="wikiBack"]')
+  assert.ok(backBtn, '记忆详情应含返回按钮')
+  assert.equal(document.activeElement, backBtn, '打开后焦点应落在返回按钮上')
+  await act(async () => {
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  })
+  // 记忆详情为整面板切换：Escape 后触发条目已卸载，焦点按失联回退落到 Memory 页签
+  assert.notEqual(document.activeElement, backBtn, 'Escape 后应离开返回按钮')
+  assert.ok(document.activeElement?.textContent.startsWith('viewMemory'),
+    `Escape 后焦点应回退到 Memory 页签按钮（实际：${document.activeElement?.constructor.name}）`)
+  assert.ok(!container.querySelector('button[aria-label="wikiBack"]'), 'Escape 后记忆详情应关闭')
+})
+
 test('DOM 集成：总览行真实点击下钻到单库视图（多工作区）', async () => {
   const workspaces = {
     list: {

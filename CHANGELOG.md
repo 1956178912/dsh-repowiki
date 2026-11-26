@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.31.0] - 2026-11-26
+
+### Changed
+
+- **Focus parity for the memory and wiki detail views** (extending
+  v0.30.0's card-detail focus management): opening a memory entry or a
+  wiki page now focuses its back button; closing (back button or Escape)
+  returns focus. One structural difference found and handled: those
+  detail views swap the whole panel, so the triggering list item is
+  unmounted — returning focus to it would have been a silent no-op on a
+  detached node (the first test version caught exactly this). The
+  restore now checks `isConnected` and falls back to the corresponding
+  tab button, so keyboard users always land somewhere sensible.
+- A focus-consistency helper (`openWithFocus` / `closeWithFocus`) is now
+  shared by all three detail flows (cards inline, memory/wiki panel
+  swaps).
+
+### Added
+
+- Real-corpus fixture gained a memory entry
+  (`test/fixtures/repo-corpus/memory/zh/ui-panel-state-machine.md`),
+  enabling the DOM focus regression for the memory detail (136/136).
+
 ## [0.30.0] - 2026-11-26
 
 ### Changed
