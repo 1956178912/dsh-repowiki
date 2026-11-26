@@ -52,8 +52,17 @@
   `generatePrompt` 增可选 `memories` 参数（空时渲染 (none)）。
 - 测试：prompt 注入与 withBody 分支（78/78 全绿）。
 
+## 消费侧扩展（v0.11.0）：检索可见记忆
+
+- `repowiki-cards` 新增 `includeMemory`（默认 false）：附已采信记忆条目
+  （slug/title/tags/summary/可选 path），query 非空时对 title+tags+body
+  做同一查询的子串过滤；render 附加 "Memory: …" 行。
+- 至此记忆的三个出口齐备：沉淀（write）、审核（accept/reject）、消费
+  （generate 汇总 v0.10.0 / 检索可见 v0.11.0）。
+- 测试：默认关闭、空 query、query 过滤、pending 排除（LANG 环境隔离；
+  79/79 全绿）。
+
 ## 下一步
 
-- 记忆面板展示（Wiki/卡片之外的第三种视图）与 cards 检索纳入记忆，
-  按需排入。
+- 记忆面板展示（Wiki/卡片之外的第三种视图）按需排入。
 - 切片 2（多工作区总览）受跨工作区读取限制，需真实环境验证。

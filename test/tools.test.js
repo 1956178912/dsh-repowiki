@@ -14,6 +14,7 @@ import { repowikiExportTool } from '../src/tool-export.js'
 import { repowikiImportTool } from '../src/tool-import.js'
 import { repowikiEditTool } from '../src/tool-edit.js'
 import { repowikiMemoryTool } from '../src/tool-memory.js'
+import { writeMemory } from '../src/memory.js'
 import { cardIsFresh, cardIsProtected, countOrphaned } from '../src/tool-extract.js'
 
 /**
@@ -320,4 +321,42 @@ test('repowiki-edit execute：人工卡 create/update 闭环', async () => {
   const kept = nodefs.readFileSync(path.join(dir, '.dsh-repowiki', 'knowledge', 'zh', 'src-a.md'), 'utf8')
   assert.match(kept, /新正文（人工修订）/, '未提供 body 时保留原正文')
   assert.match(kept, /"保留"/)
+})
+
+test('repowiki-cards execute：includeMemory 附已采信记忆并按 query 过滤', async () => {
+  const savedLang = process.env.LANG
+  process.env.LANG = 'en'
+  try {
+    const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-cards-mem-'))
+    nodefs.writeFileSync(path.join(dir, 'app.ts'), 'export function main() {}\n')
+    const ctx = makeCtx(dir)
+    await repowikiIndexTool(ctx).execute({}, fakeExec)
+    // 两条 accepted（一条带关联路径）、一条 pending（不应返回）
+    await writeMemory(ctx.fs, dir, { slug: 'use-digest', locale: 'en', title: 'Use digest not mtime', body: 'Digest drives incremental reindex.', tags: ['decision'], status: 'accepted', path: 'src/indexer.js' })
+    await writeMemory(ctx.fs, dir, { slug: 'fail-fast', locale: 'en', title: 'Fail fast', body: 'Return early.', status: 'accepted' })
+    await writeMemory(ctx.fs, dir, { slug: 'pending-one', locale: 'en', title: 'Pending draft', body: 'Not reviewed.', status: 'pending' })
+
+    const cardsTool = repowikiCardsTool(ctx)
+    // 默认不带 memories
+    const plain = await cardsTool.execute({ query: 'main' }, fakeExec)
+    assert.equal(plain.memories, undefined, '默认 includeMemory 关闭')
+
+    // includeMemory + 空 query：两条 accepted
+    const all = await cardsTool.execute({ includeMemory: true }, fakeExec)
+    assert.equal(all.memories.length, 2)
+    assert.ok(all.memories.some(m => m.slug === 'use-digest'))
+    assert.ok(!all.memories.some(m => m.slug === 'pending-one'), 'pending 记忆不返回')
+
+    // query 过滤：digest 命中 use-digest
+    const filtered = await cardsTool.execute({ query: 'digest', includeMemory: true }, fakeExec)
+    assert.equal(filtered.memories.length, 1)
+    assert.equal(filtered.memories[0].slug, 'use-digest')
+    assert.equal(filtered.memories[0].path, 'src/indexer.js')
+    assert.match(filtered.memories[0].summary, /Digest drives/)
+
+    const rendered = cardsTool.output.render({}, filtered)
+    assert.match(rendered[0].text, /Memory: Use digest not mtime/)
+  } finally {
+    process.env.LANG = savedLang
+  }
 })

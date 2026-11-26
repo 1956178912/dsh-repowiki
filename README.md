@@ -13,7 +13,7 @@ English | [中文](README.zh-CN.md)
 | Capability | Description |
 |---|---|
 | `repowiki-index` tool | Deterministically (zero LLM) rebuilds the index: symbol tables, import dependency edges, tech-stack detection, writes `.dsh-repowiki/index.json`; incremental — files whose content digest is unchanged reuse the previous entry |
-| `repowiki-cards` tool | Cross-session read-only query: filter by symbol name / kind / path; returns files + symbols and the project tech stack |
+| `repowiki-cards` tool | Cross-session read-only query: filter by symbol name / kind / path; returns files + symbols and the project tech stack; `includeMemory` attaches accepted session memory entries matched by the same query |
 | `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/`; a card is refreshed when its recorded source digest no longer matches the file, unless it is marked `manuallyEdited`; cards whose source file disappeared are reported as orphaned |
 | `repowiki-generate` tool | Reads only the cards + tech stack (+ accepted session memory as conventions/decisions), synthesizes theme-grouped Wiki pages (Markdown + optional mermaid) into `.dsh-repowiki/wiki/<locale>/` |
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |

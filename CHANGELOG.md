@@ -3,6 +3,19 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.11.0] - 2026-11-26
+
+### Added
+
+- `repowiki-cards` now consumes accepted session memory: a new
+  `includeMemory` flag (default false) attaches accepted `repowiki-memory`
+  entries to the search result, filtered by the same query substring against
+  title, tags, and body. The render output lists matched memory titles.
+- This closes the memory visibility loop alongside v0.10.0: accepted entries
+  are reachable both from wiki synthesis and from cross-session search.
+- Tests: includeMemory paths (default off, empty query, query filter, pending
+  excluded) with LANG isolation (79/79 green).
+
 ## [0.10.0] - 2026-11-26
 
 ### Added
