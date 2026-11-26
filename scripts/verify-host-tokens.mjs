@@ -37,7 +37,7 @@ const CANDIDATES = [
 ].filter(Boolean)
 
 /** 读取 asar 头并返回 { base, files: [{path,size,offset}] }；失败抛错。 */
-function readAsarIndex(p) {
+export function readAsarIndex(p) {
   const fd = fs.openSync(p, 'r')
   const sizeBuf = Buffer.alloc(8)
   fs.readSync(fd, sizeBuf, 0, 8, 0)
@@ -59,7 +59,7 @@ function readAsarIndex(p) {
 }
 
 /** 提取 asar 内一个文件的内容。 */
-function readAsarFile(p, meta, base) {
+export function readAsarFile(p, meta, base) {
   const fd = fs.openSync(p, 'r')
   const buf = Buffer.alloc(meta.size)
   fs.readSync(fd, buf, 0, meta.size, base + Number(meta.offset))
@@ -76,8 +76,13 @@ function collectClientTokens() {
   return [...names].sort()
 }
 
+/** 定位本机 app.asar（找不到返回 null，供测试复用）。 */
+export function findAsarPath() {
+  return CANDIDATES.find((p) => { try { return fs.statSync(p).isFile() } catch { return false } }) || null
+}
+
 function main() {
-  const asarPath = CANDIDATES.find((p) => { try { return fs.statSync(p).isFile() } catch { return false } })
+  const asarPath = findAsarPath()
   const asJson = process.argv.includes('--json')
   if (!asarPath) {
     if (asJson) console.log(JSON.stringify({ status: 'skip', reason: '本机未找到 app.asar' }))

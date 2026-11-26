@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.34.0] - 2026-11-27
+
+### Added
+
+- **React parity guard** (`test/react-parity.test.js`): `npm outdated`
+  flagged react/react-dom 18.3.1 vs latest 19.3.1 — verified against the
+  shipped app instead of guessing: the host's own web-frontend bundle
+  embeds **React 18.3.1**, exactly our devDependency pin, so the test
+  suite runs against the same API the panel uses at runtime (no reason to
+  chase React 19). The new test extracts the host's embedded version from
+  app.asar and fails locally when a future host upgrade diverges; skips
+  where no app.asar exists (CI), like the token drift check. The asar
+  helpers of `scripts/verify-host-tokens.mjs` are now exported for reuse.
+
+### Verified
+
+- `npm audit`: 0 vulnerabilities (the v0.17.0 supply-chain claim still
+  holds across all dependency refreshes since).
+
 ## [0.33.0] - 2026-11-27
 
 ### Fixed

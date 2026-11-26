@@ -28,6 +28,7 @@ Roadmap:
 - Consolidation (v0.15.0): duplicated path helpers and frontmatter serialize/parse logic consolidated into `src/util.js` (net −139 lines); plan coverage audited in `docs/coverage.md`
 - Stability hardening (v0.16.0): real-corpus client regression test (this repo's own generated cards driven through the panel), event-handler guard so handler throws surface as a readable status line instead of a silent no-op, CI gate on Node 22/24
 - DOM integration (v0.17.0): real React 18 + jsdom suite driving the panel with real click/change/keydown events against the real corpus — closes the reproduction gap for the reported "card click does nothing" (the event-level wiring is verified healthy); dev-only test dependencies (react, react-dom, jsdom) do not change the zero-runtime-dependency posture
+- React parity (v0.34.0): the dev pin (18.3.1) is verified to match the version embedded in the host's own web-frontend bundle, so tests exercise the same API the panel runs on; `test/react-parity.test.js` guards the drift and `npm audit` stays at 0 vulnerabilities
 - Multi-workspace overview (v0.18.0, ui-plan slice 2): every workspace as a row with status and stats, click to drill in; reuses each workspace's own session scope — no new host data plane needed
 - Optional semantic index stays deferred (YAGNI per the plan)
 
@@ -110,7 +111,7 @@ src/tool-import.js     repowiki-import tool
 src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
-test/                  Unit and integration tests (140 cases)
+test/                  Unit and integration tests (141 cases)
 docs/adr/              Architecture decision records (Chinese)
 docs/checkpoints/      Phase checkpoints (Chinese)
 ```

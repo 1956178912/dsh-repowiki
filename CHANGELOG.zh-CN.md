@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.34.0] - 2026-11-27
+
+- **React 版本一致性守卫**（`test/react-parity.test.js`）：`npm outdated`
+  提示 react 18.3.1 → latest 19.3.1，不盲目升级——解析 app.asar 证实
+  宿主前端 bundle 内嵌 **React 18.3.1**，与 devDependency 精确一致
+  （测试侧即运行时同一 API 面，无需追 19）。宿主未来升级分叉时本地
+  测试转红，CI 无 asar 时跳过（同令牌漂移自检策略）。
+- 核验 `npm audit`：0 漏洞（v0.17.0 的供应链声明历次刷新后仍成立）。
+- 141/141。
+
 ## [0.33.0] - 2026-11-27
 
 - **O7 卡片 slug 碰撞不再静默覆盖**（v0.32 评审延后项）：cardSlug 把
