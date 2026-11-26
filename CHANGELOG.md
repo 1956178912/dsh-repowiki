@@ -3,6 +3,34 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.17.0] - 2026-11-26
+
+### Added
+
+- **DOM integration test with real React + jsdom** (`test/client-dom.test.js`):
+  the stub tests call `props.onClick()` directly, bypassing the browser event
+  chain — so the user's reported "clicking a card does nothing" could never be
+  reproduced. The new suite renders `RepoWikiPage` with real React 18 into a
+  jsdom DOM and dispatches **real** events: a `change` on the workspace select
+  to load the real-corpus fixture, `click` on every generated card tile (React
+  synthetic-event root delegation, real target hit-testing), and a `keydown`
+  Escape to close the detail pane. Result: every generated card opens a detail
+  region, no `actionFailed` message surfaces, Escape closes the detail. The
+  event-level wiring is verified healthy — the historical click symptom is not
+  reproducible at this layer.
+- `test/lib/corpus-fixture.mjs`: shared corpus loader + fake remote
+  (RemoteResult contract, pagination semantics) extracted from the real-corpus
+  test for reuse by the DOM suite.
+
+### Changed
+
+- Dev-only test dependencies added (`react`, `react-dom` 18.3.1, `jsdom`,
+  all MIT, 0 vulnerabilities). The shipped plugin keeps **zero npm runtime
+  dependencies** — `client.js` uses the host's React at runtime; the tests
+  only need the same API surface. CI now installs dev dependencies before
+  running the suite; the local link-based bundle install still passes the
+  supply-chain policy (`link:` protocol does not pull dev dependencies).
+
 ## [0.16.0] - 2026-11-26
 
 ### Added

@@ -17,82 +17,18 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   makeHooks, reactFor, collectTexts, findNode, flush,
 } from './lib/stub-react.mjs'
+import { makeCorpusWf, loadCorpusFixture } from './lib/corpus-fixture.mjs'
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const FIXTURE_ROOT = path.join(REPO_ROOT, 'test', 'fixtures', 'repo-corpus')
-const KEY_PREFIX = '.dsh-repowiki/'
-
-/* 装载真实语料 fixture（.md/.json）为 flat 映射 + 目录集合（键带资产前缀） */
-const files = {}
-const dirs = new Set()
-const walk = (abs, rel) => {
-  for (const name of fs.readdirSync(abs)) {
-    const childAbs = path.join(abs, name)
-    const childRel = rel ? `${rel}/${name}` : name
-    if (fs.statSync(childAbs).isDirectory()) {
-      dirs.add(KEY_PREFIX + childRel)
-      walk(childAbs, childRel)
-    } else if (name.endsWith('.md') || name.endsWith('.json')) {
-      files[KEY_PREFIX + childRel] = fs.readFileSync(childAbs, 'utf8')
-    }
-  }
-}
-walk(FIXTURE_ROOT, '')
+const REPO_ROOT = new URL('..', import.meta.url).pathname
+const wf = makeCorpusWf()
 
 let captured = null
 globalThis.window = { __ModuleLoader__: { load: (mod) => { captured = mod } } }
 globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} }
 await import('../client.js')
-
-/** 列出某目录的直接子项（文件 + 目录），契约同真实 remote。 */
-const entriesOf = (rel) => {
-  const names = new Set()
-  for (const d of dirs) {
-    if (d.startsWith(`${rel}/`)) names.add(d.slice(rel.length + 1).split('/')[0])
-  }
-  for (const f of Object.keys(files)) {
-    if (f.startsWith(`${rel}/`)) names.add(f.slice(rel.length + 1).split('/')[0])
-  }
-  return [...names].map((name) => {
-    const child = `${rel}/${name}`
-    return files[child] !== undefined
-      ? { name, type: 'file', size: files[child].length }
-      : { name, type: 'directory' }
-  })
-}
-
-/** fake remote.workspaceFiles：内容来自本仓库真实资产。 */
-const wf = {
-  async read(sessionId, rel, range, signal) {
-    const text = files[rel]
-    if (text === undefined) {
-      return { ok: false, error: { code: 'workspace-file/not-found', message: `not found: ${rel}`, details: { path: rel } } }
-    }
-    const lines = text.split('\n')
-    const offset = range?.offset ?? 1
-    const limit = range?.limit ?? 5000
-    const slice = lines.slice(offset - 1, offset - 1 + limit)
-    return {
-      ok: true,
-      value: {
-        text: slice.join('\n'), lines: slice.length, offset,
-        eof: offset - 1 + slice.length >= lines.length,
-      },
-    }
-  },
-  async list(sessionId, rel, signal) {
-    if (rel === '.dsh-repowiki' || dirs.has(rel)) {
-      return { ok: true, value: { path: rel, entries: entriesOf(rel), truncated: false } }
-    }
-    return { ok: false, error: { code: 'workspace-file/not-found', message: `not found: ${rel}` } }
-  },
-}
 
 const workspaces = {
   list: {
@@ -195,7 +131,7 @@ test('真实语料：每张已生成卡片点击后渲染富文本详情且不�
     if (dt.length > 4) rich++
     else pending++
   }
-  const corpusCards = Object.keys(files).filter(f => f.startsWith('.dsh-repowiki/knowledge/')).length
+  const corpusCards = Object.keys(loadCorpusFixture().files).filter(f => f.startsWith('.dsh-repowiki/knowledge/')).length
   assert.ok(rich > 0, '真实语料含已生成卡片，至少一张应渲染富文本详情')
   // guard 兜底未误触发：全程点击不应出现事件期错误消息
   const textsAfter = collectTexts(hooks.root)
