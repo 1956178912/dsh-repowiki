@@ -1,6 +1,6 @@
 {
   "name": "dsh-repowiki",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "private": true,
   "description": "Symbol-level repository knowledge index, knowledge cards, wiki synthesis and cross-session query for DeepSeek Harness",
   "license": "MIT",

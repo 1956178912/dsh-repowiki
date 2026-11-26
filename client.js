@@ -6,7 +6,10 @@
  * - React 来自浏览器模块表（require('react')），无重复安装；
  * - inject 声明客户端服务（slots/locale/uiWorkspace/workspaces/remote）；
  * - 注册随 ctx.effect 生命周期回收（generator effect 形态）；
- * - 主题一律用 --dsw-alias-* 令牌并带字面量回退（重命名令牌只降观感不破渲染）；
+ * - 主题一律用官方验证过的 --dsw-alias-* 令牌（label-primary/secondary
+ *   文字、bg-layer-1/2 背景、border-l2 边框、state-business/error 状态色，
+ *   取自 dsh-client-ui-schedule 与 ui-sidebar-documentpreview 的 CSS）并带
+ *   字面量回退（v0.13.1 修正：此前 color-* 令牌名不存在，深色模式失效）；
  * - 控件自绘（不 require dsh-client-ui-primitives，该包不保证稳定）。
  *
  * 注入点（官方已分配空间的 seat，见 docs/adr/0004）：
@@ -632,28 +635,28 @@ window.__ModuleLoader__.load({
       /* 样式（主题令牌 + 字面量回退） */
       const buttonStyle = {
         padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-        background: 'var(--dsw-alias-color-surface, #ffffff)',
-        color: 'var(--dsw-alias-color-text, #111827)',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+        color: 'var(--dsw-alias-label-primary, #111827)',
         fontSize: 14,
       }
       const primaryStyle = {
         ...buttonStyle,
-        background: 'var(--dsw-alias-color-primary, #2563eb)',
+        background: 'var(--dsw-alias-state-business-primary, #2563eb)',
         borderColor: 'transparent',
         color: '#ffffff',
       }
       const inputStyle = {
         flex: 1, padding: '8px 10px', borderRadius: 8, fontSize: 14,
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-        background: 'var(--dsw-alias-color-surface, #ffffff)',
-        color: 'var(--dsw-alias-color-text, #111827)',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+        color: 'var(--dsw-alias-label-primary, #111827)',
       }
-      const muted = { color: 'var(--dsw-alias-color-muted, #6b7280)' }
+      const muted = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
       const cardChip = {
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         borderRadius: 10, padding: 14, cursor: 'pointer',
-        background: 'var(--dsw-alias-color-surface, #ffffff)',
+        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
       }
 
       /** 筛选切换按钮（带计数与 aria-pressed）。 */
@@ -717,7 +720,7 @@ window.__ModuleLoader__.load({
             ? tt('updated', { when: latestUpdate.slice(0, 10) })
             : t('never')),
           staleSet.size > 0 && h('span', {
-            style: { color: 'var(--dsw-alias-color-danger, #dc2626)' },
+            style: { color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
             role: 'status',
           }, tt('staleHint', { n: staleSet.size })),
         ),
@@ -727,7 +730,7 @@ window.__ModuleLoader__.load({
         status === 'no-asset' && h('p', { role: 'status', style: { ...muted } }, t('noAsset')),
         status === 'loading' && h('p', { role: 'status', style: { ...muted } }, t('loading')),
         status === 'error' && h('div', { role: 'alert' },
-          h('p', { style: { margin: '0 0 8px', color: 'var(--dsw-alias-color-danger, #dc2626)' } },
+          h('p', { style: { margin: '0 0 8px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' } },
             tt('loadFailed', { code: errorCode })),
           h('button', {
             type: 'button', style: buttonStyle,
@@ -826,7 +829,7 @@ window.__ModuleLoader__.load({
         ),
         message && h('p', {
           role: 'status',
-          style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-color-text, #111827)' },
+          style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-label-primary, #111827)' },
         }, message),
         notice,
       )
@@ -840,8 +843,8 @@ window.__ModuleLoader__.load({
           display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
           marginRight: 6, flex: 'none',
           background: filled
-            ? 'var(--dsw-alias-color-primary, #2563eb)'
-            : 'var(--dsw-alias-color-border, #d1d5db)',
+            ? 'var(--dsw-alias-state-business-primary, #2563eb)'
+            : 'var(--dsw-alias-border-l2, #d1d5db)',
         },
       })
     }
@@ -861,19 +864,19 @@ window.__ModuleLoader__.load({
           h('span', {
             style: { fontSize: 14, fontWeight: 600, flex: 1, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              color: 'var(--dsw-alias-color-text, #111827)' },
+              color: 'var(--dsw-alias-label-primary, #111827)' },
           }, card ? card.title : row.path),
         ),
         h('div', {
           style: { fontSize: 12, marginBottom: 8, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            color: 'var(--dsw-alias-color-muted, #6b7280)' },
+            color: 'var(--dsw-alias-label-secondary, #6b7280)' },
         },
           card ? card.summary || card.path : tt('pendingHint')),
         h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
           card && card.tags.length > 0
             ? card.tags.map((tag) => h('span', { key: tag, style: tagStyle() }, tag))
-            : h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' } },
+            : h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' } },
                 `${row.lang || ''} · ${tt('detailSymbols', { n: row.symbols })}`),
         ),
       )
@@ -895,12 +898,12 @@ window.__ModuleLoader__.load({
         h('span', {
           style: { flex: 1, fontSize: 13, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            color: 'var(--dsw-alias-color-text, #111827)' },
+            color: 'var(--dsw-alias-label-primary, #111827)' },
         }, card ? `${card.title} · ${row.path}` : row.path),
-        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)', flex: 'none' } },
+        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)', flex: 'none' } },
           tt('detailSymbols', { n: row.symbols })),
         h('span', {
-          style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+          style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
         }, card ? card.generatedAt.slice(0, 10) : t('pending')),
       )
     }
@@ -912,18 +915,18 @@ window.__ModuleLoader__.load({
         role: 'region', 'aria-label': card ? card.title : row.path,
         style: {
           marginTop: 12, padding: 16, borderRadius: 10,
-          border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-          background: 'var(--dsw-alias-color-surface, #ffffff)',
+          border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+          background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         },
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 } },
           h('div', { style: { flex: 1, minWidth: 0 } },
             h('div', {
               style: { fontSize: 15, fontWeight: 600,
-                color: 'var(--dsw-alias-color-text, #111827)' },
+                color: 'var(--dsw-alias-label-primary, #111827)' },
             }, card ? card.title : row.path),
             h('div', {
-              style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+              style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
             }, row.path),
           ),
           h('button', {
@@ -938,21 +941,21 @@ window.__ModuleLoader__.load({
               },
                 ...card.tags.map((tag) => h('span', { key: tag, style: tagStyle() }, tag)),
                 h('span', {
-                  style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+                  style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
                 }, tt('detailGeneratedAt', { when: card.generatedAt.slice(0, 10) || '—' })),
                 h('span', {
-                  style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+                  style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
                 }, tt('detailSymbols', { n: row.symbols })),
               ),
               h('div', {
                 style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
-                  color: 'var(--dsw-alias-color-text, #111827)' },
+                  color: 'var(--dsw-alias-label-primary, #111827)' },
               }, t('detailSummary')),
               ...(card.body
                 ? renderMarkdown(card.body.replace(/^\s*#[^\n]*\n+/, ''))
                 : [h('p', {
                     style: { margin: 0, fontSize: 13, lineHeight: 1.6,
-                      whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-color-text, #111827)' },
+                      whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-label-primary, #111827)' },
                   }, card.summary || t('never'))]),
             )
           : h('p', { style: { fontSize: 13, ...mutedStyle() } }, t('pendingHint')),
@@ -971,7 +974,7 @@ window.__ModuleLoader__.load({
               'aria-label': t('wikiBack'),
             }, '←'),
             h('h2', {
-              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-color-text, #111827)' },
+              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-label-primary, #111827)' },
             }, selected.title),
           ),
           // 原文 Markdown 渲染为排版文字（frontmatter 由渲染器跳过）
@@ -996,10 +999,10 @@ window.__ModuleLoader__.load({
           h('span', {
             style: { flex: 1, fontSize: 13, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              color: 'var(--dsw-alias-color-text, #111827)' },
+              color: 'var(--dsw-alias-label-primary, #111827)' },
           }, entry.title),
           h('span', {
-            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
           }, entry.generatedAt.slice(0, 10) || '—'),
         )),
       )
@@ -1017,7 +1020,7 @@ window.__ModuleLoader__.load({
               'aria-label': t('wikiBack'),
             }, '←'),
             h('h2', {
-              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-color-text, #111827)' },
+              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-label-primary, #111827)' },
             }, selected.title),
             h('span', {
               style: { ...statusPillStyle(selected.status), flex: 'none' },
@@ -1048,10 +1051,10 @@ window.__ModuleLoader__.load({
           h('span', {
             style: { flex: 1, fontSize: 13, overflow: 'hidden',
               textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              color: 'var(--dsw-alias-color-text, #111827)' },
+              color: 'var(--dsw-alias-label-primary, #111827)' },
           }, entry.title),
           h('span', {
-            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
           }, entry.createdAt.slice(0, 10) || '—'),
         )),
       )
@@ -1060,10 +1063,10 @@ window.__ModuleLoader__.load({
     /** 记忆状态徽章样式（按 accepted/pending/rejected 取色）。 */
     function statusPillStyle(status) {
       const color = status === 'accepted'
-        ? 'var(--dsw-alias-color-primary, #2563eb)'
+        ? 'var(--dsw-alias-state-business-primary, #2563eb)'
         : status === 'rejected'
-          ? 'var(--dsw-alias-color-danger, #dc2626)'
-          : 'var(--dsw-alias-color-muted, #6b7280)'
+          ? 'var(--dsw-alias-state-error-primary, #dc2626)'
+          : 'var(--dsw-alias-label-secondary, #6b7280)'
       return {
         fontSize: 11, padding: '2px 8px', borderRadius: 999,
         border: `1px solid ${color}`, color,
@@ -1087,7 +1090,7 @@ window.__ModuleLoader__.load({
         margin: level === 1 ? '0 0 10px' : '14px 0 6px',
         fontSize: level === 1 ? 18 : level === 2 ? 15 : 14,
         fontWeight: 600,
-        color: 'var(--dsw-alias-color-text, #111827)',
+        color: 'var(--dsw-alias-label-primary, #111827)',
       })
       const paragraphStyle = { margin: '0 0 10px', fontSize: 13, lineHeight: 1.6 }
       while (i < lines.length) {
@@ -1110,8 +1113,8 @@ window.__ModuleLoader__.load({
             style: {
               padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.5,
               overflow: 'auto', margin: '0 0 10px',
-              background: 'var(--dsw-alias-color-subtle, #f3f4f6)',
-              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+              background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
+              border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
             },
           }, codeLines.join('\n')))
           continue
@@ -1129,7 +1132,7 @@ window.__ModuleLoader__.load({
         if (/^-{3,}$/.test(line)) {
           blocks.push(h('hr', {
             key: key++,
-            style: { border: 0, margin: '12px 0', borderTop: '1px solid var(--dsw-alias-color-border, #d1d5db)' },
+            style: { border: 0, margin: '12px 0', borderTop: '1px solid var(--dsw-alias-border-l2, #d1d5db)' },
           }))
           i++
           continue
@@ -1144,8 +1147,8 @@ window.__ModuleLoader__.load({
             key: key++,
             style: {
               margin: '0 0 10px', padding: '6px 12px',
-              borderLeft: `3px solid var(--dsw-alias-color-border, #d1d5db)`,
-              color: 'var(--dsw-alias-color-muted, #6b7280)', fontSize: 13,
+              borderLeft: `3px solid var(--dsw-alias-border-l2, #d1d5db)`,
+              color: 'var(--dsw-alias-label-secondary, #6b7280)', fontSize: 13,
             },
           }, ...quoteLines.map((t, k) => h('div', { key: k }, ...inlineText(t)))))
           continue
@@ -1204,7 +1207,7 @@ window.__ModuleLoader__.load({
             index: link.index, end: link.index + link[0].length,
             node: h('a', {
               key: key++, href: link[2], target: '_blank', rel: 'noreferrer noopener',
-              style: { color: 'var(--dsw-alias-color-primary, #2563eb)' },
+              style: { color: 'var(--dsw-alias-state-business-primary, #2563eb)' },
             }, link[1]),
           } : null,
           bold ? {
@@ -1217,7 +1220,7 @@ window.__ModuleLoader__.load({
               key: key++,
               style: {
                 fontSize: 12, padding: '1px 4px', borderRadius: 4,
-                background: 'var(--dsw-alias-color-subtle, #f3f4f6)',
+                background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
               },
             }, code[1]),
           } : null,
@@ -1237,9 +1240,9 @@ window.__ModuleLoader__.load({
     /** 卡片瓦片/行共用外框样式。 */
     function cardChipStyle() {
       return {
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         borderRadius: 10,
-        background: 'var(--dsw-alias-color-surface, #ffffff)',
+        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
         cursor: 'pointer',
       }
     }
@@ -1248,8 +1251,8 @@ window.__ModuleLoader__.load({
     function tagStyle() {
       return {
         fontSize: 11, padding: '2px 8px', borderRadius: 999, flex: 'none',
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-        color: 'var(--dsw-alias-color-muted, #6b7280)',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+        color: 'var(--dsw-alias-label-secondary, #6b7280)',
       }
     }
 
@@ -1257,15 +1260,15 @@ window.__ModuleLoader__.load({
     function chipButtonStyle() {
       return {
         width: 28, height: 28, borderRadius: 8, flex: 'none', cursor: 'pointer',
-        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
-        background: 'var(--dsw-alias-color-surface, #ffffff)',
-        color: 'var(--dsw-alias-color-text, #111827)', fontSize: 16, lineHeight: 1,
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+        color: 'var(--dsw-alias-label-primary, #111827)', fontSize: 16, lineHeight: 1,
       }
     }
 
     /** 次要文字样式（工具函数处复用）。 */
     function mutedStyle() {
-      return { color: 'var(--dsw-alias-color-muted, #6b7280)' }
+      return { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
     }
 
     return {

@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.13.1] - 2026-11-26
+
+### Fixed
+
+- Dark-mode adaptation of the web client: the CSS custom-property names used
+  before (`--dsw-alias-color-text/-muted/-border/-surface/-primary/-subtle`,
+  54 usages) do not exist in this DSH build, so every `var()` fell back to a
+  light literal and dark mode rendered as white-on-white (the wiki `a.js`
+  inline-code case the user saw). Replaced with the names verified from the
+  shipped official pages (`dsh-client-ui-schedule`, `ui-sidebar-documentpreview`):
+  `--dsw-alias-label-primary/secondary` (text), `--dsw-alias-bg-layer-1/2`
+  (surfaces incl. code blocks), `--dsw-alias-border-l2`,
+  `--dsw-alias-state-business-primary` (primary), `--dsw-alias-state-error-primary`
+  (danger). The mapping is recorded in the client.js header comment.
+- ADR-0004's unverified token note is now resolved with the verified list.
+
 ## [0.13.0] - 2026-11-26
 
 ### Changed
