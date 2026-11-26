@@ -6,10 +6,14 @@
  * - React 来自浏览器模块表（require('react')），无重复安装；
  * - inject 声明客户端服务（slots/locale/uiWorkspace/workspaces/remote）；
  * - 注册随 ctx.effect 生命周期回收（generator effect 形态）；
- * - 主题一律用官方验证过的 --dsw-alias-* 令牌（label-primary/secondary
- *   文字、bg-layer-1/2 背景、border-l2 边框、state-business/error 状态色，
- *   取自 dsh-client-ui-schedule 与 ui-sidebar-documentpreview 的 CSS）并带
- *   字面量回退（v0.13.1 修正：此前 color-* 令牌名不存在，深色模式失效）；
+ * - 主题一律用官方 --dsw-alias-* 令牌（label-primary/secondary
+ *   文字、bg-layer-1/2 背景、border-l2 边框、state-business/done/error
+ *   状态色）并带字面量回退。令牌名已经静态实证：dsh-client-ui-theme 的
+ *   design-platform.css 定义全部 264 个 alias 令牌（含深色
+ *   body[data-ds-dark-theme] 重定义），主前端壳 CSS 使用 var(--dsw-alias-*)
+ *   348 处（v0.13.1 修正：此前 color-* 令牌名不存在，深色模式失效；
+ *   v0.21.0 补实证并将状态点蓝色改为 state-done-primary 紫色，与灰色
+ *   未生成点拉开色相）；
  * - 控件自绘（不 require dsh-client-ui-primitives，该包不保证稳定）。
  *
  * 注入点（官方已分配空间的 seat，见 docs/adr/0004）：
@@ -1096,7 +1100,9 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 状态点：已生成（主色）/未生成（灰）。 */
+    /** 状态点：已生成（done 紫）/未生成（灰）。取官方语义令牌而非蓝色的
+     *  business-primary——灰蓝两色在 8px 尺寸下难以区分（用户反馈），紫色
+     *  与灰色色相差距大，明暗模式各有对应定义。 */
     function statusDot(filled) {
       return h('span', {
         'aria-hidden': true,
@@ -1104,7 +1110,7 @@ window.__ModuleLoader__.load({
           display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
           marginRight: 6, flex: 'none',
           background: filled
-            ? 'var(--dsw-alias-state-business-primary, #2563eb)'
+            ? 'var(--dsw-alias-state-done-primary, #7c3aed)'
             : 'var(--dsw-alias-border-l2, #d1d5db)',
         },
       })

@@ -32,9 +32,16 @@
    （资产写到该工作区的 `.dsh-repowiki/`）。
 4. **图标自绘 SVG**：practices 规则禁止 `require('@deepseek-ai/dsh-client
    -ui-primitives')`（该包变更无通知）；artwork 允许使用自有颜色。
-5. **主题令牌**：本会话无 cordis_inspect 的 Theme 查询，`--dsw-alias-*`
-   令牌名未经运行时确认；样式采用 `var(--dsw-alias-*, <字面色>)` 回退
-   链，令牌缺失时回退到字面色而非破版。
+5. **主题令牌**：静态实证（v0.21.0，方法见下）确认
+   `--dsw-alias-*` 令牌体系：`dsh-client-ui-theme/src/styles/design-platform.css`
+   定义全部 **264 个 alias 令牌**，每个令牌均有浅色定义与
+   `body[data-ds-dark-theme]` 下的深色重定义；主前端壳
+   `dsh-web-frontend/dist/assets/index-*.css` 使用 `var(--dsw-alias-*)`
+   **348 处**。本插件使用的 7 个令牌（label-primary/secondary、
+   bg-layer-1/2、border-l2、state-business-primary、state-error-primary）
+   全部命中。样式仍采用 `var(--dsw-alias-*, <字面色>)` 回退链双保险。
+   实证方法：解析 `app.asar` 头（8 字节 size 头 + headerSize + 各文件
+   offset），按字节区间提取 CSS 后匹配变量定义。
 
 ## 理由
 
@@ -51,8 +58,10 @@
 - **不是 user-actions 的标准模式**：按钮没有直接调 Host 服务方法，而是
   经"会话 + 模型"执行。代价是失败处理依赖模型遵循 prompt（prompt 已
   逐步骤化并要求报告）；收益是零额外 Host 服务。
-- 令牌名未经运行时验证（本会话无 Theme 查询能力），首版用回退链；可用
-  `cordis_inspect_query` 时应核对并对齐真实令牌名。
+- 令牌名已由 app.asar 静态实证（v0.21.0）：264 个 alias 令牌在
+  `design-platform.css` 有定义与深色重定义，主前端壳消费 348 处；
+  无法确认的部分仅为"我的面板被注入时该 CSS 已加载"这一运行时事实，
+  故保留字面量回退链。
 - `client.js` 的加载需客户端构建发现（dsh.client.platform: web +
   `immediately: true`），安装后需刷新页面才能看到侧栏图标。
 - 界面后续按 docs/ui-plan.md 的切片演进（面板化、浏览检索等），本 ADR

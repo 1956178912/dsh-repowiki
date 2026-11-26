@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.15.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.20.0，测试 121/121，行覆盖率 96.1%）
+- 核对对象：本仓库当前实现（v0.21.0，测试 121/121，行覆盖率 96.1%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -49,6 +49,14 @@
 
 - 客户端面板完整化：搜索/筛选/详情/错误边界（v0.8.1 RemoteResult 契约修复、v0.13.1 深色模式官方令牌、v0.14.0 ErrorBoundary）。
 - DRY 公共层 `src/util.js`（cwdOf/toAbsPath/encodeFrontmatter/parseFrontmatter，v0.15.0）。
+- 主题令牌静态实证（v0.21.0）：解析 app.asar 提取官方 CSS——
+  `dsh-client-ui-theme/src/styles/design-platform.css` 定义全部 264 个
+  `--dsw-alias-*` 令牌（每个均含 `body[data-ds-dark-theme]` 深色重定义），
+  主前端壳 `dsh-web-frontend/dist/assets/index-*.css` 消费 348 处
+  `var(--dsw-alias-*)`。本插件使用的 7 个令牌全部命中。证据与方法见
+  ADR-0004 §5；同时把"已生成"状态点从 `state-business-primary`（蓝）改为
+  `state-done-primary`（紫 `rgb(124,58,237)`），与未生成灰点拉开色相
+  （用户反馈"灰蓝难区分"）；回归断言见 `test/client-smoke.test.js`。
 
 ## 4. §10.3 升级韧性九条
 

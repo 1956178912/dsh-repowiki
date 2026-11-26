@@ -3,6 +3,33 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.21.0] - 2026-11-26
+
+### Changed
+
+- **Theme tokens are now statically verified against the app's own CSS**
+  (the "official token" claim from v0.13.1 was second-hand — the token
+  names were lifted from another official page's stylesheet). By parsing
+  `app.asar` (8-byte size header + headerSize + per-file offsets) and
+  extracting the bundled stylesheets, the evidence is now primary:
+  - `dsh-client-ui-theme/src/styles/design-platform.css` defines **all
+    264 `--dsw-alias-*` tokens**, each with a light definition and a
+    `body[data-ds-dark-theme]` dark override — dark-mode redefinition is
+    real, not assumed.
+  - The main web shell CSS consumes `var(--dsw-alias-*)` **348 times**;
+    200 of the 233 bundled CSS files reference the alias system.
+  - All 7 tokens this panel uses (label-primary/secondary, bg-layer-1/2,
+    border-l2, state-business-primary, state-error-primary) are among the
+    264. Method and citations recorded in ADR-0004 §5; literal-color
+    fallbacks kept as a second safety net.
+- **Status dot recolored for distinguishability** (user feedback: the
+  generated/pending gray-vs-blue dots were hard to tell apart). The
+  "generated" dot now uses `--dsw-alias-state-done-primary`
+  (violet `rgb(124,58,237)`, light and dark variants) instead of the
+  blue `state-business-primary` — hue distance from the gray pending dot
+  is much larger at the 8px render size. Regression assertions added to
+  `test/client-smoke.test.js`.
+
 ## [0.20.0] - 2026-11-26
 
 ### Added

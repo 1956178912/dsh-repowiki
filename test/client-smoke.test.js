@@ -266,6 +266,16 @@ test('挂载页面：选中工作区后渲染统计、已生成卡片与未生�
   assert.ok(texts.some(s => s.includes('A 卡片')), '应渲染已生成卡片标题')
   assert.ok(texts.some(s => s.includes('A 的概要文本')), '应渲染卡片摘要')
   assert.ok(texts.some(s => s.includes('b.js')), '应渲染未生成条目')
+
+  // 状态点配色回归：已生成用 state-done-primary（紫），未生成用 border-l2（灰）
+  // —— 官方 design-platform.css 定义了两个令牌的明/暗双值（见 docs/adr/0004），
+  // 紫与灰的色相差距刻意大于旧蓝-灰组合（用户反馈"灰蓝难区分"）。
+  const doneDot = findNode(hooks.root, (n) => n.type === 'span'
+    && n.props.style && String(n.props.style.background).includes('state-done-primary'))
+  const emptyDot = findNode(hooks.root, (n) => n.type === 'span'
+    && n.props.style && String(n.props.style.background).includes('border-l2'))
+  assert.ok(doneDot, '已生成卡片的状态点应使用 state-done-primary 令牌')
+  assert.ok(emptyDot, '未生成条目的状态点应使用 border-l2 令牌')
 })
 
 test('索引缺失时走"尚未生成"分支而非失败', async () => {
