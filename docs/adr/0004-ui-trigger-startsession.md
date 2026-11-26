@@ -24,11 +24,12 @@
 
 1. **UI 注入**：`sidebar.panellist`（图标入口，`order: 20` 与任务页图标
    同级）+ `main`（`key: 'repowiki'` 独立页面）。
-2. **选择项目**：页面按钮调用 `ctx.uiWorkspace.pickDirectory()` 拿路径。
-3. **触发执行**：`startSession(undefined, { prompt, whenDraftExists: 'append' })`，
-   prompt 显式指定工具与 `root` 路径参数；执行模型仍然是"模型调用
-   repowiki-* 工具"，工具用 root 参数锚定目标项目（资产写到目标项目的
-   `.dsh-repowiki/`，与执行会话的 workspace 无关）。
+2. **选择工作区**：页面下拉展示 `ctx.workspaces.list.getSnapshot().items`
+   （`WorkspaceView`：workspaceId/path/title），并订阅其变更；不使用裸
+   目录选择器——工作区是 dsh 用户组织项目的方式。
+3. **触发执行**：`startSession(workspaceId, { prompt, whenDraftExists:
+   'append' })`，prompt 逐步骤说明工具调用；新会话的 cwd 即所选工作区
+   目录，工具用默认 root 锚定它（资产写到该工作区的 `.dsh-repowiki/`）。
 4. **图标自绘 SVG**：practices 规则禁止 `require('@deepseek-ai/dsh-client
    -ui-primitives')`（该包变更无通知）；artwork 允许使用自有颜色。
 5. **主题令牌**：本会话无 cordis_inspect 的 Theme 查询，`--dsw-alias-*`
@@ -39,9 +40,9 @@
 
 1. startSession+prompt 是官方任务页同款轻路径；不引入 Host 服务方法就
    不需要改插件形态（service class），保持 ADR-0002 的零外部 import。
-2. 工具的 `root` 参数在设计上就支持任意项目路径（Phase 1 的
-   resolveAssetRoot），因此 UI 不需要 workspace 注册或目录→workspace 的
-   转换胶水。
+2. 工具的 `root` 参数在设计上就支持任意路径（Phase 1 的
+   resolveAssetRoot），默认锚定会话 cwd；以工作区为选择单位让"选项目"
+   直接复用用户已有的工作区组织，无需目录→workspace 转换胶水。
 3. 生成是长任务（可能数十次 LLM 调用）：把它放在新会话既符合会话级
    工具表快照的现实（新会话才能看到全部工具），也让进度可见可回看。
 

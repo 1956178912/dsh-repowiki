@@ -13,15 +13,15 @@ Wiki 生成。
 - 客户端模块 `client.js` 注册两个 seat（ADR-0004）：
   - `sidebar.panellist`：侧栏 Repo Wiki 图标入口（order: 20，与任务页
     图标同级）；
-  - `main`（key=repowiki）：独立页面——目录选择器 + 四个动作（生成索引 /
-    生成知识卡片 / 生成 Wiki / 一键生成全部）。
-- 项目选择用官方 `ctx.uiWorkspace.pickDirectory()`（directory-picker 能力
-  seam，boot 时自动择优 native/browse 后端）。
-- 生成动作经 `ctx.uiWorkspace.startSession(undefined, { prompt,
-  whenDraftExists: 'append' })` 开新会话，prompt 显式指定工具名与 `root`
-  路径参数；执行模型仍是"模型调用 repowiki-* 工具"，工具用 root 参数锚定
-  目标项目（产物写目标项目的 `.dsh-repowiki/`，与执行会话的 workspace
-  无关）。
+  - `main`（key=repowiki）：独立页面——工作区下拉选择（订阅
+    `ctx.workspaces` 列表）+ 四个动作（生成索引 / 生成知识卡片 /
+    生成 Wiki / 一键生成全部）。
+- 选择单位是**工作区**（WorkspaceView：workspaceId/path/title），不是裸
+  目录：用户按工作区组织项目，下拉直接复用。
+- 生成动作经 `ctx.uiWorkspace.startSession(workspaceId,
+  { prompt, whenDraftExists: 'append' })` 在所选工作区开新会话；新会话
+  cwd 即工作区目录，工具默认 root 锚定它（产物写该工作区的
+  `.dsh-repowiki/`）。
 - 图标自绘 SVG（practices 规则：禁止 require dsh-client-ui-primitives）；
 - 样式用 `var(--dsw-alias-*, <字面色>)` 回退链（本会话无 Theme 查询，
   令牌名未经运行时确认）。

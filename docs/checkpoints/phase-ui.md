@@ -13,16 +13,17 @@ project directory and run index / extract / generate.
 - Client module `client.js` registers two seats (ADR-0004):
   - `sidebar.panellist` — a Repo wiki icon entry at `order: 20` (same level as
     the task-manager icon);
-  - `main` keyed `repowiki` — a standalone page with a directory picker, and
-    four actions (build index / extract cards / generate wiki / generate
-    everything).
-- Project picker uses the official `ctx.uiWorkspace.pickDirectory()`
-  (directory-picker seam; native or browse backend chosen at boot).
+  - `main` keyed `repowiki` — a standalone page with a workspace dropdown
+    (subscribed to `ctx.workspaces`) and four actions (build index / extract
+    cards / generate wiki / generate everything).
+- The selection unit is the **workspace** (WorkspaceView: workspaceId/path/
+  title), not a bare directory: users organize projects as workspaces, and the
+  dropdown reuses that.
 - Generation actions open a new session via
-  `ctx.uiWorkspace.startSession(undefined, { prompt, whenDraftExists: 'append' })`
-  with the tool names and explicit `root` path in the prompt; the model calls
-  the repowiki-* tools, and artifacts land in the target project's
-  `.dsh-repowiki/` (independent of the executing session's workspace).
+  `ctx.uiWorkspace.startSession(workspaceId, { prompt, whenDraftExists:
+  'append' })`; the new session's cwd is the workspace directory, and the
+  tools anchor to it by default (artifacts land in that workspace's
+  `.dsh-repowiki/`).
 - Icon is a hand-drawn SVG (practices rule: never require
   `dsh-client-ui-primitives`); styling uses `var(--dsw-alias-*, <literal>)`
   fallback chains because no Theme inspection is available this session.
