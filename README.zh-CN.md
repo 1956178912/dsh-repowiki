@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 2
+## 当前阶段：Phase 2 + 面板切片 1（v0.4.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -17,7 +17,7 @@
 | `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/` |
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈，凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
-| 侧栏 UI（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开独立页面：选择工作区后可生成索引 / 知识卡片 / Wiki（或一键全部）。生成在所选工作区的新会话中执行（ADR-0004） |
+| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成"筛选（未生成 = 在 `index.json` 中但没有卡片）、搜索、网格与列表视图、卡片详情列——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
 路线图（见设计依据）：
 - Phase 3：commit/diff 增量更新、导入导出、人工修订
@@ -35,11 +35,13 @@
 ## 客户端 UI（web）
 
 `client.js` 是 bundle 的浏览器半边（经 `dsh.client.platform: web` 注册）：
-`sidebar.panellist` 侧栏入口 + `main`（key: 'repowiki'）独立页面。页面
-列出工作区（订阅 `ctx.workspaces`）、用
-`ctx.uiWorkspace.startSession(workspaceId, ...)` 发起生成；图标为自绘
-SVG（不 import `dsh-client-ui-primitives`，因其稳定性不受保证）。安装或
-升级后需刷新一次 GUI 让客户端模块加载。
+`sidebar.panellist` 侧栏入口 + `main`（key: 'repowiki'）工作区页面。选择
+工作区后，页面经 `ctx.remote.workspaceFiles`（由该工作区的任一成员会话授权，
+见 `WorkspaceView.sessionIds`）读取
+`.dsh-repowiki/`，渲染面板：统计、"全部/已生成/未生成"筛选、搜索、网格/列表
+视图与卡片详情。生成动作用 `ctx.uiWorkspace.startSession(workspaceId, ...)`；
+图标为自绘 SVG（不 import `dsh-client-ui-primitives`，因其稳定性不受保证）。
+安装或升级后需刷新一次 GUI 让客户端模块加载。
 
 ```
 DSH Plugins > Add plugin > 选择本目录

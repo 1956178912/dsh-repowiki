@@ -3,6 +3,24 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.4.0] - 2026-11-26
+
+### Added
+
+- Slice 1 of the Repo Wiki panel (web client): after picking a workspace the
+  page reads `.dsh-repowiki/` through `ctx.remote.workspaceFiles` (authorized
+  by any member session of that workspace, per `WorkspaceView.sessionIds`)
+  and renders: file/symbol/card/doc counts and latest update, an
+  all/generated/pending filter (pending = listed in `index.json` without a
+  card), a search box, grid and list views, and an inline details pane for a
+  card (summary, tags, generation time; Escape closes).
+- Generation buttons keep the validated
+  `ctx.uiWorkspace.startSession(workspaceId, ...)` flow (ADR-0004); the panel
+  reloads when the page becomes visible again.
+- Client smoke tests (`test/client-smoke.test.js`): a minimal React/hook
+  stub mounts the page against a fake `remote.workspaceFiles` and covers the
+  load → filter → render chain and the "not yet generated" branch.
+
 ## [0.3.0] - 2026-11-26
 
 ### Added

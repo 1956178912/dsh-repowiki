@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phase 2
+## Current stage: Phase 2 + panel slice 1 (v0.4.0)
 
 | Capability | Description |
 |---|---|
@@ -17,7 +17,7 @@ English | [中文](README.zh-CN.md)
 | `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/` |
 | `repowiki-generate` tool | Reads only the cards + tech stack, synthesizes theme-grouped Wiki pages (Markdown + optional mermaid) into `.dsh-repowiki/wiki/<locale>/` |
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
-| Sidebar UI (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a standalone page: pick a workspace, then build the index / extract cards / generate the wiki (or all at once). Generation runs in a new session of the chosen workspace (ADR-0004) |
+| Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page: file/symbol/card/doc counts and latest update, an all/generated/pending filter (pending = listed in `index.json` without a card), search, grid and list views, and a card details pane — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
 
 Roadmap (see the review document):
 - Phase 3: commit/diff incremental updates, import/export, manual edits
@@ -36,8 +36,11 @@ Roadmap (see the review document):
 
 `client.js` is the browser half of the bundle (registered via
 `dsh.client.platform: web`): a sidebar entry at `sidebar.panellist` and a
-keyed page at `main` (`key: 'repowiki'`). The page lists workspaces
-(`ctx.workspaces`, subscribed) and starts generation with
+keyed page at `main` (`key: 'repowiki'`). After a workspace is picked, the
+page reads `.dsh-repowiki/` through `ctx.remote.workspaceFiles` (authorized
+by any member session of that workspace, per `WorkspaceView.sessionIds`) and
+renders the panel: counts, all/generated/pending filter, search, grid and
+list views, and card details. Generation starts with
 `ctx.uiWorkspace.startSession(workspaceId, ...)`; the icon is hand-drawn SVG
 (no `dsh-client-ui-primitives` import, per its stability rules). After installing
 or upgrading, refresh the GUI once for the client module to load.

@@ -1,22 +1,30 @@
 /**
- * dsh-repowiki 客户端模块（Phase B：UI 触发）。
+ * dsh-repowiki 客户端模块（切片 1：Repo Wiki 面板）。
  *
- * 形态遵循官方 UI 插件约定（dsh-doc ui-plugin.md + ui-schedule 实现）：
+ * 形态遵循官方 UI 插件约定（dsh-doc ui-plugin.md + practices.md）：
  * - window.__ModuleLoader__.load 注册懒工厂，id 等于包名；
  * - React 来自浏览器模块表（require('react')），无重复安装；
- * - inject 声明客户端服务（slots/locale/uiWorkspace）；
- * - 注册随 ctx.effect 生命周期回收（generator effect 形态）。
+ * - inject 声明客户端服务（slots/locale/uiWorkspace/workspaces/remote）；
+ * - 注册随 ctx.effect 生命周期回收（generator effect 形态）；
+ * - 主题一律用 --dsw-alias-* 令牌并带字面量回退（重命名令牌只降观感不破渲染）；
+ * - 控件自绘（不 require dsh-client-ui-primitives，该包不保证稳定）。
  *
  * 注入点（官方已分配空间的 seat，见 docs/adr/0004）：
  * - sidebar.panellist：侧栏"自动化任务"同级的 Repo Wiki 入口图标；
  * - main（key=repowiki）：与任务页并列的独立页面。
  *
- * 选择单位是**工作区**（ctx.workspaces 的 WorkspaceView 列表），不是裸
- * 目录：生成动作经 startSession(workspaceId, {prompt}) 在所选工作区开
- * 会话，工具的 root 默认即会话 cwd。
+ * 数据通道（ui-plan 切片 1）：
+ * - 选中工作区经 WorkspaceView.sessionIds 取任一会话 id（冷会话亦可授权），
+ *   再经 ctx.remote.workspaceFiles.read/list 读取该工作区 .dsh-repowiki/：
+ *   index.json（统计与候选文件）、knowledge/<locale>/*.md（卡片）、
+ *   wiki/<locale>/*.md（文档计数）。
+ * - read 按页返回（默认上限 5000 行/页），调用方负责翻页拼接至 eof。
+ * - 错误为 RemoteError（如 workspace-file/not-found），面板区分"尚未生成"
+ *   与"读取失败"，不向前端抛堆栈。
  *
- * 图标自绘 SVG：practices 规则禁止 require dsh-client-ui-primitives
- * （该包不保证稳定），artwork 允许使用自有颜色。
+ * 生成动作用 v0.3.0 已验证的 startSession(workspaceId, ...)（见
+ * docs/checkpoints/phase-ui2.md 对 ui-plan startSession(undefined) 提案的
+ * 取舍）：面板选择哪个工作区，生成就落在哪个工作区的新会话。
  */
 
 /** 客户端文案命名空间（与 bundle 的 locale/*.json 的 meta 无关）。 */
@@ -24,6 +32,18 @@ const NS = 'repowiki.ui'
 
 /** 侧栏面板键（main slot 的 key，框架据此把侧栏点击导航到页面）。 */
 const PANEL_KEY = 'repowiki'
+
+/** 工作区内的资产目录（相对工作区根）。 */
+const ASSET_DIR = '.dsh-repowiki'
+
+/** 单页行数上限（Host 配置 maxLines 的默认值，超过会被拒）。 */
+const READ_PAGE_LINES = 5000
+
+/** 单文件最多读取页数（防巨型文件无限翻页；超出按截断处理）。 */
+const READ_MAX_PAGES = 12
+
+/** 并发读取卡片的最大请求数（避免一次性打出大量 Remote 调用）。 */
+const CARD_CONCURRENCY = 6
 
 /** 客户端文案（中英）。 */
 const DICTS = {
@@ -42,6 +62,31 @@ const DICTS = {
     needWorkspace: '请先选择工作区。',
     failed: '发起失败，请重试。',
     busy: '已在新会话中开始，可在会话中查看进度。',
+    reload: '刷新',
+    loading: '正在读取工作区知识库 …',
+    noSession: '该工作区暂无会话。请先在该工作区打开一次会话（或生成一次），面板才能读取其文件。',
+    noAsset: '该工作区尚未生成知识库。用上方按钮生成索引与卡片。',
+    loadFailed: '读取失败：{code}',
+    retry: '重试',
+    filterAll: '全部',
+    filterGenerated: '已生成',
+    filterPending: '未生成',
+    searchPlaceholder: '搜索标题 / 路径 / 标签 …',
+    viewGrid: '网格视图',
+    viewList: '列表视图',
+    statFiles: '文件 {n}',
+    statSymbols: '符号 {n}',
+    statCards: '卡片 {n}',
+    statDocs: '文档 {n}',
+    updated: '最近更新：{when}',
+    never: '尚未生成卡片',
+    pending: '未生成',
+    pendingHint: '该文件尚未生成知识卡片。',
+    detailClose: '关闭详情',
+    detailSymbols: '符号数 {n}',
+    detailGeneratedAt: '生成于 {when}',
+    detailSummary: '摘要',
+    detailTags: '标签',
   },
   en: {
     panel: 'Repo wiki',
@@ -58,6 +103,31 @@ const DICTS = {
     needWorkspace: 'Pick a workspace first.',
     failed: 'Failed to start, please retry.',
     busy: 'Started in a new session; follow progress there.',
+    reload: 'Reload',
+    loading: 'Reading the workspace knowledge base …',
+    noSession: 'This workspace has no session yet. Open one in this workspace first (or run a generation) so the panel can read its files.',
+    noAsset: 'No knowledge base generated for this workspace yet. Use the buttons above to build the index and cards.',
+    loadFailed: 'Read failed: {code}',
+    retry: 'Retry',
+    filterAll: 'All',
+    filterGenerated: 'Generated',
+    filterPending: 'Pending',
+    searchPlaceholder: 'Search title / path / tags …',
+    viewGrid: 'Grid view',
+    viewList: 'List view',
+    statFiles: 'Files {n}',
+    statSymbols: 'Symbols {n}',
+    statCards: 'Cards {n}',
+    statDocs: 'Docs {n}',
+    updated: 'Last updated: {when}',
+    never: 'No cards generated yet',
+    pending: 'Pending',
+    pendingHint: 'No knowledge card generated for this file yet.',
+    detailClose: 'Close details',
+    detailSymbols: 'Symbols {n}',
+    detailGeneratedAt: 'Generated {when}',
+    detailSummary: 'Summary',
+    detailTags: 'Tags',
   },
 }
 
@@ -66,7 +136,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useState, useEffect } = React
+    const { useState, useEffect, useMemo, useCallback, useRef } = React
 
     /**
      * 侧栏入口图标（装饰性占据者：点击导航由框架按 PANEL_KEY 关联）。
@@ -91,18 +161,190 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /* ── 数据层：workspaceFiles 远程读取（全部相对工作区根） ── */
+
     /**
-     * Repo Wiki 主页面。
+     * 读取一个文本文件，翻页拼接至 eof（或达页数上限按截断返回）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id（工作区成员会话）。
+     * @param {string} rel - 相对工作区根的路径。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<string>} 文件文本。
+     */
+    async function readFileText(wf, sessionId, rel, signal) {
+      const parts = []
+      let offset = 1
+      for (let page = 0; page < READ_MAX_PAGES; page++) {
+        const res = await wf.read(sessionId, rel, { offset, limit: READ_PAGE_LINES }, signal)
+        if (!res || typeof res.text !== 'string') throw new Error('workspace-file/bad-read')
+        parts.push(res.text)
+        if (res.eof || !res.lines) break
+        offset += res.lines
+      }
+      return parts.join('\n')
+    }
+
+    /**
+     * 读取并解析 JSON 文件。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} rel - 相对路径。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<object>} 解析后的对象。
+     */
+    async function readJson(wf, sessionId, rel, signal) {
+      return JSON.parse(await readFileText(wf, sessionId, rel, signal))
+    }
+
+    /**
+     * 列出目录的直接子项。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} rel - 相对路径（空串表示工作区根）。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<object[]>} WorkspaceDirectoryEntry 数组（name/type/size?）。
+     */
+    async function listChildren(wf, sessionId, rel, signal) {
+      const res = await wf.list(sessionId, rel, signal)
+      if (!res || !Array.isArray(res.entries)) throw new Error('workspace-file/bad-list')
+      return res.entries
+    }
+
+    /**
+     * 解析卡片的 JSON frontmatter 与正文（与 src/knowledge.js parseCard 同构）。
+     * @param {string} text - 卡片文件内容。
+     * @returns {{meta:object, body:string}|null} 失败返回 null。
+     */
+    function parseCardText(text) {
+      const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text)
+      if (!m) return null
+      try {
+        const meta = JSON.parse(m[1])
+        if (typeof meta !== 'object' || meta === null) return null
+        return { meta, body: m[2] }
+      } catch {
+        return null
+      }
+    }
+
+    /**
+     * 从卡片正文取"概要 / Summary"节首段（与 knowledge.js cardSummaryFromBody 同构）。
+     * @param {string} body - frontmatter 之后的正文。
+     * @returns {string} 概要文本（缺失返回空串）。
+     */
+    function summaryFromBody(body) {
+      const m = /## 概要 \/ Summary\n\n([\s\S]*?)(?=\n## )/.exec(body)
+      return m ? m[1].trim().split('\n')[0] : ''
+    }
+
+    /**
+     * 受限并发映射（避免对卡片目录一次性打出过多 Remote 调用）。
+     * @param {Array} items - 待处理项。
+     * @param {number} limit - 并发上限。
+     * @param {(item:*, index:number)=>Promise<*>} fn - 映射函数。
+     * @returns {Promise<Array>} 结果数组（保持原顺序）。
+     */
+    async function mapLimit(items, limit, fn) {
+      const out = new Array(items.length)
+      let cursor = 0
+      const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (cursor < items.length) {
+          const index = cursor++
+          out[index] = await fn(items[index], index)
+        }
+      })
+      await Promise.all(workers)
+      return out
+    }
+
+    /**
+     * 装载某 locale 的卡片清单（优先匹配 UI locale，否则取第一个子目录）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} locale - 面板 locale（zh/en）。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<{locale:string, cards:object[]}>} 卡片数组。
+     */
+    async function loadCards(wf, sessionId, locale, signal) {
+      const knowledgeDir = `${ASSET_DIR}/knowledge`
+      const subs = await listChildren(wf, sessionId, knowledgeDir, signal)
+      const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
+      const chosen = locales.includes(locale) ? locale : locales[0]
+      if (!chosen) return { locale: '', cards: [] }
+      const entries = await listChildren(wf, sessionId, `${knowledgeDir}/${chosen}`, signal)
+      const cardFiles = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
+      const cards = await mapLimit(cardFiles, CARD_CONCURRENCY, async (entry) => {
+        try {
+          const text = await readFileText(wf, sessionId, `${knowledgeDir}/${chosen}/${entry.name}`, signal)
+          const parsed = parseCardText(text)
+          if (!parsed || typeof parsed.meta.path !== 'string') return null
+          return {
+            file: `knowledge/${chosen}/${entry.name}`,
+            path: parsed.meta.path,
+            title: typeof parsed.meta.title === 'string' ? parsed.meta.title : entry.name,
+            tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags.slice(0, 4) : [],
+            generatedAt: typeof parsed.meta.generatedAt === 'string' ? parsed.meta.generatedAt : '',
+            summary: summaryFromBody(parsed.body),
+          }
+        } catch {
+          // 单张坏卡不阻断整批枚举
+          return null
+        }
+      })
+      return { locale: chosen, cards: cards.filter(Boolean) }
+    }
+
+    /**
+     * 统计某 locale 的 Wiki 文档数量（用于头部统计，正文留给切片 3）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} locale - 面板 locale。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<number>} 文档 md 文件数。
+     */
+    async function countWikiDocs(wf, sessionId, locale, signal) {
+      const wikiDir = `${ASSET_DIR}/wiki`
+      let subs
+      try {
+        subs = await listChildren(wf, sessionId, wikiDir, signal)
+      } catch {
+        return 0
+      }
+      const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
+      const chosen = locales.includes(locale) ? locale : locales[0]
+      if (!chosen) return 0
+      try {
+        const entries = await listChildren(wf, sessionId, `${wikiDir}/${chosen}`, signal)
+        return entries.filter(e => e.type === 'file' && e.name.endsWith('.md')).length
+      } catch {
+        return 0
+      }
+    }
+
+    /* ── 页面 ── */
+
+    /**
+     * Repo Wiki 主页面（切片 1：单工作区面板）。
      * props 由 main slot 的 inject face 提供：t（文案）、workspaces
-     * （{items, subscribe}，订阅工作区列表）、startSession、notice。
+     * （{items, subscribe}）、startSession、files（remote.workspaceFiles）、notice。
      * @param {object} props - 页面注入。
      * @returns {object} 页面元素。
      */
     function RepoWikiPage(props) {
-      const { t, workspaces, startSession, notice } = props
+      const { t, workspaces, startSession, files, notice } = props
       const [items, setItems] = useState(() => workspaces.list.getSnapshot().items)
       const [selected, setSelected] = useState('')
+      const [status, setStatus] = useState('idle')
+      const [errorCode, setErrorCode] = useState('')
+      const [index, setIndex] = useState(null)
+      const [cards, setCards] = useState([])
+      const [docs, setDocs] = useState(0)
+      const [filter, setFilter] = useState('all')
+      const [query, setQuery] = useState('')
+      const [view, setView] = useState('grid')
+      const [detail, setDetail] = useState(null)
       const [message, setMessage] = useState('')
+      const latestRequest = useRef(0)
 
       // 订阅工作区列表变更（增删/重命名时下拉同步）
       useEffect(() => workspaces.list.subscribe(() => {
@@ -111,6 +353,99 @@ window.__ModuleLoader__.load({
 
       /** 当前选中的 workspaceId（列表变化时清掉失效选择）。 */
       const current = items.some(w => w.workspaceId === selected) ? selected : ''
+
+      /** 带插值兜底的文案函数（替换 {key} 占位）。 */
+      const tt = useCallback((key, params) => {
+        const text = t(key)
+        if (!params) return text
+        return text.replace(/\{(\w+)\}/g, (_, k) => (params[k] ?? ''))
+      }, [t])
+
+      /**
+       * 装载所选工作区的知识库数据（index + 卡片 + 文档计数）。
+       * @param {AbortSignal} signal - 取消信号。
+       */
+      const load = useCallback(async (signal) => {
+        const workspace = items.find(w => w.workspaceId === selected)
+        const sessionId = workspace?.sessionIds?.[0]
+        if (!sessionId) {
+          setStatus('no-session')
+          setIndex(null)
+          setCards([])
+          setDocs(0)
+          return
+        }
+        const requestId = ++latestRequest.current
+        setStatus('loading')
+        setErrorCode('')
+        try {
+          const wf = files
+          if (!wf || typeof wf.read !== 'function' || typeof wf.list !== 'function') {
+            throw new Error('workspace-file/unavailable')
+          }
+          let parsedIndex = null
+          try {
+            parsedIndex = await readJson(wf, sessionId, `${ASSET_DIR}/index.json`, signal)
+          } catch (err) {
+            // 索引缺失按"尚未生成"呈现，不当作失败
+            const code = remoteErrorCode(err)
+            if (code !== 'workspace-file/not-found') throw err
+          }
+          if (signal.aborted || requestId !== latestRequest.current) return
+          if (!parsedIndex || !Array.isArray(parsedIndex.files)) {
+            setStatus('no-asset')
+            setIndex(null)
+            setCards([])
+            setDocs(0)
+            return
+          }
+          const { cards: loaded } = await loadCards(wf, sessionId, localeName(t), signal)
+          const docCount = await countWikiDocs(wf, sessionId, localeName(t), signal)
+          if (signal.aborted || requestId !== latestRequest.current) return
+          setIndex(parsedIndex)
+          setCards(loaded)
+          setDocs(docCount)
+          setStatus('ready')
+        } catch (err) {
+          if (signal.aborted || requestId !== latestRequest.current) return
+          setErrorCode(remoteErrorCode(err))
+          setStatus('error')
+        }
+      }, [files, items, selected, t])
+
+      // 选中工作区变化时装载（可取消）
+      useEffect(() => {
+        if (!current) {
+          setStatus('idle')
+          setIndex(null)
+          setCards([])
+          setDocs(0)
+          return
+        }
+        const ac = new AbortController()
+        load(ac.signal)
+        return () => ac.abort()
+      }, [load, current])
+
+      // 回到页面时刷新一次（会话里生成完成后切回可见结果）
+      useEffect(() => {
+        const onVisibility = () => {
+          if (!document.hidden && current) {
+            const ac = new AbortController()
+            load(ac.signal)
+          }
+        }
+        document.addEventListener('visibilitychange', onVisibility)
+        return () => document.removeEventListener('visibilitychange', onVisibility)
+      }, [load, current])
+
+      // Escape 关闭详情
+      useEffect(() => {
+        if (!detail) return
+        const onKey = (e) => { if (e.key === 'Escape') setDetail(null) }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [detail])
 
       /**
        * 在所选工作区开新会话发起生成任务。
@@ -131,6 +466,33 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /* 派生视图数据 */
+      const cardByPath = useMemo(() => new Map(cards.map(c => [c.path, c])), [cards])
+      const rows = useMemo(() => (index?.files ?? []).map((f) => ({
+        path: f.path,
+        lang: f.lang,
+        symbols: Array.isArray(f.symbols) ? f.symbols.length : 0,
+        card: cardByPath.get(f.path) || null,
+      })), [index, cardByPath])
+      const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase()
+        return rows.filter((r) => {
+          if (filter === 'generated' && !r.card) return false
+          if (filter === 'pending' && r.card) return false
+          if (!q) return true
+          const hay = [r.path, r.card?.title, r.card?.summary, ...(r.card?.tags ?? [])]
+            .join('\u0001').toLowerCase()
+          return hay.includes(q)
+        })
+      }, [rows, filter, query])
+      const pendingCount = useMemo(() => rows.filter(r => !r.card).length, [rows])
+      const latestUpdate = useMemo(() => cards
+        .map(c => c.generatedAt)
+        .filter(Boolean)
+        .sort()
+        .pop() || '', [cards])
+
+      /* 样式（主题令牌 + 字面量回退） */
       const buttonStyle = {
         padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
         border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
@@ -150,17 +512,33 @@ window.__ModuleLoader__.load({
         background: 'var(--dsw-alias-color-surface, #ffffff)',
         color: 'var(--dsw-alias-color-text, #111827)',
       }
+      const muted = { color: 'var(--dsw-alias-color-muted, #6b7280)' }
+      const cardChip = {
+        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        borderRadius: 10, padding: 14, cursor: 'pointer',
+        background: 'var(--dsw-alias-color-surface, #ffffff)',
+      }
+
+      /** 筛选切换按钮（带计数与 aria-pressed）。 */
+      const filterButton = (value, label, count) => h('button', {
+        type: 'button',
+        'aria-pressed': filter === value,
+        onClick: () => setFilter(value),
+        style: filter === value ? primaryStyle : buttonStyle,
+      }, `${label}${count > 0 ? ` ${count}` : ''}`)
 
       return h('div', {
-        style: { padding: '24px 28px', maxWidth: 720, margin: '0 auto' },
+        style: { padding: '24px 28px', maxWidth: 960, margin: '0 auto' },
         'aria-label': t('title'),
       },
         h('h1', { style: { margin: '0 0 4px', fontSize: 22 } }, t('title')),
-        h('p', { style: { margin: '0 0 20px', color: 'var(--dsw-alias-color-muted, #6b7280)' } }, t('subtitle')),
-        h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 } },
+        h('p', { style: { margin: '0 0 20px', ...muted } }, t('subtitle')),
+
+        // 头部行：工作区下拉 + 刷新
+        h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 } },
           h('label', { htmlFor: 'repowiki-workspace', style: { fontSize: 14 } }, t('workspace')),
           items.length === 0
-            ? h('span', { style: { ...inputStyle, display: 'inline-flex', alignItems: 'center', color: 'var(--dsw-alias-color-muted, #6b7280)' } }, t('empty'))
+            ? h('span', { style: { ...inputStyle, display: 'inline-flex', alignItems: 'center', ...muted } }, t('empty'))
             : h('select', {
                 id: 'repowiki-workspace', value: current, inputMode: 'none',
                 style: inputStyle,
@@ -171,24 +549,273 @@ window.__ModuleLoader__.load({
                 ...items.map(w => h('option', { key: w.workspaceId, value: w.workspaceId },
                   `${w.title || w.path} — ${w.path}`)),
               ),
+          h('button', {
+            type: 'button', style: buttonStyle, onClick: () => {
+              if (!current) return
+              const ac = new AbortController()
+              load(ac.signal)
+            },
+            'aria-label': t('reload'),
+          }, t('reload')),
         ),
-        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 } },
+
+        // 生成动作
+        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 } },
           h('button', { type: 'button', style: primaryStyle, onClick: () => run('all') }, t('actionAll')),
           h('button', { type: 'button', style: buttonStyle, onClick: () => run('index') }, t('actionIndex')),
           h('button', { type: 'button', style: buttonStyle, onClick: () => run('extract') }, t('actionExtract')),
           h('button', { type: 'button', style: buttonStyle, onClick: () => run('generate') }, t('actionGenerate')),
         ),
-        h('p', { style: { margin: '0 0 8px', fontSize: 13, color: 'var(--dsw-alias-color-muted, #6b7280)' } }, t('note')),
+        h('p', { style: { margin: '0 0 16px', fontSize: 13, ...muted } }, t('note')),
+
+        // 统计行（仅在数据就绪时渲染）
+        status === 'ready' && index && h('div', {
+          style: { display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 12, fontSize: 13, ...muted },
+        },
+          h('span', null, tt('statFiles', { n: index.stats?.files ?? rows.length })),
+          h('span', null, tt('statSymbols', { n: index.stats?.symbols ?? rows.reduce((a, r) => a + r.symbols, 0) })),
+          h('span', null, tt('statCards', { n: cards.length })),
+          h('span', null, tt('statDocs', { n: docs })),
+          h('span', null, latestUpdate
+            ? tt('updated', { when: latestUpdate.slice(0, 10) })
+            : t('never')),
+        ),
+
+        // 状态分支
+        status === 'no-session' && h('p', { role: 'status', style: { ...muted } }, t('noSession')),
+        status === 'no-asset' && h('p', { role: 'status', style: { ...muted } }, t('noAsset')),
+        status === 'loading' && h('p', { role: 'status', style: { ...muted } }, t('loading')),
+        status === 'error' && h('div', { role: 'alert' },
+          h('p', { style: { margin: '0 0 8px', color: 'var(--dsw-alias-color-danger, #dc2626)' } },
+            tt('loadFailed', { code: errorCode })),
+          h('button', {
+            type: 'button', style: buttonStyle,
+            onClick: () => {
+              if (!current) return
+              const ac = new AbortController()
+              load(ac.signal)
+            },
+          }, t('retry')),
+        ),
+
+        // 主区：筛选 + 搜索 + 视图切换 + 列表
+        status === 'ready' && h('div', null,
+          h('div', {
+            style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 },
+          },
+            filterButton('all', t('filterAll'), rows.length),
+            filterButton('generated', t('filterGenerated'), rows.length - pendingCount),
+            filterButton('pending', t('filterPending'), pendingCount),
+            h('input', {
+              type: 'search', style: { ...inputStyle, maxWidth: 280 },
+              placeholder: t('searchPlaceholder'),
+              value: query,
+              onChange: (e) => setQuery(e.target.value),
+              'aria-label': t('searchPlaceholder'),
+            }),
+            h('button', {
+              type: 'button', style: view === 'grid' ? primaryStyle : buttonStyle,
+              onClick: () => setView('grid'), 'aria-pressed': view === 'grid',
+              'aria-label': t('viewGrid'),
+            }, t('viewGrid')),
+            h('button', {
+              type: 'button', style: view === 'list' ? primaryStyle : buttonStyle,
+              onClick: () => setView('list'), 'aria-pressed': view === 'list',
+              'aria-label': t('viewList'),
+            }, t('viewList')),
+          ),
+          filtered.length === 0
+            ? h('p', { style: { ...muted } }, t('pendingHint'))
+            : (view === 'grid'
+                ? h('div', {
+                    style: {
+                      display: 'grid', gap: 12,
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                    },
+                  },
+                  ...filtered.map((r) => h(CardTile, {
+                    key: r.path, row: r, t, tt, onOpen: () => setDetail(r),
+                  })),
+                )
+                : h('div', null,
+                  ...filtered.map((r) => h(CardRow, {
+                    key: r.path, row: r, t, tt, onOpen: () => setDetail(r),
+                  })),
+                )),
+          // 内联详情列（切片 1 不开新页面；Escape 或按钮关闭）
+          detail && h(DetailPane, {
+            row: detail, t, tt, onClose: () => setDetail(null),
+          }),
+        ),
         message && h('p', {
           role: 'status',
-          style: { margin: 0, fontSize: 14, color: 'var(--dsw-alias-color-text, #111827)' },
+          style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-color-text, #111827)' },
         }, message),
         notice,
       )
     }
 
+    /** 状态点：已生成（主色）/未生成（灰）。 */
+    function statusDot(filled) {
+      return h('span', {
+        'aria-hidden': true,
+        style: {
+          display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+          marginRight: 6, flex: 'none',
+          background: filled
+            ? 'var(--dsw-alias-color-primary, #2563eb)'
+            : 'var(--dsw-alias-color-border, #d1d5db)',
+        },
+      })
+    }
+
+    /** 卡片瓦片（网格视图）。 */
+    function CardTile({ row, t, tt, onOpen }) {
+      const { card } = row
+      return h('button', {
+        type: 'button', onClick: onOpen,
+        style: { ...cardChipStyle(), textAlign: 'left' },
+        'aria-label': card ? card.title : `${row.path} (${t('pending')})`,
+      },
+        h('div', {
+          style: { display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6 },
+        },
+          statusDot(Boolean(card)),
+          h('span', {
+            style: { fontSize: 14, fontWeight: 600, flex: 1, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              color: 'var(--dsw-alias-color-text, #111827)' },
+          }, card ? card.title : row.path),
+        ),
+        h('div', {
+          style: { fontSize: 12, marginBottom: 8, overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            color: 'var(--dsw-alias-color-muted, #6b7280)' },
+        },
+          card ? card.summary || card.path : tt('pendingHint')),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
+          card && card.tags.length > 0
+            ? card.tags.map((tag) => h('span', { key: tag, style: tagStyle() }, tag))
+            : h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' } },
+                `${row.lang || ''} · ${tt('detailSymbols', { n: row.symbols })}`),
+        ),
+      )
+    }
+
+    /** 卡片行（列表视图）。 */
+    function CardRow({ row, t, tt, onOpen }) {
+      const { card } = row
+      return h('button', {
+        type: 'button', onClick: onOpen,
+        style: {
+          ...cardChipStyle(),
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+          marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+        },
+        'aria-label': card ? card.title : `${row.path} (${t('pending')})`,
+      },
+        statusDot(Boolean(card)),
+        h('span', {
+          style: { flex: 1, fontSize: 13, overflow: 'hidden',
+            textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            color: 'var(--dsw-alias-color-text, #111827)' },
+        }, card ? `${card.title} · ${row.path}` : row.path),
+        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)', flex: 'none' } },
+          tt('detailSymbols', { n: row.symbols })),
+        h('span', {
+          style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+        }, card ? card.generatedAt.slice(0, 10) : t('pending')),
+      )
+    }
+
+    /** 详情列（选中条目的元数据与摘要）。 */
+    function DetailPane({ row, t, tt, onClose }) {
+      const { card } = row
+      return h('div', {
+        role: 'region', 'aria-label': card ? card.title : row.path,
+        style: {
+          marginTop: 12, padding: 16, borderRadius: 10,
+          border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+          background: 'var(--dsw-alias-color-surface, #ffffff)',
+        },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 } },
+          h('div', { style: { flex: 1, minWidth: 0 } },
+            h('div', {
+              style: { fontSize: 15, fontWeight: 600,
+                color: 'var(--dsw-alias-color-text, #111827)' },
+            }, card ? card.title : row.path),
+            h('div', {
+              style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+            }, row.path),
+          ),
+          h('button', {
+            type: 'button', onClick: onClose, style: chipButtonStyle(),
+            'aria-label': t('detailClose'),
+          }, '×'),
+        ),
+        card
+          ? h('div', null,
+              h('div', {
+                style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+              },
+                ...card.tags.map((tag) => h('span', { key: tag, style: tagStyle() }, tag)),
+                h('span', {
+                  style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+                }, tt('detailGeneratedAt', { when: card.generatedAt.slice(0, 10) || '—' })),
+                h('span', {
+                  style: { fontSize: 12, color: 'var(--dsw-alias-color-muted, #6b7280)' },
+                }, tt('detailSymbols', { n: row.symbols })),
+              ),
+              h('div', {
+                style: { fontSize: 13, fontWeight: 600, marginBottom: 4,
+                  color: 'var(--dsw-alias-color-text, #111827)' },
+              }, t('detailSummary')),
+              h('p', {
+                style: { margin: 0, fontSize: 13, lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap', color: 'var(--dsw-alias-color-text, #111827)' },
+              }, card.summary || t('never')),
+            )
+          : h('p', { style: { fontSize: 13, ...mutedStyle() } }, t('pendingHint')),
+      )
+    }
+
+    /** 卡片瓦片/行共用外框样式。 */
+    function cardChipStyle() {
+      return {
+        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        borderRadius: 10,
+        background: 'var(--dsw-alias-color-surface, #ffffff)',
+        cursor: 'pointer',
+      }
+    }
+
+    /** 标签徽章样式。 */
+    function tagStyle() {
+      return {
+        fontSize: 11, padding: '2px 8px', borderRadius: 999, flex: 'none',
+        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        color: 'var(--dsw-alias-color-muted, #6b7280)',
+      }
+    }
+
+    /** 小号按钮样式（详情关闭等）。 */
+    function chipButtonStyle() {
+      return {
+        width: 28, height: 28, borderRadius: 8, flex: 'none', cursor: 'pointer',
+        border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+        background: 'var(--dsw-alias-color-surface, #ffffff)',
+        color: 'var(--dsw-alias-color-text, #111827)', fontSize: 16, lineHeight: 1,
+      }
+    }
+
+    /** 次要文字样式（工具函数处复用）。 */
+    function mutedStyle() {
+      return { color: 'var(--dsw-alias-color-muted, #6b7280)' }
+    }
+
     return {
-      inject: ['slots', 'locale', 'uiWorkspace', 'workspaces'],
+      inject: ['slots', 'locale', 'uiWorkspace', 'workspaces', 'remote', 'remote.workspaceFiles'],
       apply(ctx) {
         ctx.effect(() => ctx.locale.register(NS, DICTS), 'repowiki: dictionaries')
         const t = ctx.locale.bind(NS)
@@ -208,6 +835,7 @@ window.__ModuleLoader__.load({
               t,
               workspaces: ctx.workspaces,
               startSession: (workspaceId, opts) => ctx.uiWorkspace.startSession(workspaceId, opts),
+              files: ctx.remote?.workspaceFiles,
             }),
           }, RepoWikiPage))
         })
@@ -215,6 +843,25 @@ window.__ModuleLoader__.load({
     }
   },
 })
+
+/**
+ * 从 RemoteError（或普通错误）提取错误码。
+ * @param {Error} err - 捕获的错误。
+ * @returns {string} 错误码（缺失返回 unknown）。
+ */
+function remoteErrorCode(err) {
+  return err?.code || err?.details?.code || (err?.message?.startsWith('workspace-file/') ? err.message : 'unknown')
+}
+
+/**
+ * 从绑定的文案函数推断 UI locale（复用 t('never') 的语言兜底不可行时，
+ * 回退 zh——卡片资产以中英两种子目录存在时优先匹配）。
+ * @param {(key:string)=>string} t - 绑定的文案函数。
+ * @returns {'zh'|'en'} locale 名。
+ */
+function localeName(t) {
+  return t('reload') === '刷新' ? 'zh' : 'en'
+}
 
 /**
  * 构造发给新会话的执行 prompt。
