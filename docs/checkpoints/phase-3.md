@@ -47,8 +47,18 @@
 - 未实现：`.dsh-repowiki/` 导入导出、人工修订卡片标记（manuallyEdited
   字段已存在但流程未落地）、commit/diff 监听。
 
+## 补充：人工修订保护与孤儿报告（v0.5.1）
+
+- `cardIsProtected`：frontmatter `manuallyEdited=true` 的卡片即使源文
+  件变化也不被 extract 自动刷新（人工修订优先于自动再生）；force=true
+  走全新提取路径，保护不生效。输出新增 `skippedManual` 计数。
+- `countOrphaned`：卡片存在但源文件已不在索引（删除/重命名残留）按次
+  计数为 `orphaned` 输出——只报告不删除，删除作为破坏性操作留给后续
+  的显式清理流程。
+- 测试：两函数的分支单测（63/63 全绿）。
+
 ## 下一步
 
 - 面板侧"有可用更新"提示（切片 3）可直接消费 digest 差异，等用户确认
   v0.4.0 GUI 渲染后排入。
-- Phase 3 剩余：导入导出、人工修订流程；Phase 4 会话记忆提炼另议。
+- Phase 3 剩余：导入导出；孤儿卡片显式清理；Phase 4 会话记忆提炼另议。

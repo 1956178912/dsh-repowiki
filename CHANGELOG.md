@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.5.1] - 2026-11-26
+
+### Added
+
+- Manual-edit protection: a knowledge card whose frontmatter carries
+  `manuallyEdited: true` is never auto-refreshed by `repowiki-extract` when
+  its source file changes (`force: true` still overrides); the run reports
+  the protected count as `skippedManual`.
+- Orphaned card reporting: `repowiki-extract` counts cards whose source file
+  is no longer in the index (deleted or renamed sources) and reports them
+  as `orphaned` — reported only, never deleted (a destructive cleanup
+  remains a deliberate, later step).
+- Unit tests for `cardIsProtected` and `countOrphaned` (63/63 green).
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

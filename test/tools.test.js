@@ -10,7 +10,7 @@ import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiCardsTool } from '../src/tool-cards.js'
-import { cardIsFresh } from '../src/tool-extract.js'
+import { cardIsFresh, cardIsProtected, countOrphaned } from '../src/tool-extract.js'
 
 /**
  * 构造一个最小插件 ctx（fake fs）。
@@ -133,4 +133,23 @@ test('cardIsFresh：digest 匹配判定卡片新鲜度', () => {
   assert.equal(cardIsFresh(undefined, { meta: { sourceDigest: 'abc' } }), false)
   assert.equal(cardIsFresh({ digest: 'abc' }, undefined), false)
   assert.equal(cardIsFresh({ digest: '' }, { meta: { sourceDigest: '' } }), false, '空指纹一律不判鲜')
+})
+
+test('cardIsProtected：人工修订保护判定', () => {
+  assert.equal(cardIsProtected({ meta: { manuallyEdited: true } }), true)
+  assert.equal(cardIsProtected({ meta: { manuallyEdited: false } }), false)
+  assert.equal(cardIsProtected({ meta: {} }), false, '字段缺失视为未保护')
+  assert.equal(cardIsProtected(undefined), false)
+})
+
+test('countOrphaned：源文件已消失的卡片计数（不删除）', () => {
+  const existing = new Map([
+    ['a.ts', { meta: {}, path: 'knowledge/zh/a.md' }],
+    ['b.ts', { meta: {}, path: 'knowledge/zh/b.md' }],
+    ['c.ts', { meta: {}, path: 'knowledge/zh/c.md' }],
+  ])
+  assert.equal(countOrphaned(existing, [{ path: 'a.ts' }, { path: 'b.ts' }]), 1)
+  assert.equal(countOrphaned(existing, [{ path: 'a.ts' }, { path: 'b.ts' }, { path: 'c.ts' }]), 0)
+  assert.equal(countOrphaned(existing, []), 3)
+  assert.equal(countOrphaned(new Map(), []), 0)
 })

@@ -26,9 +26,11 @@ const DESCRIPTION = [
   'one Markdown card per file (purpose, key symbols, pitfalls, related modules). Each file is',
   'extracted by a fresh subagent that inherits this session model; requires an existing index',
   '(run repowiki-index first). Existing cards are skipped when their recorded source digest',
-  'still matches the file; a changed file refreshes its card. force=true re-extracts',
-  'regardless. Deterministic filtering (symbol-count threshold) skips trivial files;',
-  'extraction itself is model work.',
+  'still matches the file; a changed file refreshes its card. Manually edited cards',
+  '(frontmatter manuallyEdited=true) are never auto-refreshed without force=true.',
+  'force=true re-extracts regardless. Cards whose source file no longer exists are',
+  'reported as orphaned. Deterministic filtering (symbol-count threshold) skips trivial',
+  'files; extraction itself is model work.',
 ].join(' ')
 
 /**
@@ -78,19 +80,22 @@ export function repowikiExtractTool(ctx) {
           locale: { type: 'string' },
           extracted: { type: 'integer' },
           skippedExisting: { type: 'integer' },
+          skippedManual: { type: 'integer' },
           skippedSimple: { type: 'integer' },
+          orphaned: { type: 'integer' },
           failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] } },
           capped: { type: 'boolean' },
           planSource: { type: 'string' },
           durationMs: { type: 'integer' },
         },
-        required: ['root', 'cardsDir', 'locale', 'extracted', 'skippedExisting', 'skippedSimple', 'failed', 'capped', 'durationMs'],
+        required: ['root', 'cardsDir', 'locale', 'extracted', 'skippedExisting', 'skippedManual', 'skippedSimple', 'orphaned', 'failed', 'capped', 'durationMs'],
       },
       render: (_args, value) => [{
         type: 'text',
         text: [
           `Extracted ${value.extracted} card(s) to ${value.cardsDir} (${value.locale}) in ${value.durationMs}ms.`,
-          `Skipped: ${value.skippedExisting} existing, ${value.skippedSimple} trivial.`,
+          `Skipped: ${value.skippedExisting} unchanged, ${value.skippedManual} manually edited, ${value.skippedSimple} trivial.`,
+          value.orphaned > 0 ? `Orphaned cards (source file gone): ${value.orphaned}.` : '',
           value.failed.length > 0 ? `Failed: ${value.failed.map(f => `${f.path} (${f.reason})`).join('; ')}` : 'No failures.',
           value.capped ? 'Capped: more files remain for later runs.' : '',
         ].filter(Boolean).join('\n'),
@@ -109,8 +114,8 @@ export function repowikiExtractTool(ctx) {
       const index = await readIndex(fs, root)
       if (!index) {
         return {
-          root, cardsDir: '', locale, extracted: 0, skippedExisting: 0, skippedSimple: 0,
-          failed: [], capped: false, durationMs: 0,
+          root, cardsDir: '', locale, extracted: 0, skippedExisting: 0, skippedManual: 0, skippedSimple: 0,
+          orphaned: 0, failed: [], capped: false, durationMs: 0,
           // 无索引：render 提示先建索引（覆写 render 文本）
           hint: 'No usable index found. Run repowiki-index first.',
         }
@@ -127,11 +132,19 @@ export function repowikiExtractTool(ctx) {
       const failed = []
       let extracted = 0
       let skippedExisting = 0
+      let skippedManual = 0
       let i = 0
       for (const rel of candidates) {
+        const file = index.files.find(f => f.path === rel)
         const prior = existing.get(rel)
-        if (prior && cardIsFresh(index.files.find(f => f.path === rel), prior)) {
+        if (prior && cardIsFresh(file, prior)) {
           skippedExisting++
+          continue
+        }
+        // 人工修订保护：manuallyEdited=true 的卡片不被自动刷新覆盖（Phase 3
+        // §人工修订；force=true 时 existing 为空 Map，保护不生效）
+        if (prior && cardIsProtected(prior)) {
+          skippedManual++
           continue
         }
         // 空 slug（纯非 ASCII 文件名）会互相覆盖卡片文件，直接记失败不写盘
@@ -141,7 +154,6 @@ export function repowikiExtractTool(ctx) {
         }
         i++
         try {
-          const file = index.files.find(f => f.path === rel)
           let source = ''
           try {
             const target = await fs.resolve(rel, { cwd: root })
@@ -218,4 +230,33 @@ function cwdOf(ctx) {
  */
 export function cardIsFresh(fileMeta, prior) {
   return Boolean(fileMeta?.digest && prior?.meta?.sourceDigest === fileMeta.digest)
+}
+
+/**
+ * 判断卡片是否受人工修订保护（frontmatter manuallyEdited=true）。
+ * 受保护的卡片即使源文件已变化也不会被 extract 自动刷新覆盖——人工修订
+ * 的内容优先于自动再生（Phase 3 §人工修订）。force=true 走全新提取路径，
+ * 保护不生效。
+ * @param {{meta?:{manuallyEdited?:boolean}}|undefined} prior - 已有卡片。
+ * @returns {boolean} 受保护时为 true。
+ */
+export function cardIsProtected(prior) {
+  return prior?.meta?.manuallyEdited === true
+}
+
+/**
+ * 统计孤儿卡片：卡片存在但其源文件已不在索引文件列表中（源文件被删除
+ * 或重命名后残留）。只统计不删除——删除是破坏性操作，由人工或后续专门
+ * 的清理流程处理。
+ * @param {Map<string, {meta:object, path:string}>} existing - 已有卡片映射。
+ * @param {{path:string}[]} files - index.json 的文件条目。
+ * @returns {number} 孤儿卡片数。
+ */
+export function countOrphaned(existing, files) {
+  const paths = new Set(files.map(f => f.path))
+  let orphaned = 0
+  for (const sourcePath of existing.keys()) {
+    if (!paths.has(sourcePath)) orphaned++
+  }
+  return orphaned
 }

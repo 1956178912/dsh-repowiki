@@ -14,13 +14,13 @@
 |---|---|
 | `repowiki-index` 工具 | 确定性（零 LLM）重建索引：符号表、import 依赖边、技术栈识别，写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目 |
 | `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径过滤，返回文件+符号与项目技术栈 |
-| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；源文件摘要变化时卡片自动刷新 |
+| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；源文件摘要变化时卡片自动刷新，但标记为 `manuallyEdited` 的卡片受保护；源文件已消失的卡片报告为孤儿 |
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈，凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成"筛选（未生成 = 在 `index.json` 中但没有卡片）、搜索、网格与列表视图、卡片详情列——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
 路线图：
-- Phase 3（v0.5.0 已完成一部分）：内容摘要驱动的索引增量重建与卡片自动刷新已落地；目录导入导出与人工修订卡片尚待实现
+- Phase 3（v0.5.1 已完成一部分）：内容摘要驱动的索引增量重建、卡片自动刷新、人工修订保护与孤儿卡片报告已落地；目录导入导出尚待实现
 - Phase 4：会话记忆提炼、可选语义索引
 
 ## 架构要点
