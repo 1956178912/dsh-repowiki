@@ -1,9 +1,9 @@
-# ADR-0003: LLM 调用走 spawn 子代理，模型路由只做"继承会话默认"一层
+# ADR-0003：LLM 调用走 spawn 子代理，模型路由只做"继承会话默认"一层
 
-- Date: 2026-11-26
-- Status: Accepted (Phase 2)
+- 日期：2026-11-26
+- 状态：已采纳（Phase 2）
 
-## Context
+## 背景
 
 Phase 2 的卡片提取与 Wiki 生成本质是 LLM 子任务。评审修订版 §P1 记录：
 `GenerateOptions.provider/model` 必填、`agent/request` hook 已弃用——工具
@@ -17,7 +17,7 @@ Phase 2 的卡片提取与 Wiki 生成本质是 LLM 子任务。评审修订版 
 而本 bundle 按 ADR-0002 选择了零外部 import（不 import schemastery 声明
 Config schema），且用户硬约束"不依赖第三方插件"。
 
-## Decision
+## 决策
 
 1. **LLM 子任务一律派发 spawn 子代理**：`provider: 'spawn'`，
    `delivery: 'caller'`（工具消费结果），取消走 `exec.signal`，结构化输出
@@ -30,14 +30,14 @@ Config schema），且用户硬约束"不依赖第三方插件"。
 4. **项目级配置走 `.dsh-repowiki/repowiki-plan.json`**（JSON、零依赖、随
    Git），不引入 YAML 解析依赖。
 
-## Rationale
+## 理由
 
 1. 子代理路径顺带获得重试、取消、`outputSchema` 校验（评审 §P1 附带收益）。
 2. 继承会话默认对绝大多数场景够用：用户在哪个会话触发就用哪个模型；
    ADR-0002 的零 import 原则不因配置便利性妥协。
 3. 卡片 JSON frontmatter（而非 YAML）使解析零依赖、Git diff 清晰。
 
-## Consequences（诚实披露）
+## 后果（诚实披露）
 
 - 用户**无法**在 Settings/patch 层为提取/生成指定其他模型（模型覆盖能力
   后置）。需要时两条路：①工具参数（暂时不暴露模型字段，因为 ② 更稳妥）；
@@ -48,7 +48,7 @@ Config schema），且用户硬约束"不依赖第三方插件"。
 - extract 每文件一次子代理激活：500 文件仓库首轮成本由 `maxCardsPerRun`
   默认 40 与 `paths`/`includeOnly` 参数约束（修订版 §11.4 成本模型）。
 
-## Rollback
+## 回滚
 
 把 runSubagent 改为带 `agentOptions` 的调用（值来自新增的 Config 字段），
 其余链路不变。

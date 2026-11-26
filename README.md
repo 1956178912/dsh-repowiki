@@ -83,8 +83,8 @@ src/tool-cards.js      repowiki-cards tool
 src/tool-extract.js    repowiki-extract tool
 src/tool-generate.js   repowiki-generate tool
 test/                  Unit and integration tests (52 cases)
-docs/adr/              Architecture decision records (English default + .zh)
-docs/checkpoints/      Phase checkpoints (English default + .zh)
+docs/adr/              Architecture decision records (Chinese)
+docs/checkpoints/      Phase checkpoints (Chinese)
 ```
 
 ## License

@@ -82,8 +82,8 @@ src/tool-cards.js      repowiki-cards 工具
 src/tool-extract.js    repowiki-extract 工具
 src/tool-generate.js   repowiki-generate 工具
 test/                  单元与集成测试（52 用例）
-docs/adr/              架构决策记录（英文默认 + .zh 中文）
-docs/checkpoints/      阶段检查点（英文默认 + .zh 中文）
+docs/adr/              架构决策记录（中文）
+docs/checkpoints/      阶段检查点（中文）
 ```
 
 ## 许可
