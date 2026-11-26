@@ -1,5 +1,5 @@
 /**
- * dsh-repowiki 客户端模块（切片 1：Repo Wiki 面板）。
+ * dsh-repowiki 客户端模块（切片 1 + 切片 3：Repo Wiki 面板）。
  *
  * 形态遵循官方 UI 插件约定（dsh-doc ui-plugin.md + practices.md）：
  * - window.__ModuleLoader__.load 注册懒工厂，id 等于包名；
@@ -21,6 +21,10 @@
  * - read 按页返回（默认上限 5000 行/页），调用方负责翻页拼接至 eof。
  * - 错误为 RemoteError（如 workspace-file/not-found），面板区分"尚未生成"
  *   与"读取失败"，不向前端抛堆栈。
+ *
+ * 更新检测（ui-plan 切片 3）：卡片 frontmatter 的 sourceDigest 与索引
+ * digest 不一致 → staleSet，驱动统计行的"待更新"提示与筛选页签。
+ * Wiki 页签（切片 3）：列出 wiki/<locale>/ 页面并以原文呈现。
  *
  * 生成动作用 v0.3.0 已验证的 startSession(workspaceId, ...)（见
  * docs/checkpoints/phase-ui2.md 对 ui-plan startSession(undefined) 提案的
@@ -82,6 +86,12 @@ const DICTS = {
     never: '尚未生成卡片',
     pending: '未生成',
     pendingHint: '该文件尚未生成知识卡片。',
+    staleFilter: '待更新',
+    staleHint: '{n} 张卡片待更新（源文件已变化）',
+    viewCards: '卡片',
+    viewWiki: 'Wiki',
+    wikiBack: '返回 Wiki 列表',
+    wikiEmpty: '尚未生成 Wiki 页面。',
     detailClose: '关闭详情',
     detailSymbols: '符号数 {n}',
     detailGeneratedAt: '生成于 {when}',
@@ -123,6 +133,12 @@ const DICTS = {
     never: 'No cards generated yet',
     pending: 'Pending',
     pendingHint: 'No knowledge card generated for this file yet.',
+    staleFilter: 'Stale',
+    staleHint: '{n} card(s) need an update (source changed)',
+    viewCards: 'Cards',
+    viewWiki: 'Wiki',
+    wikiBack: 'Back to the wiki list',
+    wikiEmpty: 'No wiki pages generated yet.',
     detailClose: 'Close details',
     detailSymbols: 'Symbols {n}',
     detailGeneratedAt: 'Generated {when}',
@@ -284,6 +300,7 @@ window.__ModuleLoader__.load({
             title: typeof parsed.meta.title === 'string' ? parsed.meta.title : entry.name,
             tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags.slice(0, 4) : [],
             generatedAt: typeof parsed.meta.generatedAt === 'string' ? parsed.meta.generatedAt : '',
+            sourceDigest: typeof parsed.meta.sourceDigest === 'string' ? parsed.meta.sourceDigest : '',
             summary: summaryFromBody(parsed.body),
           }
         } catch {
@@ -295,30 +312,53 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 统计某 locale 的 Wiki 文档数量（用于头部统计，正文留给切片 3）。
+     * 装载某 locale 的 Wiki 页面清单（切片 3：面板内浏览；正文一并读取，
+     * 面板直接以原文呈现，Markdown 渲染留待后续）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id。
      * @param {string} locale - 面板 locale。
      * @param {AbortSignal} signal - 取消信号。
-     * @returns {Promise<number>} 文档 md 文件数。
+     * @returns {Promise<object[]>} 页面对象（file/title/generatedAt/text）。
      */
-    async function countWikiDocs(wf, sessionId, locale, signal) {
+    async function loadWikiEntries(wf, sessionId, locale, signal) {
       const wikiDir = `${ASSET_DIR}/wiki`
       let subs
       try {
         subs = await listChildren(wf, sessionId, wikiDir, signal)
       } catch {
-        return 0
+        return []
       }
       const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
       const chosen = locales.includes(locale) ? locale : locales[0]
-      if (!chosen) return 0
+      if (!chosen) return []
+      let entries
       try {
-        const entries = await listChildren(wf, sessionId, `${wikiDir}/${chosen}`, signal)
-        return entries.filter(e => e.type === 'file' && e.name.endsWith('.md')).length
+        entries = await listChildren(wf, sessionId, `${wikiDir}/${chosen}`, signal)
       } catch {
-        return 0
+        return []
       }
+      const pages = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
+      const list = await mapLimit(pages, CARD_CONCURRENCY, async (entry) => {
+        try {
+          const text = await readFileText(wf, sessionId, `${wikiDir}/${chosen}/${entry.name}`, signal)
+          let title = entry.name.replace(/\.md$/, '')
+          let generatedAt = ''
+          const m = /^---\n([\s\S]*?)\n---\n/.exec(text)
+          if (m) {
+            try {
+              const meta = JSON.parse(m[1])
+              if (typeof meta.title === 'string') title = meta.title
+              if (typeof meta.generatedAt === 'string') generatedAt = meta.generatedAt
+            } catch {
+              // 坏 frontmatter 时退化为文件名作标题
+            }
+          }
+          return { file: `wiki/${chosen}/${entry.name}`, title, generatedAt, text }
+        } catch {
+          return null
+        }
+      })
+      return list.filter(Boolean)
     }
 
     /* ── 页面 ── */
@@ -339,6 +379,9 @@ window.__ModuleLoader__.load({
       const [index, setIndex] = useState(null)
       const [cards, setCards] = useState([])
       const [docs, setDocs] = useState(0)
+      const [wikis, setWikis] = useState([])
+      const [tab, setTab] = useState('cards')
+      const [wikiSelected, setWikiSelected] = useState(null)
       const [filter, setFilter] = useState('all')
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
@@ -373,6 +416,7 @@ window.__ModuleLoader__.load({
           setIndex(null)
           setCards([])
           setDocs(0)
+          setWikis([])
           return
         }
         const requestId = ++latestRequest.current
@@ -397,14 +441,16 @@ window.__ModuleLoader__.load({
             setIndex(null)
             setCards([])
             setDocs(0)
+            setWikis([])
             return
           }
           const { cards: loaded } = await loadCards(wf, sessionId, localeName(t), signal)
-          const docCount = await countWikiDocs(wf, sessionId, localeName(t), signal)
+          const wikiPages = await loadWikiEntries(wf, sessionId, localeName(t), signal)
           if (signal.aborted || requestId !== latestRequest.current) return
           setIndex(parsedIndex)
           setCards(loaded)
-          setDocs(docCount)
+          setDocs(wikiPages.length)
+          setWikis(wikiPages)
           setStatus('ready')
         } catch (err) {
           if (signal.aborted || requestId !== latestRequest.current) return
@@ -420,6 +466,7 @@ window.__ModuleLoader__.load({
           setIndex(null)
           setCards([])
           setDocs(0)
+          setWikis([])
           return
         }
         const ac = new AbortController()
@@ -474,11 +521,22 @@ window.__ModuleLoader__.load({
         symbols: Array.isArray(f.symbols) ? f.symbols.length : 0,
         card: cardByPath.get(f.path) || null,
       })), [index, cardByPath])
+      /** 待更新卡片：卡片记录的 sourceDigest 与索引 digest 不一致（切片 3 更新检测） */
+      const staleSet = useMemo(() => {
+        const digestByPath = new Map((index?.files ?? []).map(f => [f.path, f.digest]))
+        const stale = new Set()
+        for (const card of cards) {
+          const digest = digestByPath.get(card.path)
+          if (digest !== undefined && digest !== card.sourceDigest) stale.add(card.path)
+        }
+        return stale
+      }, [index, cards])
       const filtered = useMemo(() => {
         const q = query.trim().toLowerCase()
         return rows.filter((r) => {
           if (filter === 'generated' && !r.card) return false
           if (filter === 'pending' && r.card) return false
+          if (filter === 'stale' && !(r.card && staleSet.has(r.path))) return false
           if (!q) return true
           const hay = [r.path, r.card?.title, r.card?.summary, ...(r.card?.tags ?? [])]
             .join('\u0001').toLowerCase()
@@ -579,6 +637,10 @@ window.__ModuleLoader__.load({
           h('span', null, latestUpdate
             ? tt('updated', { when: latestUpdate.slice(0, 10) })
             : t('never')),
+          staleSet.size > 0 && h('span', {
+            style: { color: 'var(--dsw-alias-color-danger, #dc2626)' },
+            role: 'status',
+          }, tt('staleHint', { n: staleSet.size })),
         ),
 
         // 状态分支
@@ -598,14 +660,28 @@ window.__ModuleLoader__.load({
           }, t('retry')),
         ),
 
-        // 主区：筛选 + 搜索 + 视图切换 + 列表
+        // 主区：卡片/Wiki 双页签 + 筛选 + 搜索 + 视图切换 + 列表
         status === 'ready' && h('div', null,
-          h('div', {
-            style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 },
-          },
-            filterButton('all', t('filterAll'), rows.length),
-            filterButton('generated', t('filterGenerated'), rows.length - pendingCount),
-            filterButton('pending', t('filterPending'), pendingCount),
+          h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
+            h('button', {
+              type: 'button', 'aria-pressed': tab === 'cards',
+              style: tab === 'cards' ? primaryStyle : buttonStyle,
+              onClick: () => setTab('cards'),
+            }, t('viewCards')),
+            h('button', {
+              type: 'button', 'aria-pressed': tab === 'wiki',
+              style: tab === 'wiki' ? primaryStyle : buttonStyle,
+              onClick: () => setTab('wiki'),
+            }, `${t('viewWiki')} ${wikis.length}`),
+          ),
+          tab === 'cards' && h('div', null,
+            h('div', {
+              style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 },
+            },
+              filterButton('all', t('filterAll'), rows.length),
+              filterButton('generated', t('filterGenerated'), rows.length - pendingCount),
+              filterButton('pending', t('filterPending'), pendingCount),
+              filterButton('stale', t('staleFilter'), staleSet.size),
             h('input', {
               type: 'search', style: { ...inputStyle, maxWidth: 280 },
               placeholder: t('searchPlaceholder'),
@@ -645,6 +721,15 @@ window.__ModuleLoader__.load({
           // 内联详情列（切片 1 不开新页面；Escape 或按钮关闭）
           detail && h(DetailPane, {
             row: detail, t, tt, onClose: () => setDetail(null),
+          }),
+          ),
+          // Wiki 页签：页面列表与单页原文浏览（切片 3）
+          tab === 'wiki' && h(WikiPanel, {
+            entries: wikis,
+            selected: wikiSelected,
+            onSelect: setWikiSelected,
+            onClose: () => setWikiSelected(null),
+            t, tt,
           }),
         ),
         message && h('p', {
@@ -777,6 +862,60 @@ window.__ModuleLoader__.load({
               }, card.summary || t('never')),
             )
           : h('p', { style: { fontSize: 13, ...mutedStyle() } }, t('pendingHint')),
+      )
+    }
+
+    /** Wiki 面板：页面列表与单页原文浏览（切片 3，无 Markdown 渲染器，暂以原文呈现）。 */
+    function WikiPanel({ entries, selected, onSelect, onClose, t }) {
+      if (selected) {
+        return h('div', null,
+          h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
+          },
+            h('button', {
+              type: 'button', style: chipButtonStyle(), onClick: onClose,
+              'aria-label': t('wikiBack'),
+            }, '←'),
+            h('h2', {
+              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-color-text, #111827)' },
+            }, selected.title),
+          ),
+          h('pre', {
+            style: {
+              padding: 14, borderRadius: 10, fontSize: 12, lineHeight: 1.6,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+              background: 'var(--dsw-alias-color-surface, #ffffff)',
+              color: 'var(--dsw-alias-color-text, #111827)',
+              maxHeight: 560, overflow: 'auto',
+            },
+          }, selected.text),
+        )
+      }
+      if (entries.length === 0) {
+        return h('p', { style: { ...mutedStyle() } }, t('wikiEmpty'))
+      }
+      return h('div', null,
+        ...entries.map((entry) => h('button', {
+          key: entry.file,
+          type: 'button',
+          onClick: () => onSelect(entry),
+          style: {
+            ...cardChipStyle(),
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+            marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+          },
+          'aria-label': entry.title,
+        },
+          h('span', {
+            style: { flex: 1, fontSize: 13, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              color: 'var(--dsw-alias-color-text, #111827)' },
+          }, entry.title),
+          h('span', {
+            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+          }, entry.generatedAt.slice(0, 10) || '—'),
+        )),
       )
     }
 

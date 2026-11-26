@@ -169,21 +169,22 @@ const flush = async () => {
  */
 function makeFakeRemotes(overrides = {}) {
   const index = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: '2026-11-26T08:00:00.000Z',
-    stats: { files: 2, symbols: 2, edges: 0, durationMs: 1, capped: false },
+    stats: { files: 3, symbols: 3, edges: 0, durationMs: 1, capped: false, reused: 0 },
     stack: { technologies: [], projectName: 'demo', projectVersion: '1.0.0' },
     files: [
-      { path: 'a.js', lang: 'javascript', sizeBytes: 10, symbols: [{ name: 'x' }, { name: 'y' }], imports: [] },
-      { path: 'b.js', lang: 'javascript', sizeBytes: 10, symbols: [], imports: [] },
+      { path: 'a.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-a', symbols: [{ name: 'x' }, { name: 'y' }], imports: [] },
+      { path: 'b.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-b', symbols: [], imports: [] },
+      { path: 'c.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-c', symbols: [{ name: 'z' }], imports: [] },
     ],
   }
-  const card = [
+  const cardA = [
     '---',
     JSON.stringify({
       schemaVersion: 1, path: 'a.js', lang: 'javascript', locale: 'zh',
       title: 'A 卡片', tags: ['demo'], manuallyEdited: false,
-      generatedAt: '2026-11-26T07:00:00.000Z',
+      sourceDigest: 'dig-a', generatedAt: '2026-11-26T07:00:00.000Z',
     }, null, 2),
     '---',
     '# A 卡片',
@@ -199,18 +200,46 @@ function makeFakeRemotes(overrides = {}) {
     '职责正文',
     '',
   ].join('\n')
+  // c.js 的卡片：记录的 sourceDigest 与索引不一致 → 待更新
+  const cardC = [
+    '---',
+    JSON.stringify({
+      schemaVersion: 1, path: 'c.js', lang: 'javascript', locale: 'zh',
+      title: 'C 卡片', tags: ['stale'], manuallyEdited: false,
+      sourceDigest: 'stale-digest', generatedAt: '2026-11-26T06:00:00.000Z',
+    }, null, 2),
+    '---',
+    '# C 卡片',
+    '',
+    '## 概要 / Summary',
+    '',
+    'C 的概要文本',
+    '',
+  ].join('\n')
+  const wikiPage = (title, body) => [
+    '---',
+    JSON.stringify({ schemaVersion: 1, title, slug: title, locale: 'zh',
+      generatedAt: '2026-11-26T08:00:00.000Z' }, null, 2),
+    '---',
+    `# ${title}`,
+    '',
+    body,
+    '',
+  ].join('\n')
   const files = {
     '.dsh-repowiki/index.json': JSON.stringify(index),
-    '.dsh-repowiki/knowledge/zh/a.md': card,
-    '.dsh-repowiki/wiki/zh/overview.md': '# 概览\n',
+    '.dsh-repowiki/knowledge/zh/a.md': cardA,
+    '.dsh-repowiki/knowledge/zh/c.md': cardC,
+    '.dsh-repowiki/wiki/zh/overview.md': wikiPage('概览', '这是概览正文。'),
+    '.dsh-repowiki/wiki/zh/core.md': wikiPage('核心模块', '核心正文。'),
     ...overrides,
   }
   const dirs = {
     '.dsh-repowiki': ['.dsh-repowiki/knowledge', '.dsh-repowiki/wiki', '.dsh-repowiki/index.json'],
     '.dsh-repowiki/knowledge': ['.dsh-repowiki/knowledge/zh'],
-    '.dsh-repowiki/knowledge/zh': ['.dsh-repowiki/knowledge/zh/a.md'],
+    '.dsh-repowiki/knowledge/zh': ['.dsh-repowiki/knowledge/zh/a.md', '.dsh-repowiki/knowledge/zh/c.md'],
     '.dsh-repowiki/wiki': ['.dsh-repowiki/wiki/zh'],
-    '.dsh-repowiki/wiki/zh': ['.dsh-repowiki/wiki/zh/overview.md'],
+    '.dsh-repowiki/wiki/zh': ['.dsh-repowiki/wiki/zh/overview.md', '.dsh-repowiki/wiki/zh/core.md'],
   }
   const entriesOf = (rel) => (dirs[rel] ?? []).map((p) => {
     const name = p.split('/').pop()
@@ -407,6 +436,81 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
   const texts = collectTexts(hooks.root)
   assert.ok(texts.some(s => s.includes('noAsset')), '索引缺失应渲染"尚未生成"提示')
   assert.ok(!texts.some(s => s.includes('loadFailed')), '不应把 not-found 当作读取失败')
+})
+
+/** 挂载页面（未选工作区），返回 hooks。 */
+function mountPage() {
+  const { wf, workspaces, startSession } = makeFakeRemotes()
+  const hooks = makeHooks()
+  const mod = captured.factory((name) => {
+    if (name !== 'react') throw new Error(`意外 require: ${name}`)
+    return {
+      createElement,
+      useState: hooks.useState,
+      useEffect: hooks.useEffect,
+      useMemo: hooks.useMemo,
+      useCallback: hooks.useCallback,
+      useRef: hooks.useRef,
+    }
+  })
+  mod.apply(makeStubCtx(wf))
+  hooks.mount(RepoWikiPageOf(mod), {
+    t: (key) => key,
+    workspaces,
+    startSession,
+    files: wf,
+    notice: null,
+  })
+  return hooks
+}
+
+/** 挂载页面并选中工作区 w1，等待数据就绪。 */
+async function mountReadyPage() {
+  const hooks = mountPage()
+  const select = findNode(hooks.root, (n) => n.type === 'select' && n.props.id === 'repowiki-workspace')
+  select.props.onChange({ target: { value: 'w1' } })
+  await flush()
+  return hooks
+}
+
+test('待更新检测：digest 不一致的卡片计入提示与待更新筛选', async () => {
+  const hooks = await mountReadyPage()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('staleHint')), '应渲染待更新提示')
+
+  // 切换到"待更新"筛选
+  const staleBtn = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('staleFilter'))
+  assert.ok(staleBtn, '应渲染待更新筛选按钮')
+  staleBtn.props.onClick()
+  await flush()
+  const filtered = collectTexts(hooks.root)
+  assert.ok(filtered.some(s => s.includes('C 卡片')), '待更新筛选包含 stale 卡片')
+  assert.ok(!filtered.some(s => s.includes('A 卡片')), '待更新筛选排除未变化卡片')
+})
+
+test('Wiki 页签：页面列表与单页原文浏览', async () => {
+  const hooks = await mountReadyPage()
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const listTexts = collectTexts(hooks.root)
+  assert.ok(listTexts.some(s => s.includes('概览')), 'Wiki 列表应含页面标题')
+  assert.ok(listTexts.some(s => s.includes('核心模块')), 'Wiki 列表应含第二个页面标题')
+
+  // 打开第一个页面，查看原文
+  const entry = findNode(hooks.root, (n) => n.type === 'button'
+    && n.children?.some(c => Array.isArray(c?.children) && c.children.includes('概览')))
+  assert.ok(entry, 'Wiki 列表项可点击')
+  entry.props.onClick()
+  await flush()
+  const pageTexts = collectTexts(hooks.root)
+  assert.ok(pageTexts.some(s => s.includes('这是概览正文。')), '应呈现页面正文')
+  const backBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
+  assert.ok(backBtn, '应渲染返回列表控件（aria-label）')
 })
 
 /**

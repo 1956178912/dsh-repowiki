@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 3 完成 + 面板切片 1（v0.6.0）
+## 当前阶段：Phase 3 完成 + 面板切片 1-3（v0.7.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -19,7 +19,7 @@
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；目标非空时默认拒绝，除非 `overwrite` |
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
-| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成"筛选（未生成 = 在 `index.json` 中但没有卡片）、搜索、网格与列表视图、卡片详情列——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
+| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、搜索、网格与列表视图、卡片详情、以及浏览已生成页面的 Wiki 页签——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
 路线图：
 - Phase 3（v0.6.0 完成）：内容摘要驱动的索引增量重建、卡片自动刷新、人工修订保护、孤儿卡片报告、目录导入导出

@@ -3,6 +3,23 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.7.0] - 2026-11-26
+
+### Added
+
+- Panel slice 3 essentials in the web client:
+  - **Update detection**: cards whose frontmatter `sourceDigest` differs from
+    the index `digest` are counted as stale; the stats row shows an
+    "N cards need an update" hint and a **Stale** filter lists exactly those
+    cards.
+  - **Wiki tab**: a Cards / Wiki tab pair; the wiki tab lists
+    `wiki/<locale>/` pages (title from frontmatter) and shows a page's raw
+    Markdown text with a back control.
+- `loadCards` now harvests `sourceDigest`; `countWikiDocs` was replaced by
+  `loadWikiEntries` which returns titles, generation times, and full text.
+- Smoke tests extended with stale-detection and wiki-browsing scenarios
+  (70/70 green).
+
 ## [0.6.0] - 2026-11-26
 
 ### Added
