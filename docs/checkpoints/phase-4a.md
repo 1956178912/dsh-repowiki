@@ -62,7 +62,18 @@
 - 测试：默认关闭、空 query、query 过滤、pending 排除（LANG 环境隔离；
   79/79 全绿）。
 
+## 面板视图（v0.12.0）：记忆第三页签
+
+- Cards / Wiki / Memory 三页签；记忆页列 `.dsh-repowiki/memory/<locale>/`
+  条目，按状态着色徽章（accepted 主色 / pending 灰 / rejected danger），
+  点击以 pre 原文呈现，附返回控件；Escape 同时关闭卡片与记忆详情。
+- `loadMemoryEntries` 经同一 `ctx.remote.workspaceFiles` 通道（目录缺失
+  时降级空数组）；挂载/切换/页面重新可见时随主加载一并刷新。
+- 记忆三出口齐备：generate 汇总（v0.10.0）、检索可见（v0.11.0）、面板
+  展示（v0.12.0）。
+- 测试：记忆页签列表+徽章+详情（80/80 全绿）。
+
 ## 下一步
 
-- 记忆面板展示（Wiki/卡片之外的第三种视图）按需排入。
 - 切片 2（多工作区总览）受跨工作区读取限制，需真实环境验证。
+- Phase 4"可选语义索引"按方案保持后置（YAGNI）。

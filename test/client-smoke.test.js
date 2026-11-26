@@ -226,20 +226,34 @@ function makeFakeRemotes(overrides = {}) {
     body,
     '',
   ].join('\n')
+  // 记忆条目（与 src/memory.js renderMemoryMarkdown 同构）
+  const memoryPage = (title, status, body) => [
+    '---',
+    JSON.stringify({ schemaVersion: 1, kind: 'memory', title, tags: status === 'accepted' ? ['decision'] : [], status, createdAt: '2026-11-26T07:30:00.000Z' }, null, 2),
+    '---',
+    `# ${title}`,
+    '',
+    body,
+    '',
+  ].join('\n')
   const files = {
     '.dsh-repowiki/index.json': JSON.stringify(index),
     '.dsh-repowiki/knowledge/zh/a.md': cardA,
     '.dsh-repowiki/knowledge/zh/c.md': cardC,
     '.dsh-repowiki/wiki/zh/overview.md': wikiPage('概览', '这是概览正文。'),
     '.dsh-repowiki/wiki/zh/core.md': wikiPage('核心模块', '核心正文。'),
+    '.dsh-repowiki/memory/zh/use-digest.md': memoryPage('用摘要判变化', 'accepted', '摘要驱动增量重建。'),
+    '.dsh-repowiki/memory/zh/pending-draft.md': memoryPage('待审草稿', 'pending', '尚未审核的知识。'),
     ...overrides,
   }
   const dirs = {
-    '.dsh-repowiki': ['.dsh-repowiki/knowledge', '.dsh-repowiki/wiki', '.dsh-repowiki/index.json'],
+    '.dsh-repowiki': ['.dsh-repowiki/knowledge', '.dsh-repowiki/wiki', '.dsh-repowiki/memory', '.dsh-repowiki/index.json'],
     '.dsh-repowiki/knowledge': ['.dsh-repowiki/knowledge/zh'],
     '.dsh-repowiki/knowledge/zh': ['.dsh-repowiki/knowledge/zh/a.md', '.dsh-repowiki/knowledge/zh/c.md'],
     '.dsh-repowiki/wiki': ['.dsh-repowiki/wiki/zh'],
     '.dsh-repowiki/wiki/zh': ['.dsh-repowiki/wiki/zh/overview.md', '.dsh-repowiki/wiki/zh/core.md'],
+    '.dsh-repowiki/memory': ['.dsh-repowiki/memory/zh'],
+    '.dsh-repowiki/memory/zh': ['.dsh-repowiki/memory/zh/use-digest.md', '.dsh-repowiki/memory/zh/pending-draft.md'],
   }
   const entriesOf = (rel) => (dirs[rel] ?? []).map((p) => {
     const name = p.split('/').pop()
@@ -518,6 +532,31 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(pageTexts.some(s => s.includes('这是概览正文。')), '应呈现页面正文')
   const backBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
   assert.ok(backBtn, '应渲染返回列表控件（aria-label）')
+})
+
+test('记忆页签：条目列表（状态徽章）与单条原文浏览', async () => {
+  const hooks = await mountReadyPage()
+  const memTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewMemory'))
+  assert.ok(memTab, '应渲染记忆页签')
+  memTab.props.onClick()
+  await flush()
+
+  const listTexts = collectTexts(hooks.root)
+  assert.ok(listTexts.some(s => s.includes('用摘要判变化')), '记忆列表含已采信条目')
+  assert.ok(listTexts.some(s => s.includes('待审草稿')), '记忆列表含待审条目')
+  assert.ok(listTexts.some(s => s.includes('accepted')), '渲染状态徽章')
+
+  // 打开条目详情，原文呈现
+  const entry = findNode(hooks.root, (n) => n.type === 'button'
+    && n.children?.some(c => Array.isArray(c?.children) && c.children.includes('用摘要判变化')))
+  assert.ok(entry, '记忆条目可点击')
+  entry.props.onClick()
+  await flush()
+  const pageTexts = collectTexts(hooks.root)
+  assert.ok(pageTexts.some(s => s.includes('摘要驱动增量重建。')), '应呈现条目正文')
+  const detailBack = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
+  assert.ok(detailBack, '详情有返回控件')
 })
 
 /**

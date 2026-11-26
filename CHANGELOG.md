@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.12.0] - 2026-11-26
+
+### Added
+
+- Panel memory view (web client): a "Memory" tab beside Cards / Wiki lists
+  `.dsh-repowiki/memory/<locale>/` entries with a status pill
+  (accepted / pending / rejected colored) and opens one entry's raw text
+  with a back control. Escape closes the details of both cards and memory.
+- The panel reload now also harvests memory entries through the same
+  `ctx.remote.workspaceFiles` channel (`loadMemoryEntries`, tolerant of a
+  missing memory directory).
+- Session memory is now visible in three places: wiki synthesis (v0.10.0),
+  search (`includeMemory`, v0.11.0), and the panel (this release).
+- Tests: memory tab list + detail with state pills (80/80 green).
+
 ## [0.11.0] - 2026-11-26
 
 ### Added

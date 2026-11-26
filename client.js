@@ -90,8 +90,10 @@ const DICTS = {
     staleHint: '{n} 张卡片待更新（源文件已变化）',
     viewCards: '卡片',
     viewWiki: 'Wiki',
+    viewMemory: '记忆',
     wikiBack: '返回 Wiki 列表',
     wikiEmpty: '尚未生成 Wiki 页面。',
+    memoryEmpty: '尚无会话记忆。用 repowiki-memory 工具沉淀本会话知识。',
     detailClose: '关闭详情',
     detailSymbols: '符号数 {n}',
     detailGeneratedAt: '生成于 {when}',
@@ -137,8 +139,10 @@ const DICTS = {
     staleHint: '{n} card(s) need an update (source changed)',
     viewCards: 'Cards',
     viewWiki: 'Wiki',
+    viewMemory: 'Memory',
     wikiBack: 'Back to the wiki list',
     wikiEmpty: 'No wiki pages generated yet.',
+    memoryEmpty: 'No session memory yet. Use the repowiki-memory tool to persist knowledge from this session.',
     detailClose: 'Close details',
     detailSymbols: 'Symbols {n}',
     detailGeneratedAt: 'Generated {when}',
@@ -377,6 +381,53 @@ window.__ModuleLoader__.load({
       return list.filter(Boolean)
     }
 
+    /**
+     * 装载某 locale 的会话记忆条目（Phase 4 面板视图：第三页签）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} locale - 面板 locale。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<object[]>} 条目（file/slug/title/status/tags/createdAt/text）。
+     */
+    async function loadMemoryEntries(wf, sessionId, locale, signal) {
+      const memoryDir = `${ASSET_DIR}/memory`
+      let subs
+      try {
+        subs = await listChildren(wf, sessionId, memoryDir, signal)
+      } catch {
+        return []
+      }
+      const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
+      const chosen = locales.includes(locale) ? locale : locales[0]
+      if (!chosen) return []
+      let entries
+      try {
+        entries = await listChildren(wf, sessionId, `${memoryDir}/${chosen}`, signal)
+      } catch {
+        return []
+      }
+      const files = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
+      const list = await mapLimit(files, CARD_CONCURRENCY, async (entry) => {
+        try {
+          const text = await readFileText(wf, sessionId, `${memoryDir}/${chosen}/${entry.name}`, signal)
+          const parsed = parseCardText(text)
+          if (!parsed) return null
+          return {
+            file: `memory/${chosen}/${entry.name}`,
+            slug: entry.name.replace(/\.md$/, ''),
+            title: typeof parsed.meta.title === 'string' ? parsed.meta.title : entry.name,
+            status: typeof parsed.meta.status === 'string' ? parsed.meta.status : 'pending',
+            tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags : [],
+            createdAt: typeof parsed.meta.createdAt === 'string' ? parsed.meta.createdAt : '',
+            text,
+          }
+        } catch {
+          return null
+        }
+      })
+      return list.filter(Boolean)
+    }
+
     /* ── 页面 ── */
 
     /**
@@ -396,8 +447,10 @@ window.__ModuleLoader__.load({
       const [cards, setCards] = useState([])
       const [docs, setDocs] = useState(0)
       const [wikis, setWikis] = useState([])
+      const [memories, setMemories] = useState([])
       const [tab, setTab] = useState('cards')
       const [wikiSelected, setWikiSelected] = useState(null)
+      const [memorySelected, setMemorySelected] = useState(null)
       const [filter, setFilter] = useState('all')
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
@@ -433,6 +486,7 @@ window.__ModuleLoader__.load({
           setCards([])
           setDocs(0)
           setWikis([])
+          setMemories([])
           return
         }
         const requestId = ++latestRequest.current
@@ -458,6 +512,7 @@ window.__ModuleLoader__.load({
             setCards([])
             setDocs(0)
             setWikis([])
+            setMemories([])
             return
           }
           const { cards: loaded } = await loadCards(wf, sessionId, localeName(t), signal)
@@ -467,6 +522,7 @@ window.__ModuleLoader__.load({
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
+          setMemories(await loadMemoryEntries(wf, sessionId, localeName(t), signal))
           setStatus('ready')
         } catch (err) {
           if (signal.aborted || requestId !== latestRequest.current) return
@@ -483,6 +539,7 @@ window.__ModuleLoader__.load({
           setCards([])
           setDocs(0)
           setWikis([])
+          setMemories([])
           return
         }
         const ac = new AbortController()
@@ -502,13 +559,17 @@ window.__ModuleLoader__.load({
         return () => document.removeEventListener('visibilitychange', onVisibility)
       }, [load, current])
 
-      // Escape 关闭详情
+      // Escape 关闭详情（卡片详情与记忆详情共用）
       useEffect(() => {
-        if (!detail) return
-        const onKey = (e) => { if (e.key === 'Escape') setDetail(null) }
+        if (!detail && !memorySelected) return
+        const onKey = (e) => {
+          if (e.key !== 'Escape') return
+          if (detail) setDetail(null)
+          if (memorySelected) setMemorySelected(null)
+        }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
-      }, [detail])
+      }, [detail, memorySelected])
 
       /**
        * 在所选工作区开新会话发起生成任务。
@@ -689,6 +750,11 @@ window.__ModuleLoader__.load({
               style: tab === 'wiki' ? primaryStyle : buttonStyle,
               onClick: () => setTab('wiki'),
             }, `${t('viewWiki')} ${wikis.length}`),
+            h('button', {
+              type: 'button', 'aria-pressed': tab === 'memory',
+              style: tab === 'memory' ? primaryStyle : buttonStyle,
+              onClick: () => setTab('memory'),
+            }, `${t('viewMemory')} ${memories.length}`),
           ),
           tab === 'cards' && h('div', null,
             h('div', {
@@ -745,6 +811,14 @@ window.__ModuleLoader__.load({
             selected: wikiSelected,
             onSelect: setWikiSelected,
             onClose: () => setWikiSelected(null),
+            t, tt,
+          }),
+          // 记忆页签：条目列表（状态徽章）与单条原文浏览（Phase 4）
+          tab === 'memory' && h(MemoryPanel, {
+            entries: memories,
+            selected: memorySelected,
+            onSelect: setMemorySelected,
+            onClose: () => setMemorySelected(null),
             t, tt,
           }),
         ),
@@ -933,6 +1007,79 @@ window.__ModuleLoader__.load({
           }, entry.generatedAt.slice(0, 10) || '—'),
         )),
       )
+    }
+
+    /** 记忆面板：条目列表（状态徽章）与单条原文浏览（Phase 4 面板视图）。 */
+    function MemoryPanel({ entries, selected, onSelect, onClose, t }) {
+      if (selected) {
+        return h('div', null,
+          h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
+          },
+            h('button', {
+              type: 'button', style: chipButtonStyle(), onClick: onClose,
+              'aria-label': t('wikiBack'),
+            }, '←'),
+            h('h2', {
+              style: { margin: 0, fontSize: 16, color: 'var(--dsw-alias-color-text, #111827)' },
+            }, selected.title),
+            h('span', {
+              style: { ...statusPillStyle(selected.status), flex: 'none' },
+            }, selected.status),
+          ),
+          h('pre', {
+            style: {
+              padding: 14, borderRadius: 10, fontSize: 12, lineHeight: 1.6,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              border: '1px solid var(--dsw-alias-color-border, #d1d5db)',
+              background: 'var(--dsw-alias-color-surface, #ffffff)',
+              color: 'var(--dsw-alias-color-text, #111827)',
+              maxHeight: 560, overflow: 'auto',
+            },
+          }, selected.text),
+        )
+      }
+      if (entries.length === 0) {
+        return h('p', { style: { ...mutedStyle() } }, t('memoryEmpty'))
+      }
+      return h('div', null,
+        ...entries.map((entry) => h('button', {
+          key: entry.file,
+          type: 'button',
+          onClick: () => onSelect(entry),
+          style: {
+            ...cardChipStyle(),
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+            marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+          },
+          'aria-label': entry.title,
+        },
+          h('span', {
+            style: { ...statusPillStyle(entry.status), flex: 'none' },
+          }, entry.status),
+          h('span', {
+            style: { flex: 1, fontSize: 13, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              color: 'var(--dsw-alias-color-text, #111827)' },
+          }, entry.title),
+          h('span', {
+            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-color-muted, #6b7280)' },
+          }, entry.createdAt.slice(0, 10) || '—'),
+        )),
+      )
+    }
+
+    /** 记忆状态徽章样式（按 accepted/pending/rejected 取色）。 */
+    function statusPillStyle(status) {
+      const color = status === 'accepted'
+        ? 'var(--dsw-alias-color-primary, #2563eb)'
+        : status === 'rejected'
+          ? 'var(--dsw-alias-color-danger, #dc2626)'
+          : 'var(--dsw-alias-color-muted, #6b7280)'
+      return {
+        fontSize: 11, padding: '2px 8px', borderRadius: 999,
+        border: `1px solid ${color}`, color,
+      }
     }
 
     /** 卡片瓦片/行共用外框样式。 */
