@@ -19,8 +19,8 @@ function frontmatter(meta) {
 /**
  * 单张知识卡片 JSON → Markdown。
  * @param {object} card - 卡片结构化数据（cardOutputSchema 的输出）。
- * @param {{path:string, lang:string, generatedAt:string, locale:string, manuallyEdited?:boolean}} meta
- *   文件级元数据。
+ * @param {{path:string, lang:string, generatedAt:string, locale:string, sourceDigest?:string, manuallyEdited?:boolean}} meta
+ *   文件级元数据（sourceDigest 来自 index.json 的文件条目，供失效检测）。
  * @returns {string} 卡片 Markdown。
  */
 export function renderCardMarkdown(card, meta) {
@@ -36,6 +36,7 @@ export function renderCardMarkdown(card, meta) {
     path: meta.path,
     lang: meta.lang,
     locale: meta.locale,
+    sourceDigest: meta.sourceDigest ?? '',
     title: card.title,
     tags: card.tags,
     manuallyEdited: meta.manuallyEdited ?? false,

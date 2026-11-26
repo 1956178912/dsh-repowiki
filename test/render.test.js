@@ -32,6 +32,15 @@ test('renderCardMarkdown：frontmatter 元数据 + 正文结构完整', () => {
   assert.match(md, /符号提取失败时整文件跳过/)
   assert.match(md, /## 相关模块 \/ Related modules/)
   assert.match(md, /src\/symbols.js/)
+  assert.match(md, /"sourceDigest": ""/)
+})
+
+test('renderCardMarkdown：sourceDigest 显式写入 frontmatter', () => {
+  const md = renderCardMarkdown(usableCard, {
+    path: 'a.ts', lang: 'typescript', locale: 'en', generatedAt: 'now',
+    sourceDigest: 'abc123def456',
+  })
+  assert.match(md, /"sourceDigest": "abc123def456"/)
 })
 
 test('renderCardMarkdown：空陷阱与相关模块渲染为 (none)', () => {

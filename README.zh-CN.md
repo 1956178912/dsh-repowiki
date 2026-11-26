@@ -8,19 +8,19 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 2 + 面板切片 1（v0.4.0）
+## 当前阶段：Phase 3 增量内核 + 面板切片 1（v0.5.0）
 
 | 能力 | 说明 |
 |---|---|
-| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：符号表、import 依赖边、技术栈识别，写入 `.dsh-repowiki/index.json` |
+| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：符号表、import 依赖边、技术栈识别，写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目 |
 | `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径过滤，返回文件+符号与项目技术栈 |
-| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/` |
+| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；源文件摘要变化时卡片自动刷新 |
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈，凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成"筛选（未生成 = 在 `index.json` 中但没有卡片）、搜索、网格与列表视图、卡片详情列——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
 
-路线图（见设计依据）：
-- Phase 3：commit/diff 增量更新、导入导出、人工修订
+路线图：
+- Phase 3（v0.5.0 已完成一部分）：内容摘要驱动的索引增量重建与卡片自动刷新已落地；目录导入导出与人工修订卡片尚待实现
 - Phase 4：会话记忆提炼、可选语义索引
 
 ## 架构要点

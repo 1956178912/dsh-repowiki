@@ -16,8 +16,16 @@ export const ASSET_DIR = '.dsh-repowiki'
 export const INDEX_REL_PATH = `${ASSET_DIR}/index.json`
 
 /** index.json 的数据版本。任何字段或折叠语义变化必须 +1，
- *  读取侧据做兼容校验与降级（方案 §10.3-4：资产数据版本化）。 */
-export const INDEX_SCHEMA_VERSION = 1
+ *  读取侧据做兼容校验与降级（方案 §10.3-4：资产数据版本化）。
+ *  v2：文件条目新增 digest（内容指纹），支撑增量重建与卡片失效检测。 */
+export const INDEX_SCHEMA_VERSION = 2
+
+/**
+ * 文件内容指纹的十六进制位数（sha256 前 12 位）。
+ * 48-bit 指纹用于"文件是否变化"的判定，碰撞概率对增量用途可忽略；
+ * 不取全长是为了缩小随 Git 共享的 index.json 体积。
+ */
+export const DIGEST_CHARS = 12
 
 /**
  * 索引工具结果条目的默认上限。检索工具的输出必须是有界的

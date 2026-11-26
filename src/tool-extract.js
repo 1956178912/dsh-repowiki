@@ -25,8 +25,10 @@ const DESCRIPTION = [
   'Generate knowledge cards for repository files into .dsh-repowiki/knowledge/<locale>/,',
   'one Markdown card per file (purpose, key symbols, pitfalls, related modules). Each file is',
   'extracted by a fresh subagent that inherits this session model; requires an existing index',
-  '(run repowiki-index first). Existing cards are skipped unless force=true. Deterministic',
-  'filtering (symbol-count threshold) skips trivial files; extraction itself is model work.',
+  '(run repowiki-index first). Existing cards are skipped when their recorded source digest',
+  'still matches the file; a changed file refreshes its card. force=true re-extracts',
+  'regardless. Deterministic filtering (symbol-count threshold) skips trivial files;',
+  'extraction itself is model work.',
 ].join(' ')
 
 /**
@@ -124,9 +126,14 @@ export function repowikiExtractTool(ctx) {
       const existing = args.force ? new Map() : await readExistingCards(fs, root, locale)
       const failed = []
       let extracted = 0
+      let skippedExisting = 0
       let i = 0
       for (const rel of candidates) {
-        if (existing.has(rel)) continue
+        const prior = existing.get(rel)
+        if (prior && cardIsFresh(index.files.find(f => f.path === rel), prior)) {
+          skippedExisting++
+          continue
+        }
         // 空 slug（纯非 ASCII 文件名）会互相覆盖卡片文件，直接记失败不写盘
         if (!cardSlug(rel)) {
           failed.push({ path: rel, reason: 'path cannot be slugified to a stable card file name' })
@@ -161,6 +168,7 @@ export function repowikiExtractTool(ctx) {
           }
           const md = renderCardMarkdown(card, {
             path: rel, lang: file.lang, locale, generatedAt: new Date().toISOString(),
+            sourceDigest: file.digest,
           })
           await writeCard(fs, root, rel, locale, md)
           extracted++
@@ -174,7 +182,7 @@ export function repowikiExtractTool(ctx) {
         cardsDir: `${root}/.dsh-repowiki/knowledge/${locale}`,
         locale,
         extracted,
-        skippedExisting: existing.size,
+        skippedExisting,
         skippedSimple: skippedSimple.length,
         failed,
         capped,
@@ -198,4 +206,16 @@ function cwdOf(ctx) {
     try { return wd.get() } catch { /* 降级到 process.cwd */ }
   }
   return process.cwd()
+}
+
+/**
+ * 判断已有卡片是否仍然新鲜（源文件未变化）。
+ * 判定依据：index.json 中文件条目的 digest 与卡片 frontmatter 记录的
+ * sourceDigest 一致。老卡（无 sourceDigest）或源已变化都视为需重提取。
+ * @param {{digest?:string}|undefined} fileMeta - index.json 的文件条目。
+ * @param {{meta?:{sourceDigest?:string}}|undefined} prior - 已有卡片（readExistingCards 的值形态）。
+ * @returns {boolean} 卡片可跳过重提取时为 true。
+ */
+export function cardIsFresh(fileMeta, prior) {
+  return Boolean(fileMeta?.digest && prior?.meta?.sourceDigest === fileMeta.digest)
 }

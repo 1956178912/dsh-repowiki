@@ -10,7 +10,7 @@ import {
   MAX_FILES_DEFAULT,
 } from './schema.js'
 import {
-  resolveAssetRoot, writeIndex,
+  resolveAssetRoot, writeIndex, readIndex,
 } from './assets.js'
 import { buildIndex } from './indexer.js'
 
@@ -30,8 +30,9 @@ import { buildIndex } from './indexer.js'
 const DESCRIPTION = [
   'Rebuild the symbol-level index of the current repository into .dsh-repowiki/index.json,',
   'so later sessions (and repowiki-cards) can query symbols, files and dependencies without',
-  're-reading source code. Deterministic: no model calls. Run it once after checkout or when',
-  'the project structure changes. Existing index.json is overwritten.',
+  're-reading source code. Deterministic: no model calls. Incremental by default: files whose',
+  'content digest is unchanged reuse the previous index entry (set incremental=false for a',
+  'full rebuild). Existing index.json is overwritten.',
 ].join(' ')
 
 /**
@@ -57,6 +58,10 @@ export function repowikiIndexTool(ctx) {
         type: 'integer',
         description: `Hard cap on walked files; exceeding it caps the index and reports capped=true. Defaults to ${MAX_FILES_DEFAULT}.`,
       },
+      incremental: {
+        type: 'boolean',
+        description: 'Reuse the entry of files whose content digest is unchanged since the previous index (default true). Pass false to re-extract every file.',
+      },
     },
     output: {
       // 手写定义的 output.schema 直接经注册表 assertSupportedJsonSchema 校验，
@@ -70,14 +75,15 @@ export function repowikiIndexTool(ctx) {
           files: { type: 'integer' },
           symbols: { type: 'integer' },
           edges: { type: 'integer' },
+          reused: { type: 'integer' },
           durationMs: { type: 'integer' },
           capped: { type: 'boolean' },
         },
-        required: ['root', 'indexPath', 'files', 'symbols', 'edges', 'durationMs', 'capped'],
+        required: ['root', 'indexPath', 'files', 'symbols', 'edges', 'reused', 'durationMs', 'capped'],
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Indexed ${value.files} files, ${value.symbols} symbols, ${value.edges} dependency edges in ${value.durationMs}ms → ${value.indexPath}${value.capped ? ' (capped: file limit reached)' : ''}`,
+        text: `Indexed ${value.files} files (${value.reused} unchanged, reused), ${value.symbols} symbols, ${value.edges} dependency edges in ${value.durationMs}ms → ${value.indexPath}${value.capped ? ' (capped: file limit reached)' : ''}`,
       }],
     },
     // 索引大仓库可能耗时，给一个宽松的协作式预算（工具须转发 exec.signal）
@@ -91,9 +97,15 @@ export function repowikiIndexTool(ctx) {
         ? args.root
         : cwdOf(ctx)
       const { root } = await resolveAssetRoot(fs, startDir)
+      // 旧版本索引（readIndex 已校验 schemaVersion）作为增量基准；
+      // incremental=false 或旧索引不可读（含 schema 版本不匹配）则全量重建
+      const previous = args.incremental === false
+        ? null
+        : await readIndex(fs, root)
       const doc = await buildIndex(fs, root, {
         extraExclude: Array.isArray(args.exclude) ? args.exclude : undefined,
         maxFiles: typeof args.maxFiles === 'number' ? args.maxFiles : undefined,
+        previous,
       })
       const indexPath = await writeIndex(fs, root, doc)
       return {
@@ -102,6 +114,7 @@ export function repowikiIndexTool(ctx) {
         files: doc.stats.files,
         symbols: doc.stats.symbols,
         edges: doc.stats.edges,
+        reused: doc.stats.reused,
         durationMs: doc.stats.durationMs,
         capped: doc.stats.capped,
       }
@@ -110,7 +123,7 @@ export function repowikiIndexTool(ctx) {
       card: 'generic',
       title: 'Index repository symbols',
       kind: 'search',
-      rawInput: { root: args.root ?? '(current directory)' },
+      rawInput: { root: args.root ?? '(current directory)', incremental: args.incremental ?? true },
     }),
   }
 }

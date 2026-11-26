@@ -6,9 +6,11 @@
  */
 
 import * as path from 'node:path'
+import { createHash } from 'node:crypto'
 import {
   EXCLUDE_DIRS, EXTENSION_LANGS, MANIFEST_FILES, MAX_FILES_DEFAULT, MAX_FILE_BYTES,
   INDEX_SCHEMA_VERSION, EDGE_KIND_IMPORT, JS_PATH_CANDIDATES, PY_PATH_CANDIDATES,
+  DIGEST_CHARS,
 } from './schema.js'
 import { extractSymbols } from './symbols.js'
 import { extractImports } from './deps.js'
@@ -19,6 +21,7 @@ import { detectStack } from './stack.js'
  * @typedef {Object} BuildOptions
  * @property {string[]} [extraExclude] - 调用方追加排除的目录名。
  * @property {number} [maxFiles] - 文件数上限（默认 MAX_FILES_DEFAULT）。
+ * @property {object} [previous] - 上一版索引文档，用于增量复用（见 buildIndex）。
  */
 
 /** 递归遍历时栈深度上限，防御过深目录树。 */
@@ -125,10 +128,23 @@ function resolvePySpecifier(fromRel, specifier, indexed) {
 }
 
 /**
+ * 计算文本内容指纹（sha256 前 DIGEST_CHARS 位十六进制）。
+ * node:crypto 为内置模块，不构成第三方依赖；指纹用于判定"文件内容
+ * 是否变化"，驱动索引增量复用与知识卡片失效检测（Phase 3 §增量更新）。
+ * @param {string} text - 文件文本。
+ * @returns {string} 指纹。
+ */
+export function digestText(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, DIGEST_CHARS)
+}
+
+/**
  * 构建完整索引文档并写盘。
  * @param {object} fs - ctx.fs 服务。
  * @param {string} rootAbs - 项目根绝对路径。
  * @param {BuildOptions} [opts] - 构建选项。
+ * @param {object} [opts.previous] - 上一版索引文档（schemaVersion 已校验），
+ *   内容未变的文件直接复用其符号与依赖条目（省 CPU；读取仍需进行以算摘要）。
  * @returns {Promise<object>} 索引文档（调用方转成工具结果）。
  */
 export async function buildIndex(fs, rootAbs, opts = {}) {
@@ -142,6 +158,9 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
 
   // 第一遍只登记路径（依赖边解析需要全集）
   const indexed = new Set(sourceFiles.map(f => f.rel))
+  // 旧索引条目按路径建表，供增量复用判定
+  const previousFiles = new Map((opts.previous?.files ?? []).map(f => [f.path, f]))
+  let reused = 0
 
   const files = []
   const edges = []
@@ -156,12 +175,25 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       continue // 单文件读取失败不阻断整体索引
     }
     if (text.length > MAX_FILE_BYTES) continue
-    const symbols = extractSymbols(text, lang)
-    const imports = extractImports(text, lang)
+    const digest = digestText(text)
+    const cached = previousFiles.get(rel)
+    let symbols
+    let imports
+    if (cached && cached.digest === digest
+      && Array.isArray(cached.symbols) && Array.isArray(cached.imports)) {
+      // 内容未变：复用旧条目的解析结果（提取是 CPU 大头；读盘省不了）
+      symbols = cached.symbols
+      imports = cached.imports
+      reused++
+    } else {
+      symbols = extractSymbols(text, lang)
+      imports = extractImports(text, lang)
+    }
     files.push({
       path: rel,
       lang,
       sizeBytes: text.length,
+      digest,
       symbols,
       imports,
     })
@@ -198,6 +230,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       edges: edges.length,
       durationMs: Date.now() - startedAt,
       capped: sourceFiles.length + manifests.length >= maxFiles,
+      reused,
     },
     stack,
     files,

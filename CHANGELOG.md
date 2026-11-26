@@ -3,6 +3,28 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.5.0] - 2026-11-26
+
+### Added
+
+- Content-digest incremental reindexing (Phase 3, first step): every indexed
+  file entry now carries a `digest` (first 12 hex chars of sha256, computed
+  with the built-in `node:crypto`); `repowiki-index` reuses the previous
+  index entry for files whose digest is unchanged and reports the count in
+  its output (`reused`). `incremental: false` forces a full rebuild; an
+  index written by an older version is rebuilt from scratch (index
+  `schemaVersion` bumped to 2, the read side keeps its rebuild-prompt
+  degradation).
+- Knowledge cards now record `sourceDigest` in their frontmatter;
+  `repowiki-extract` skips a card only while its recorded digest still
+  matches the file, and refreshes it when the source changed (old cards
+  without a digest are re-extracted once, `cardIsFresh` is exported and
+  unit-tested).
+- Tests for the incremental paths: indexer reuse/change/delete
+  (`test/indexer.test.js`), tool-level `reused` and `incremental: false`
+  behavior and digest freshness (`test/tools.test.js`), and frontmatter
+  `sourceDigest` rendering (`test/render.test.js`).
+
 ## [0.4.0] - 2026-11-26
 
 ### Added

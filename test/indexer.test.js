@@ -8,8 +8,8 @@ import * as nodefs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
-import { buildIndex } from '../src/indexer.js'
-import { INDEX_SCHEMA_VERSION } from '../src/schema.js'
+import { buildIndex, digestText } from '../src/indexer.js'
+import { INDEX_SCHEMA_VERSION, DIGEST_CHARS } from '../src/schema.js'
 
 /**
  * 创建临时项目并写入 fixture 文件。
@@ -121,4 +121,51 @@ test('不可读文件不阻断整体索引', async () => {
   } finally {
     nodefs.chmodSync(path.join(dir, 'bad.ts'), 0o644)
   }
+})
+
+test('增量重建：未变文件复用旧条目，变化文件重算', async () => {
+  const dir = makeProject({
+    'package.json': '{}',
+    'src/stable.ts': 'export const a = 1\n',
+    'src/moving.ts': 'export const b = 2\n',
+  })
+  const fs = makeFakeFs(dir)
+  const first = await buildIndex(fs, dir)
+  assert.equal(first.stats.reused, 0, '无基准时全量提取')
+
+  // 内容未变：全部复用，条目内容与首版一致
+  const same = await buildIndex(fs, dir, { previous: first })
+  assert.equal(same.stats.reused, first.stats.files)
+  assert.deepEqual(
+    same.files.find(f => f.path === 'src/stable.ts'),
+    first.files.find(f => f.path === 'src/stable.ts'),
+  )
+
+  // 修改一个文件：只有它重算，digest 变化可观测
+  nodefs.writeFileSync(path.join(dir, 'src/moving.ts'), 'export const b = 22\n')
+  const after = await buildIndex(fs, dir, { previous: first })
+  assert.equal(after.stats.reused, first.stats.files - 1)
+  assert.notEqual(
+    after.files.find(f => f.path === 'src/moving.ts').digest,
+    first.files.find(f => f.path === 'src/moving.ts').digest,
+  )
+  assert.equal(
+    after.files.find(f => f.path === 'src/stable.ts').digest,
+    first.files.find(f => f.path === 'src/stable.ts').digest,
+  )
+  for (const f of after.files) {
+    assert.equal(typeof f.digest, 'string')
+    assert.equal(f.digest.length, DIGEST_CHARS)
+  }
+
+  // 删除一个文件：不再出现在索引
+  nodefs.unlinkSync(path.join(dir, 'src/stable.ts'))
+  const dropped = await buildIndex(fs, dir, { previous: after })
+  assert.ok(!dropped.files.some(f => f.path === 'src/stable.ts'))
+})
+
+test('digestText：同一内容稳定、不同内容相异', () => {
+  assert.equal(digestText('hello'), digestText('hello'))
+  assert.notEqual(digestText('hello'), digestText('hello!'))
+  assert.equal(digestText('hello').length, DIGEST_CHARS)
 })

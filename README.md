@@ -8,19 +8,19 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phase 2 + panel slice 1 (v0.4.0)
+## Current stage: Phase 3 incremental core + panel slice 1 (v0.5.0)
 
 | Capability | Description |
 |---|---|
-| `repowiki-index` tool | Deterministically (zero LLM) rebuilds the index: symbol tables, import dependency edges, tech-stack detection; writes `.dsh-repowiki/index.json` |
+| `repowiki-index` tool | Deterministically (zero LLM) rebuilds the index: symbol tables, import dependency edges, tech-stack detection, writes `.dsh-repowiki/index.json`; incremental — files whose content digest is unchanged reuse the previous entry |
 | `repowiki-cards` tool | Cross-session read-only query: filter by symbol name / kind / path; returns files + symbols and the project tech stack |
-| `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/` |
+| `repowiki-extract` tool | One spawn subagent per file (inherits the session model) generates a knowledge card (purpose, key symbols, pitfalls, related modules) into `.dsh-repowiki/knowledge/<locale>/`; a card is refreshed when its recorded source digest no longer matches the file |
 | `repowiki-generate` tool | Reads only the cards + tech stack, synthesizes theme-grouped Wiki pages (Markdown + optional mermaid) into `.dsh-repowiki/wiki/<locale>/` |
 | Project plan | `.dsh-repowiki/repowiki-plan.json` (Git-shared): exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
 | Repo Wiki panel (web) | A "Repo wiki" sidebar entry (beside the scheduled-tasks icon) opens a workspace page: file/symbol/card/doc counts and latest update, an all/generated/pending filter (pending = listed in `index.json` without a card), search, grid and list views, and a card details pane — data read from `.dsh-repowiki/` via `ctx.remote.workspaceFiles` — plus the generation actions (ADR-0004) |
 
-Roadmap (see the review document):
-- Phase 3: commit/diff incremental updates, import/export, manual edits
+Roadmap:
+- Phase 3 (partly done in v0.5.0): content-digest incremental reindexing and card refresh are landed; directory import/export and manual card edits remain
 - Phase 4: session memory distillation, optional semantic index
 
 ## Architecture highlights

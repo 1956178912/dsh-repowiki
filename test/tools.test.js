@@ -10,6 +10,7 @@ import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiCardsTool } from '../src/tool-cards.js'
+import { cardIsFresh } from '../src/tool-extract.js'
 
 /**
  * 构造一个最小插件 ctx（fake fs）。
@@ -95,4 +96,41 @@ test('工具契约：name/description/output 契约完整（注册表最低要�
     assert.ok(tool.output && typeof tool.output.schema === 'object' && typeof tool.output.render === 'function', '输出契约完整')
     assert.equal(typeof tool.execute, 'function')
   }
+})
+
+test('repowiki-index execute：增量二次调用复用未变文件', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-inc-'))
+  nodefs.writeFileSync(path.join(dir, 'keep.ts'), 'export const a = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'move.ts'), 'export const b = 2\n')
+  const ctx = makeCtx(dir)
+  const tool = repowikiIndexTool(ctx)
+
+  const first = await tool.execute({}, fakeExec)
+  assert.equal(first.files, 2)
+  assert.equal(first.reused, 0, '无旧索引时全部新算')
+
+  // 内容未变：二次执行全部复用
+  const second = await tool.execute({}, fakeExec)
+  assert.equal(second.files, 2)
+  assert.equal(second.reused, 2)
+
+  // 修改一个文件：只有它重算
+  nodefs.writeFileSync(path.join(dir, 'move.ts'), 'export const b = 22\n')
+  const third = await tool.execute({}, fakeExec)
+  assert.equal(third.reused, 1)
+  const rendered = tool.output.render({}, third)
+  assert.match(rendered[0].text, /1 unchanged, reused/)
+
+  // incremental=false 强制全量
+  const full = await tool.execute({ incremental: false }, fakeExec)
+  assert.equal(full.reused, 0, 'incremental=false 时不复用')
+})
+
+test('cardIsFresh：digest 匹配判定卡片新鲜度', () => {
+  assert.equal(cardIsFresh({ digest: 'abc' }, { meta: { sourceDigest: 'abc' } }), true)
+  assert.equal(cardIsFresh({ digest: 'abc' }, { meta: { sourceDigest: 'abd' } }), false)
+  assert.equal(cardIsFresh({ digest: 'abc' }, { meta: {} }), false, '老卡无 sourceDigest 需重提取')
+  assert.equal(cardIsFresh(undefined, { meta: { sourceDigest: 'abc' } }), false)
+  assert.equal(cardIsFresh({ digest: 'abc' }, undefined), false)
+  assert.equal(cardIsFresh({ digest: '' }, { meta: { sourceDigest: '' } }), false, '空指纹一律不判鲜')
 })
