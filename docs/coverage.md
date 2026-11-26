@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.15.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.29.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.21.0，测试 121/121，行覆盖率 96.1%）
+- 核对对象：本仓库当前实现（v0.29.0，测试 134/134，行覆盖率 96.0%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 每次 push/PR 在 Node 22/24 装好 devOnly 依赖后跑 `node --test test/*.test.js`（121/121，含 LLM 执行路径契约回归、真实 React+jsdom 的 DOM 事件回归与故障注入降级链；本地覆盖率 96.1% 行）。dsh 版本变更侧的回归仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 每次 push/PR 在 Node 22/24 装好 devOnly 依赖后跑 `node --test test/*.test.js`（134/134，含 LLM 执行路径契约回归、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、打包与版本一致性守卫；本地覆盖率 96.0% 行）。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
