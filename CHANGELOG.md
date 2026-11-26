@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.25.0] - 2026-11-26
+
+### Added
+
+- **Plugin-manager detail page** per `references/plugin-details.md`:
+  `docs/detail/DETAIL.md` (+ `DETAIL.zh.md`) is exactly one image line
+  referencing a text-free 640×300 feature illustration (`preview.svg`,
+  shared across locales — source files → symbol index → knowledge cards and
+  wiki pages; no text/fonts/scripts/remote resources, self-contained light
+  background so it stays readable in dark themes). Both `locale/{en,zh}.json`
+  now declare `meta.detail`; `files` ships exactly `docs/detail` (the
+  internal ADR/checkpoint docs stay out of the tarball).
+- **Richer plugin metadata**: `meta.description` in both locales now states
+  the trigger location ("Repo wiki sidebar entry beside the scheduled-tasks
+  icon"), the added LLM requests (extract/generate spawn subagents
+  inheriting the session model), the data location, and what turning the
+  plugin off does — the fields the detail page is expected to carry.
+
+### Changed
+
+- `test/pack.test.js`: detail-page files are now required in the tarball;
+  internal `docs/` trees (adr/checkpoints/coverage) stay excluded.
+- `test/locale.test.js`: now also guards the detail document (exactly one
+  image line with alt text, image exists) and the SVG conventions
+  (640×300, no text/font/script/style/foreignObject/remote refs, ≤5 MiB).
+
 ## [0.24.0] - 2026-11-26
 
 ### Added

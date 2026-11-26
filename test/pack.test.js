@@ -20,14 +20,18 @@ function packFiles() {
   return new Set(entries[0].files.map((f) => f.path))
 }
 
-// 运行时必需文件：入口、客户端、loader patch、图标、locale、全部 src 模块
+// 运行时必需文件：入口、客户端、loader patch、图标、locale、全部 src 模块、详情页
 const required = [
   'index.js', 'client.js', 'cordis.patch.yml', 'icon.svg',
   'locale/en.json', 'locale/zh.json',
+  'docs/detail/DETAIL.md', 'docs/detail/DETAIL.zh.md', 'docs/detail/preview.svg',
   ...fs.readdirSync(path.join(ROOT, 'src')).filter((f) => f.endsWith('.js')).map((f) => `src/${f}`),
 ]
-// 开发态文件不应进包：测试、脚本、文档、CI、门面 CHANGELOG
-const forbidden = ['test', 'scripts', 'docs', '.github', 'CHANGELOG.md', 'CHANGELOG.zh-CN.md', 'package-lock.json']
+// 开发态文件不应进包：测试、脚本、内部文档、CI、门面 CHANGELOG
+const forbidden = [
+  'test', 'scripts', '.github', 'CHANGELOG.md', 'CHANGELOG.zh-CN.md', 'package-lock.json',
+  'docs/adr', 'docs/checkpoints', 'docs/coverage.md', 'docs/ui-plan.md',
+]
 
 test('npm pack 产物含全部运行时文件', () => {
   const files = packFiles()

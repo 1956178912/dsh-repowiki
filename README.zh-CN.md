@@ -87,6 +87,7 @@ npm run verify:host
 ```
 index.js               插件入口（apply + inject: fs/tools/subagents）
 scripts/verify-host-tokens.mjs  本地宿主漂移自检（令牌存活性，v0.22.0）
+docs/detail/           插件管理页详情页（一图式文档，v0.25.0）
 cordis.patch.yml       Loader patch（插入插件行）
 src/schema.js          常量与领域约定（单一来源）
 src/symbols.js         零依赖符号提取（JS/TS/Python）

@@ -86,6 +86,7 @@ npm run verify:host
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
+docs/detail/           Plugin-manager detail page (one image + docs, v0.25.0)
 cordis.patch.yml       Loader patch (inserts the plugin row)
 src/schema.js          Constants and domain conventions (single source)
 src/symbols.js         Zero-dependency symbol extraction (JS/TS/Python)

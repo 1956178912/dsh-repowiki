@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Repo wiki",
-    "description": "Index a repository into a Git-shareable symbol-level knowledge base (.dsh-repowiki): deterministic symbol indexing, LLM knowledge cards and wiki synthesis, cross-session query, snapshot import/export, session-memory review, and a workspace-level GUI panel with a sidebar entry. Tools: repowiki-index, repowiki-cards, repowiki-extract, repowiki-generate, repowiki-edit, repowiki-export, repowiki-import, repowiki-memory."
+    "description": "Indexes a repository into a Git-shareable symbol-level knowledge base (.dsh-repowiki) that any session can query without re-reading source. Trigger generation from the Repo wiki sidebar entry beside the scheduled-tasks icon, or call the tools directly. repowiki-index builds a deterministic symbol index with dependency edges (no model calls); repowiki-extract and repowiki-generate spawn subagents inheriting the session model (added LLM requests) to write knowledge cards and wiki pages; repowiki-cards searches them across sessions; repowiki-edit, -export, -import and -memory cover hand edits, snapshot transfer and session-memory review. Assets stay in the project directory and travel with Git; disabling the plugin removes the tools and panel but leaves the shared files untouched. Tools: repowiki-index, repowiki-cards, repowiki-extract, repowiki-generate, repowiki-edit, repowiki-export, repowiki-import, repowiki-memory.",
+    "detail": "docs/detail/DETAIL.md"
   }
 }

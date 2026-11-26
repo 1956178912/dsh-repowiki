@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.25.0] - 2026-11-26
+
+- 新增**插件管理页详情页**（按官方 plugin-details 约定）：`docs/detail/DETAIL.md`
+  （+中文版）恰为一行图片引用，配一张 text-free 640×300 特性图（源文件→符号
+  索引→知识卡片与 Wiki 页面；无文字/字体/脚本/远程资源，自含浅色背景在深色
+  主题也可读）。`locale/{en,zh}.json` 声明 `meta.detail`；`files` 只装
+  `docs/detail`（内部 ADR/检查点文档不进包）。
+- **元描述补全**：两语 `meta.description` 现含触发位置（侧栏“Repo wiki”入口）、
+  新增的 LLM 请求（extract/generate 继承会话模型的子代理）、数据位置与关闭
+  插件的影响。
+- 测试更新：pack 守卫要求详情页三文件入包且内部文档仍排除；locale 守卫
+  覆盖详情文档单行图片形式与 SVG 约定（130/130）。
+
 ## [0.24.0] - 2026-11-26
 
 - 新增**打包完整性守卫**（`test/pack.test.js`）：跑 `npm pack --dry-run`
