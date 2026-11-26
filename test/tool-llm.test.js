@@ -188,6 +188,21 @@ test('repowiki-extract execute：子代理返回不可用卡片时记 failed（�
   assert.ok(out.failed[0].reason.includes('complete'), '失败原因应含 stopReason 便于诊断')
 })
 
+test('repowiki-extract execute：exec.signal 已 abort 时停止派发（取消语义）', async () => {
+  // F3 回归：超时/取消后不应继续对剩余候选逐个派发子代理（烧 LLM 成本
+  // 并产出误导性 failed 清单）
+  const { ctx } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+  })
+  const ac = new AbortController()
+  ac.abort()
+  const abortedExec = { signal: ac.signal, agent: fakeExec.agent }
+  const out = await repowikiExtractTool(ctx).execute({ locale: 'zh' }, abortedExec)
+  assert.strictEqual(out.extracted, 0, '取消后不应写卡')
+  assert.deepStrictEqual(out.failed, [], '取消不应把候选记为 failed')
+  assert.match(out.hint, /Cancelled/, '应返回取消提示')
+})
+
 test('repowiki-extract execute：源文件索引后被删除记 unreadable（不阻断其他文件）', async () => {
   const { ctx, dir } = await makeIndexedCtx({
     'repowiki-extract': extractResult(),

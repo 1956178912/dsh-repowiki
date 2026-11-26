@@ -5,6 +5,65 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.32.0] - 2026-11-27
+
+### Fixed
+
+Findings from an independent code review of the Host side (a subagent read
+all 22 `src/` modules; transcript in `docs/checkpoints/phase-16-code-review.md`).
+
+- **F1 — Wiki page slugs are now sanitized** (`src/knowledge.js`): LLM
+  output reached `path.posix.join` unsanitized, so a `slug` like
+  `../../../../tmp/evil` would write outside the asset directory. Added
+  `wikiSlug()` (lowercase + `[a-z0-9-]` whitelist + length cap + empty
+  fallback) enforced inside `wikiPath()` so every caller is safe, and a
+  `pattern: '^[a-z0-9-]+$'` constraint on the wiki output schema as a
+  second line of defense. Cards were already safe via `cardSlug`; the
+  Wiki side had no equivalent. Regression: traversal attempts stay inside
+  `wiki/<locale>/` on disk.
+- **F2 — `hint` is now declared in the six tools' output schemas**: the
+  degrade paths returned `hint` while the schemas declared
+  `additionalProperties: false` — if the host ever validates execute
+  results, every degradation would have failed. Zero behavior change.
+- **F3 — cancellation reaches the LLM loops**: `repowiki-extract` now
+  checks `exec.signal.aborted` before each subagent dispatch (previously a
+  timeout/cancel would keep dispatching activations and record every
+  remaining candidate as `failed`, spending LLM budget on a dead run);
+  `repowiki-generate` checks before each page write. Both report a
+  `Cancelled: …` hint. Regression with a pre-aborted signal.
+- **F4 — `capped` no longer lies**: the file budget counts every walked
+  file (not just sources), so 5000 non-source files could exhaust it
+  while `capped: false` claimed the index was complete. The walk now
+  tracks an explicit `stopped` flag and `capped` reports the truth.
+  Regression: 150 Markdown files + 10 sources at `maxFiles: 100` yields
+  `capped: true`.
+- **F6 — memory accept/reject slugs validated**: the `slug` argument
+  reached `path.posix.join` without a whitelist (write was safe via
+  `slugifyMemory`, accept/reject was not). Non-conforming slugs now get an
+  explicit `invalid` status with a hint. Regression: traversal slug
+  refused.
+- **O1 — `copyTree` depth cap** (24, matching the indexer): an unbounded
+  recursive walk over a user-supplied snapshot could stack-overflow on a
+  pathological tree.
+- **O6 — numeric clamps**: `maxFiles: -1` stopped the walk immediately
+  with a misleading `capped: false`; `limit: 0` produced
+  `truncated: true` with an empty result. Both clamp to `>= 1`.
+- **O8 — extraction prompts use four-backtick fences**: source code
+  containing ``` could escape a three-backtick fence and inject
+  instructions into the extraction prompt; output stays schema-bound but
+  the fence is no longer trivially escapable.
+
+### Changed
+
+- **F5 — the import tool description now tells the truth**: `overwrite`
+  merges the snapshot into existing assets and never deletes anything
+  (the implementation was always a merge; the description claimed a
+  replace). No behavior change.
+- `sizeBytes` in index.json is documented as the character count it
+  actually is (name kept for compatibility with existing corpora).
+- Dead code removed: `listKnowledgeFiles` (no production caller) and an
+  unused `outcome` variable in `writeIndex`.
+
 ## [0.31.0] - 2026-11-26
 
 ### Changed

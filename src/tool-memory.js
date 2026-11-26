@@ -105,6 +105,7 @@ export function repowikiMemoryTool(ctx) {
           },
           total: { type: 'integer' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['action', 'durationMs'],
       },
@@ -179,6 +180,15 @@ export function repowikiMemoryTool(ctx) {
           action, locale, slug: '', total: 0, status: 'invalid',
           durationMs: Date.now() - startedAt,
           hint: 'slug is required for accept/reject. Use list to obtain it.',
+        }
+      }
+      // slug 由 list 返回（slugifyMemory 产物），在此白名单校验后再生路径拼接，
+      // 杜绝 '../../...' 之类输入写到资产目录之外
+      if (!/^[A-Za-z0-9._-]{1,96}$/.test(slug)) {
+        return {
+          action, locale, slug, total: 0, status: 'invalid',
+          durationMs: Date.now() - startedAt,
+          hint: 'slug must be a plain file name without path separators (as returned by list).',
         }
       }
       const status = action === 'accept' ? 'accepted' : 'rejected'

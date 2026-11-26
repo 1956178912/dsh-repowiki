@@ -37,11 +37,13 @@ const MAX_DEPTH = 24
  * @param {number} depth - 当前深度。
  * @param {Array<{abs:string, rel:string}>} sourceFiles - 累积的源码文件。
  * @param {Array<{abs:string, rel:string}>} manifests - 累积的清单文件。
- * @param {{count:number}} budget - 文件计数预算（引用传递，超限即停）。
+ * @param {{count:number, stopped?:boolean}} budget - 文件计数预算（引用传递，
+ * 超限即停；stopped 置真表示遍历确因预算提前终止）。
  * @returns {Promise<void>}
  */
 async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles, manifests, budget) {
-  if (depth > MAX_DEPTH || budget.count >= maxFiles) return
+  if (depth > MAX_DEPTH) return
+  if (budget.count >= maxFiles) { budget.stopped = true; return }
   let entries
   try {
     const dirTarget = await fs.resolve(dirPath)
@@ -50,7 +52,7 @@ async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles,
     return // 不可读目录安静跳过（权限/IO 问题不阻断整体索引）
   }
   for (const entry of entries) {
-    if (budget.count >= maxFiles) return
+    if (budget.count >= maxFiles) { budget.stopped = true; return }
     if (entry.type === 'directory') {
       if (exclude.has(entry.name)) continue
       await walk(fs, rootAbs, path.posix.join(dirPath, entry.name), exclude, maxFiles, depth + 1, sourceFiles, manifests, budget)
@@ -154,7 +156,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
 
   const sourceFiles = []
   const manifests = []
-  await walk(fs, rootAbs, rootAbs, exclude, maxFiles, 0, sourceFiles, manifests, { count: 0 })
+  const budget = { count: 0, stopped: false }
+  await walk(fs, rootAbs, rootAbs, exclude, maxFiles, 0, sourceFiles, manifests, budget)
 
   // 第一遍只登记路径（依赖边解析需要全集）
   const indexed = new Set(sourceFiles.map(f => f.rel))
@@ -192,6 +195,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     files.push({
       path: rel,
       lang,
+      // 字段名为历史约定：值是 readText 解码后的字符数（UTF-8 字节数约为
+      // 其 1–3 倍），见 schema.js MAX_FILE_BYTES 注释
       sizeBytes: text.length,
       digest,
       symbols,
@@ -229,7 +234,9 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       symbols: files.reduce((n, f) => n + f.symbols.length, 0),
       edges: edges.length,
       durationMs: Date.now() - startedAt,
-      capped: sourceFiles.length + manifests.length >= maxFiles,
+      // capped 的真值：遍历确实因预算提前终止（而非"恰好收集到 maxFiles 个
+      // 源码文件"——预算对全部路过文件计数，非源码文件同样消耗它）
+      capped: budget.stopped,
       reused,
     },
     stack,

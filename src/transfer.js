@@ -28,13 +28,18 @@ const TEXT_EXTENSIONS = new Set(['.md', '.json'])
  */
 export async function copyTree(fs, srcAbs, dstAbs) {
   const counts = { files: 0, dirs: 0, skipped: 0 }
+  // 目录深度上限（与 indexer 一致）：用户提供的快照可能含超深树或环，
+  // 无上限递归会栈溢出
+  const MAX_DEPTH = 24
 
   /**
    * 单层遍历复制。
    * @param {string} srcDir - 源目录绝对路径。
    * @param {string} dstDir - 目标目录绝对路径。
+   * @param {number} depth - 当前深度。
    */
-  const walk = async (srcDir, dstDir) => {
+  const walk = async (srcDir, dstDir, depth = 0) => {
+    if (depth > MAX_DEPTH) { counts.skipped++; return }
     let entries
     try {
       const target = await fs.resolve(srcDir)
@@ -46,7 +51,7 @@ export async function copyTree(fs, srcAbs, dstAbs) {
     for (const entry of entries) {
       if (entry.type === 'directory') {
         counts.dirs++
-        await walk(entry.target.displayPath, path.posix.join(dstDir, entry.name))
+        await walk(entry.target.displayPath, path.posix.join(dstDir, entry.name), depth + 1)
       } else if (entry.type === 'file') {
         const ext = entry.name.slice(entry.name.lastIndexOf('.')).toLowerCase()
         if (!TEXT_EXTENSIONS.has(ext)) {

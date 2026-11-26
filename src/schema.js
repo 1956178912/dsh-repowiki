@@ -48,7 +48,9 @@ export const DEFAULT_RESULT_LIMIT = 50
 /** 单次索引扫描的文件数硬上限，防止巨型仓库耗尽工具超时预算。 */
 export const MAX_FILES_DEFAULT = 5000
 
-/** 单个源码文件读取的字节上限（4 MiB，与 readText 的合理预算对齐）。 */
+/** 单个源码文件读取的字符数上限（4 MiB 字符；按字符而非字节计数，CJK
+ * 文件的实际字节数约为字符数 3 倍——比较发生在 readText 全量读取之后，
+ * 故为读取预算而非内存峰值防线）。 */
 export const MAX_FILE_BYTES = 4 * 1024 * 1024
 
 /**

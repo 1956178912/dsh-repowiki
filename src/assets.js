@@ -102,31 +102,8 @@ export async function readIndex(fs, root) {
  */
 export async function writeIndex(fs, root, doc) {
   const target = await fs.resolve(INDEX_REL_PATH, { cwd: root })
-  const outcome = await fs.writeText(target, JSON.stringify(doc, null, 2) + '\n')
+  await fs.writeText(target, JSON.stringify(doc, null, 2) + '\n')
   return target.displayPath
-}
-
-/**
- * 列出知识目录下当前 locale 的卡片文件（Phase 2 的产物；Phase 1
- * 目录一般不存在，返回空数组而非报错——检索工具据此给出"先建索引/
- * 提取卡片"的降级提示）。
- * @param {object} fs - ctx.fs 服务。
- * @param {string} root - 资产根目录绝对路径。
- * @param {string} locale - 语言代码（如 'zh'、'en'）。
- * @returns {Promise<string[]>} 卡片文件的相对路径列表（相对资产根）。
- */
-export async function listKnowledgeFiles(fs, root, locale) {
-  const dir = path.posix.join(ASSET_DIR, 'knowledge', locale)
-  try {
-    const dirTarget = await fs.resolve(dir, { cwd: root })
-    const info = await fs.stat(dirTarget)
-    if (info?.type !== 'directory') return []
-    const entries = await fs.listDir(dirTarget)
-    return entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
-      .map(e => `${dir}/${e.name}`)
-  } catch {
-    return []
-  }
 }
 
 /**

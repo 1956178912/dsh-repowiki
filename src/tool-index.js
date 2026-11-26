@@ -105,7 +105,8 @@ export function repowikiIndexTool(ctx) {
         : await readIndex(fs, root)
       const doc = await buildIndex(fs, root, {
         extraExclude: Array.isArray(args.exclude) ? args.exclude : undefined,
-        maxFiles: typeof args.maxFiles === 'number' ? args.maxFiles : undefined,
+        // 下界钳制：maxFiles=-1 会让 walk 立即停且 capped 误报为 false
+        maxFiles: typeof args.maxFiles === 'number' ? Math.max(1, Math.floor(args.maxFiles)) : undefined,
         previous,
       })
       const indexPath = await writeIndex(fs, root, doc)

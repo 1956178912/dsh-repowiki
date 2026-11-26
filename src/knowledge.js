@@ -42,13 +42,29 @@ export function cardPath(relPath, locale) {
 }
 
 /**
- * Wiki 页文件相对资产根的路径。
- * @param {string} slug - 页面 slug。
+ * 净化 Wiki 页 slug（LLM 输出不得直达文件路径拼接）。
+ * 小写 + 非 [a-z0-9-] 归一为连字符 + 去首尾连字符 + 长度上限；空串兜底
+ * 为 'page'，保证 writeWikiPage 永远落在 wiki/<locale>/ 目录内。
+ * @param {string} slug - LLM 返回的页面 slug。
+ * @returns {string} 净化后的 slug。
+ */
+export function wikiSlug(slug) {
+  const cleaned = String(slug)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64)
+  return cleaned || 'page'
+}
+
+/**
+ * Wiki 页文件相对资产根的路径。内部强制走 wikiSlug 净化（路径穿越防线）。
+ * @param {string} slug - 页面 slug（LLM 输出，将被净化）。
  * @param {string} locale - 语言代码。
  * @returns {string} 形如 '.dsh-repowiki/wiki/zh/overview.md'。
  */
 export function wikiPath(slug, locale) {
-  return path.posix.join(ASSET_DIR, WIKI_DIR, locale, `${slug}.md`)
+  return path.posix.join(ASSET_DIR, WIKI_DIR, locale, `${wikiSlug(slug)}.md`)
 }
 
 /**

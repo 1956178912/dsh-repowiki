@@ -158,7 +158,8 @@ export function repowikiCardsTool(ctx) {
         query: typeof args.query === 'string' ? args.query : undefined,
         kind: typeof args.kind === 'string' ? args.kind : undefined,
         pathPrefix: typeof args.path === 'string' ? args.path : undefined,
-        limit: typeof args.limit === 'number' ? args.limit : undefined,
+        // limit=0 会得到 truncated=true 且空结果，钳制为 ≥1
+        limit: typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : undefined,
       })
 
       // 记忆消费侧（Phase 4）：includeMemory=true 时附已采信记忆，按 query 过滤

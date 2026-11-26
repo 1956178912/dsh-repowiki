@@ -9,7 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import {
-  resolveAssetRoot, readIndex, writeIndex, searchIndex, listKnowledgeFiles,
+  resolveAssetRoot, readIndex, writeIndex, searchIndex,
 } from '../src/assets.js'
 import { INDEX_SCHEMA_VERSION } from '../src/schema.js'
 
@@ -101,19 +101,4 @@ test('searchIndex：大小写不敏感与无过滤条件返回全部', () => {
     { name: 'Foo', kind: 'class', line: 1, endLine: 1, exported: true }] }] }
   assert.equal(searchIndex(index, { query: 'foo' }).total, 1)
   assert.equal(searchIndex(index, {}).total, 1)
-})
-
-test('listKnowledgeFiles：目录不存在返回空数组，存在则列出 md', async () => {
-  const dir = makeProject(d => {
-    nodefs.mkdirSync(path.join(d, '.dsh-repowiki', 'knowledge', 'zh'), { recursive: true })
-    nodefs.writeFileSync(path.join(d, '.dsh-repowiki', 'knowledge', 'zh', 'a.md'), '# A')
-    nodefs.writeFileSync(path.join(d, '.dsh-repowiki', 'knowledge', 'zh', 'b.txt'), 'nope')
-  })
-  const fs = makeFakeFs(dir)
-  const files = await listKnowledgeFiles(fs, dir, 'zh')
-  assert.deepEqual(files, ['.dsh-repowiki/knowledge/zh/a.md'])
-
-  const empty = makeProject(() => {})
-  const fs2 = makeFakeFs(empty)
-  assert.deepEqual(await listKnowledgeFiles(fs2, empty, 'zh'), [])
 })

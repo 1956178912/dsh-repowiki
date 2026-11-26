@@ -263,6 +263,11 @@ test('repowiki-memory execute：write/list/accept/reject 审核闭环', async ()
 
   const missing = await tool.execute({ action: 'reject', locale: 'zh', slug: 'nope' }, fakeExec)
   assert.match(missing.hint, /not found/)
+
+  // F6 回归：accept 的 slug 走白名单， '../../../../../tmp/x' 不得拼进路径
+  const traversal = await tool.execute({ action: 'accept', locale: 'zh', slug: '../../../../../tmp/x' }, fakeExec)
+  assert.equal(traversal.status, 'invalid')
+  assert.match(traversal.hint, /plain file name/)
 })
 
 test('repowiki-edit execute：人工卡 create/update 闭环', async () => {

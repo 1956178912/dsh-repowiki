@@ -9,7 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import {
-  cardSlug, cardPath, wikiPath, writeCard, writeWikiPage, parseCard, readExistingCards,
+  cardSlug, cardPath, wikiPath, wikiSlug, writeCard, writeWikiPage, parseCard, readExistingCards,
 } from '../src/knowledge.js'
 
 test('cardSlug：路径 slug 化', () => {
@@ -79,6 +79,23 @@ test('writeWikiPage：落盘路径正确', async () => {
   const fs = makeFakeFs(dir)
   await writeWikiPage(fs, dir, 'core-modules', 'zh', '# 核心模块\n')
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/core-modules.md')))
+})
+
+test('wikiSlug：LLM 的 slug 净化后必落在 wiki/<locale>/ 内（路径穿越防线）', async () => {
+  // F1 回归：generate 的 page.slug 来自 LLM 输出，直接 posix.join 可越出资产目录
+  assert.equal(wikiSlug('../../../../tmp/evil'), 'tmp-evil')
+  assert.equal(wikiSlug('a/../../index'), 'a-index')
+  assert.equal(wikiSlug('OverView 页面!'), 'overview')
+  assert.equal(wikiSlug(''), 'page')
+  assert.equal(wikiSlug('..'), 'page')
+  const rel = wikiPath('../../../../tmp/evil', 'zh')
+  assert.ok(rel.startsWith('.dsh-repowiki/wiki/zh/'), `路径须留在 wiki 目录内：${rel}`)
+  assert.ok(!rel.includes('..'), `净化后不得含 ..：${rel}`)
+  // 真实写盘验证：fake fs 的 resolve 拒绝逃逸
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-wiki-'))
+  const fs = makeFakeFs(dir)
+  await writeWikiPage(fs, dir, '../../../../tmp/evil', 'zh', '# evil\n')
+  assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/tmp-evil.md')))
 })
 
 test('parseCard：坏 frontmatter 与版本不符返回 null', () => {

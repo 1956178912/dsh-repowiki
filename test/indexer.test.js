@@ -108,6 +108,19 @@ test('maxFiles 上限停扫且 capped=true', async () => {
   assert.ok(doc.stats.files <= 4)
 })
 
+test('F4 回归：非源码文件耗尽预算时 capped 必须为真（不得谎报索引完整）', async () => {
+  // 5000 个 .md 文件（不入索引）+ 10 个源码文件；maxFiles=100 时预算在
+  // 非源码文件上耗尽——旧实现 capped=false，用户会误以为索引完整
+  const files = {}
+  for (let i = 0; i < 150; i++) files[`note${i}.md`] = '# note\n'
+  for (let i = 0; i < 10; i++) files[`s${i}.ts`] = 'export const x = 1\n'
+  const dir = makeProject(files)
+  const fs = makeFakeFs(dir)
+  const doc = await buildIndex(fs, dir, { maxFiles: 100 })
+  assert.equal(doc.stats.capped, true, '遍历因预算提前终止时 capped 必须为真')
+  assert.ok(doc.stats.files < 10, '预算被非源码文件占用，源码文件应有遗漏')
+})
+
 test('不可读文件不阻断整体索引', async () => {
   const dir = makeProject({
     'good.ts': 'export const fine = 1\n',

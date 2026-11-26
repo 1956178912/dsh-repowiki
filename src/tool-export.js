@@ -54,6 +54,7 @@ export function repowikiExportTool(ctx) {
           dirs: { type: 'integer' },
           skipped: { type: 'integer' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['root', 'assetDir', 'target', 'files', 'dirs', 'skipped', 'durationMs'],
       },

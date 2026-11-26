@@ -111,7 +111,7 @@ src/tool-import.js     repowiki-import 工具
 src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
-test/                  单元与集成测试（136 用例）
+test/                  单元与集成测试（138 用例）
 docs/adr/              架构决策记录（中文）
 docs/checkpoints/      阶段检查点（中文）
 ```

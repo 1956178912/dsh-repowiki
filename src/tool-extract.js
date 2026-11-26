@@ -88,6 +88,7 @@ export function repowikiExtractTool(ctx) {
           capped: { type: 'boolean' },
           planSource: { type: 'string' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['root', 'cardsDir', 'locale', 'extracted', 'skippedExisting', 'skippedManual', 'skippedSimple', 'orphaned', 'failed', 'capped', 'durationMs'],
       },
@@ -135,7 +136,11 @@ export function repowikiExtractTool(ctx) {
       let skippedExisting = 0
       let skippedManual = 0
       let i = 0
+      let aborted = false
       for (const rel of candidates) {
+        // 协作式取消：exec.signal 已 abort（超时/用户取消）时停止派发新子代理，
+        // 否则剩余候选会被逐个记 failed 并继续产生 LLM 成本
+        if (exec.signal?.aborted) { aborted = true; break }
         const file = index.files.find(f => f.path === rel)
         const prior = existing.get(rel)
         if (prior && cardIsFresh(file, prior)) {
@@ -192,6 +197,7 @@ export function repowikiExtractTool(ctx) {
 
       // 孤儿卡片：源文件已不在索引中（删除/重命名后残留），只报告不删除
       const orphaned = countOrphaned(existing, index.files)
+      const remaining = aborted ? candidates.length - i : 0
       return {
         root,
         cardsDir: `${root}/.dsh-repowiki/knowledge/${locale}`,
@@ -205,6 +211,7 @@ export function repowikiExtractTool(ctx) {
         capped,
         planSource: planError ? 'broken' : planSource,
         durationMs: Date.now() - startedAt,
+        ...(aborted ? { hint: `Cancelled: ${remaining} candidate(s) left unprocessed.` } : {}),
       }
     },
     presentCall: (args) => ({

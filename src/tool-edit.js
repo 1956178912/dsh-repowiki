@@ -78,6 +78,7 @@ export function repowikiEditTool(ctx) {
           slug: { type: 'string' },
           card: { type: 'string' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['action', 'locale', 'path', 'slug', 'durationMs'],
       },

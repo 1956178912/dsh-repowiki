@@ -61,6 +61,7 @@ export function repowikiGenerateTool(ctx) {
           cardsRead: { type: 'integer' },
           memoriesRead: { type: 'integer' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['root', 'wikiDir', 'locale', 'pages', 'cardsRead', 'memoriesRead', 'durationMs'],
       },
@@ -131,7 +132,10 @@ export function repowikiGenerateTool(ctx) {
       }
 
       const written = []
+      let aborted = false
       for (const page of pages) {
+        // 协作式取消：超时/用户取消后停止写盘，已写页面仍保留并可读
+        if (exec.signal?.aborted) { aborted = true; break }
         if (typeof page.slug !== 'string' || !page.slug) continue
         const md = renderWikiMarkdown(page, { locale, generatedAt: new Date().toISOString() })
         await writeWikiPage(fs, root, page.slug, locale, md)
@@ -145,6 +149,7 @@ export function repowikiGenerateTool(ctx) {
         cardsRead: cards.length,
         memoriesRead: memorySummaries.length,
         durationMs: Date.now() - startedAt,
+        ...(aborted ? { hint: `Cancelled: ${pages.length - written.length} page(s) not written.` } : {}),
       }
     },
     presentCall: (args) => ({

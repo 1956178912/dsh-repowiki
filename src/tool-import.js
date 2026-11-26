@@ -16,8 +16,11 @@ const DESCRIPTION = [
   'Import the .dsh-repowiki/ knowledge base of the current project from a directory',
   'snapshot (the output of repowiki-export: index.json, knowledge/, wiki/, plan file).',
   'Restores into .dsh-repowiki/ of the current project. The import is refused while',
-  'existing assets are present unless overwrite=true. Pure file copy with no model calls.',
-  'After import, index.json compatibility is verified and reported.',
+  'existing assets are present unless overwrite=true, in which case the snapshot is',
+  'merged in: files present in the snapshot overwrite their counterparts, and files',
+  'that exist only in your assets are kept (import never deletes anything). Pure',
+  'file copy with no model calls. After import, index.json compatibility is',
+  'verified and reported.',
 ].join(' ')
 
 /**
@@ -55,6 +58,7 @@ export function repowikiImportTool(ctx) {
           skipped: { type: 'integer' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
+          hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
         required: ['root', 'source', 'files', 'dirs', 'skipped', 'indexOk', 'durationMs'],
       },

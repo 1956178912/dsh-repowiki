@@ -110,7 +110,7 @@ src/tool-import.js     repowiki-import tool
 src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
-test/                  Unit and integration tests (136 cases)
+test/                  Unit and integration tests (138 cases)
 docs/adr/              Architecture decision records (Chinese)
 docs/checkpoints/      Phase checkpoints (Chinese)
 ```

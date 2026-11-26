@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.32.0] - 2026-11-27
+
+Host 侧独立代码评审（子代理通读全部 22 个 src 模块；记录见
+`docs/checkpoints/phase-16-code-review.md`）发现的应修项与观察项：
+
+- **F1 Wiki slug 净化**：LLM 输出的 page.slug 曾直接 posix.join，`../../../../tmp/evil` 可写出资产目录；新增 `wikiSlug()` 白名单净化（在 `wikiPath` 内强制，所有调用方自动安全）+ schema pattern 双重防线。回归：穿越尝试落盘仍在 wiki/<locale>/ 内。
+- **F2 `hint` 字段入 schema**：六个工具的降级分支返回 hint 但 schema 声明 `additionalProperties:false`——宿主一旦校验 execute 结果则降级全塌。零行为变更。
+- **F3 取消语义**：extract 每次派发子代理前检查 `exec.signal.aborted`（此前超时后继续派发并把剩余候选逐个记 failed，白烧 LLM 成本）；generate 写盘前同检；均返回 `Cancelled: …` 提示。
+- **F4 capped 不再撒谎**：文件预算对全部路过文件计数（非仅源码），非源码文件耗尽预算时旧实现 `capped:false` 谎报完整；现以显式 stopped 标志求真。
+- **F5 import 描述修正**：overwrite 一直是“合并不删除”，描述却写成 replace；改为如实描述（无行为变更）。
+- **F6 memory accept/reject slug 白名单**：write 路径本有 slugifyMemory 净化，accept/reject 没有；不符合白名单的 slug 返回 invalid + hint。
+- **O1 copyTree 深度上限 24**、**O6 maxFiles/limit 下界钳制**、**O8 提取 prompt 改四反引号围栏**（源码含 ``` 可逃逸三反引号注入指令）。
+- 死代码清理（listKnowledgeFiles 无生产调用方、writeIndex 未用变量）；index.json 的 sizeBytes 注释更正为字符数（字段名保留兼容）。
+- 共 4 条新回归（穿越/取消/预算诚实/白名单拒绝），138/138。
+
 ## [0.31.0] - 2026-11-26
 
 - **记忆与 Wiki 详情的焦点对齐**（v0.30.0 卡片详情焦点管理的推广）：

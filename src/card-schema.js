@@ -98,7 +98,7 @@ export function wikiOutputSchema() {
           additionalProperties: false,
           properties: {
             title: { type: 'string' },
-            slug: { type: 'string', description: 'ASCII kebab-case file name without extension, e.g. "core-modules".' },
+            slug: { type: 'string', description: 'ASCII kebab-case file name without extension, e.g. "core-modules".', pattern: '^[a-z0-9-]+$' },
             overview: { type: 'string' },
             sections: {
               type: 'array',

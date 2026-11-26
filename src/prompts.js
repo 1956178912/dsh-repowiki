@@ -32,9 +32,11 @@ export function extractPrompt(file, locale) {
     symbolLines,
     truncated,
     `Source code:`,
-    '```' + fenceLang(file.lang),
+    // 四反引号围栏：源码内含 ``` 即可逃出三反引号围栏注入指令；输出虽受
+    // outputSchema 约束（最坏是脏卡片），围栏加固降低该注入面
+    '````' + fenceLang(file.lang),
     file.source,
-    '```',
+    '````',
     ``,
     `Task:`,
     `1. Read the code and decide whether this file deserves a knowledge card (skip generated files, trivial constants, or files with no meaningful behavior).`,
