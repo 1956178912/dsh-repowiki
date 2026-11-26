@@ -3,6 +3,38 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.19.0] - 2026-11-26
+
+### Fixed
+
+- `repowiki-extract` execute result was missing `skippedManual` and
+  `orphaned`, both declared **required** by the tool's output schema —
+  the render layer would have printed "undefined manually edited" and the
+  result would not have satisfied the declared contract. Both fields are
+  now returned (found by the new execute-path coverage, not by a user
+  report).
+
+### Added
+
+- **LLM execution paths are now covered by tests with a contract-level
+  subagent stub** (`test/tool-llm.test.js`) — previously `runSubagent`
+  and the `repowiki-extract` / `repowiki-generate` execute paths (the
+  plan's core LLM seam) had zero coverage while the rest of the suite sat
+  at 90%+. The fake `ctx.subagents.startActivation` returns
+  schema-constrained structured card/page JSON and records every dispatch
+  spec; tests assert the activation contract (provider `spawn`,
+  `delivery: 'caller'`, `parent` = `exec.agent`, `outputSchema` passed
+  through, prompt carries the source path), first-run card writing with
+  `sourceDigest`, digest-based skip on re-run, manual-edit protection,
+  unreadable-source and unusable-card failure reporting, and Wiki
+  generation consuming cards.
+- `test/spawn.test.js`: `runSubagent` contract (activation spec shape,
+  dispose semantics on success/failure, readable errors for missing
+  capabilities) and `getLocale` env mapping.
+- Coverage measurement is now part of the quality loop
+  (`node --test --experimental-test-coverage`): overall line coverage
+  89.9% → 94.7%, `spawn.js` and `card-schema.js` at 100%.
+
 ## [0.18.0] - 2026-11-26
 
 ### Added
