@@ -3,6 +3,13 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.34.1] - 2026-11-27
+
+- 修复 react-parity 导入 verify 脚本的进程退出副作用：CI 无 asar 时
+  exit 3 杀死测试文件；本地有 asar 时 exit 0 造成**假通过**（断言从未
+  执行）。脚本现在仅作入口运行时执行 main()，import 无副作用。
+  （v0.34.0 tag 落在红提交上，修正在此版。）
+
 ## [0.34.0] - 2026-11-27
 
 - **React 版本一致性守卫**（`test/react-parity.test.js`）：`npm outdated`

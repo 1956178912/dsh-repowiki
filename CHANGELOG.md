@@ -5,6 +5,19 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.34.1] - 2026-11-27
+
+### Fixed
+
+- `npm test` in CI caught a real testing bug: importing
+  `scripts/verify-host-tokens.mjs` from `test/react-parity.test.js`
+  executed the script's top-level `main()` — with no app.asar on the CI
+  runner it exited 3 and killed the test file, and on a machine with an
+  asar present it exited 0 and made the test **falsely pass** (no
+  assertion ever ran). The script now runs `main()` only as a direct
+  entry (`import.meta.url === argv[1]`), so imports stay side-effect
+  free. (v0.34.0's tag sits on the red commit; the fix is here.)
+
 ## [0.34.0] - 2026-11-27
 
 ### Added
