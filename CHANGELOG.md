@@ -3,6 +3,37 @@
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.16.0] - 2026-11-26
+
+### Added
+
+- **Real-corpus client regression test** (`test/client-real-corpus.test.js`):
+  the smoke-test fixtures are hand-written tidy Markdown, but cards in the
+  wild are LLM-generated (mixed heading levels, inline markup, fenced code).
+  The new test feeds this repository's own `.dsh-repowiki/` corpus through
+  the exact panel render path and asserts every generated card opens a rich
+  detail view (renderMarkdown), pending rows fall back cleanly, and the Wiki
+  tab browses page by page without throwing. This produced the decisive
+  evidence that the renderer is healthy on real content.
+- **Event-handler guard** in the web client: React error boundaries do not
+  catch errors thrown in event handlers (onClick/onChange), so a handler
+  throw showed up as "click does nothing". All interactive handlers
+  (reload, generation actions, tabs, filters, view toggle, card open/close,
+  wiki/memory open/close) are now wrapped in a guard that turns synchronous
+  throws and async rejections into a readable status line
+  ("Action failed (open-card): …"). Combined with the v0.14.0 render-time
+  ErrorBoundary, both failure modes are now user-visible instead of silent.
+- **CI gate** (`.github/workflows/tests.yml`): `node --test test/*.test.js`
+  on Node 22 and 24 for every push/PR — closes the last undone hard clause
+  of the plan's upgrade-resilience checklist (§10.3-8).
+
+### Changed
+
+- Test infrastructure deduplicated: the minimal React stub (hooks,
+  createElement with error-boundary simulation, tree walkers) moved to
+  `test/lib/stub-react.mjs` and is shared by the smoke test and the
+  real-corpus test (~160 duplicated lines removed).
+
 ## [0.15.0] - 2026-11-26
 
 ### Changed

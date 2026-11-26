@@ -11,6 +11,9 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {
+  makeHooks, reactFor, collectTexts, findNode, flush,
+} from './lib/stub-react.mjs'
 
 let captured = null
 globalThis.window = {
@@ -22,172 +25,6 @@ globalThis.document = {
   removeEventListener() {},
 }
 await import('../client.js')
-
-/* ── 最小 React stub：createElement + 常用 hooks ── */
-
-/**
- * 制造一套独立 hooks 状态（每个测试一套）。
- * @returns {object} hooks 接口（含 mount/root）。
- */
-function makeHooks() {
-  const states = []
-  const effects = []
-  const memos = []
-  let cursor = 0
-  let component = null
-  let props = null
-  let root = null
-  let pending = false
-
-  function scheduleRender() {
-    if (pending) return
-    pending = true
-    queueMicrotask(() => { pending = false; render() })
-  }
-
-  function render() {
-    cursor = 0
-    root = component(props)
-    return root
-  }
-
-  return {
-    mount(comp, p) { component = comp; props = p; render() },
-    get root() { return root },
-    useState(initial) {
-      const i = cursor++
-      if (!Object.hasOwn(states, i)) {
-        states[i] = { value: typeof initial === 'function' ? initial() : initial }
-      }
-      return [
-        states[i].value,
-        (v) => {
-          states[i].value = typeof v === 'function' ? v(states[i].value) : v
-          scheduleRender()
-        },
-      ]
-    },
-    useEffect(fn, deps) {
-      const i = cursor++
-      const prev = effects[i]
-      if (!prev || !deps || deps.some((d, k) => !Object.is(d, prev.deps?.[k]))) {
-        if (prev?.cleanup) prev.cleanup()
-        const cleanup = fn()
-        effects[i] = {
-          deps: deps ? deps.slice() : undefined,
-          cleanup: typeof cleanup === 'function' ? cleanup : undefined,
-        }
-      }
-    },
-    useMemo(fn, deps) {
-      const i = cursor++
-      const prev = memos[i]
-      if (!prev || !deps || deps.some((d, k) => !Object.is(d, prev.deps?.[k]))) {
-        memos[i] = { value: fn(), deps: deps ? deps.slice() : undefined }
-      }
-      return memos[i].value
-    },
-    useCallback(fn, deps) {
-      const i = cursor++
-      const prev = memos[i]
-      if (!prev || !deps || deps.some((d, k) => !Object.is(d, prev.deps?.[k]))) {
-        memos[i] = { value: fn, deps: deps ? deps.slice() : undefined }
-      }
-      return memos[i].value
-    },
-    useRef(initial) {
-      const i = cursor++
-      if (!Object.hasOwn(states, i)) states[i] = { value: { current: initial } }
-      return states[i].value
-    },
-  }
-}
-
-/** React.Component 的桩基类（ErrorBoundary 需要 Component/super/setState 语义）。 */
-class StubReactComponent {
-  constructor(props) {
-    this.props = props
-    this.state = {}
-  }
-
-  setState(partial) {
-    Object.assign(this.state, partial)
-  }
-}
-// 对齐真实 React：类组件靠 prototype.isReactComponent 判定
-StubReactComponent.prototype.isReactComponent = true
-
-function createElement(type, props, ...children) {
-  // 类组件：实例化 + 调 render（对齐真实 React 的 isReactComponent 判定；
-  // render 抛错时模拟 React 错误边界：getDerivedStateFromError + 重渲染）
-  if (typeof type === 'function' && type.prototype?.isReactComponent) {
-    const instance = new type({ ...(props || {}), children })
-    try {
-      const rendered = instance.render()
-      return Array.isArray(rendered) ? rendered[0] : rendered
-    } catch (err) {
-      const derived = type.getDerivedStateFromError?.(err)
-      if (!derived) throw err
-      instance.setState(derived)
-      const rendered = instance.render()
-      return Array.isArray(rendered) ? rendered[0] : rendered
-    }
-  }
-  // 函数型组件：内联渲染（CardTile/CardRow/DetailPane/WikiPanel/MemoryPanel）
-  if (typeof type === 'function') {
-    return type({ ...(props || {}), children })
-  }
-  return {
-    type,
-    props: props || {},
-    children: children.flat().filter(c => c !== null && c !== undefined && c !== false && c !== ''),
-  }
-}
-
-/**
- * 深度收集虚拟树中的文本（children 字符串）。
- * @param {object|string|number} node - 虚拟节点。
- * @param {string[]} out - 收集输出。
- * @returns {string[]} 文本数组。
- */
-function collectTexts(node, out = []) {
-  if (node === null || node === undefined || node === false) return out
-  if (typeof node === 'string' || typeof node === 'number') {
-    out.push(String(node))
-    return out
-  }
-  if (Array.isArray(node)) {
-    node.forEach(c => collectTexts(c, out))
-    return out
-  }
-  if (node && Array.isArray(node.children)) {
-    node.children.forEach(c => collectTexts(c, out))
-  }
-  return out
-}
-
-/**
- * 在虚拟树里找第一个满足断言的节点。
- * @param {object} node - 根节点。
- * @param {(node:object)=>boolean} pred - 判定函数。
- * @returns {object|null} 匹配节点。
- */
-function findNode(node, pred) {
-  if (!node || typeof node !== 'object') return null
-  if (pred(node)) return node
-  for (const child of node.children ?? []) {
-    const hit = findNode(child, pred)
-    if (hit) return hit
-  }
-  return null
-}
-
-/** 等待微任务与定时器排空（异步数据装载完成）。 */
-const flush = async () => {
-  for (let i = 0; i < 4; i++) {
-    await new Promise(resolve => setTimeout(resolve, 20))
-  }
-}
 
 /* ── fake remote.workspaceFiles：模拟工作区文件系统 ── */
 
@@ -361,15 +198,7 @@ test('客户端模块按 ModuleLoader 约定注册并声明 remote 依赖', () =
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name === 'react') {
-      return {
-        createElement,
-        Component: StubReactComponent,
-        useState: hooks.useState,
-        useEffect: hooks.useEffect,
-        useMemo: hooks.useMemo,
-        useCallback: hooks.useCallback,
-        useRef: hooks.useRef,
-      }
+      return reactFor(hooks)
     }
     throw new Error(`意外 require: ${name}`)
   })
@@ -384,15 +213,7 @@ test('apply 注册侧栏与主页面，main 注入 face 提供 files', () => {
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
-    return {
-      createElement,
-      Component: StubReactComponent,
-      useState: hooks.useState,
-      useEffect: hooks.useEffect,
-      useMemo: hooks.useMemo,
-      useCallback: hooks.useCallback,
-      useRef: hooks.useRef,
-    }
+    return reactFor(hooks)
   })
   mod.apply(ctx)
   // 第二个 effect 是 generator：手动推进两步完成侧栏与主页面的注入
@@ -420,15 +241,7 @@ test('挂载页面：选中工作区后渲染统计、已生成卡片与未生�
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
-    return {
-      createElement,
-      Component: StubReactComponent,
-      useState: hooks.useState,
-      useEffect: hooks.useEffect,
-      useMemo: hooks.useMemo,
-      useCallback: hooks.useCallback,
-      useRef: hooks.useRef,
-    }
+    return reactFor(hooks)
   })
   mod.apply(makeStubCtx(wf))
   // 直接挂载页面组件（等价于 slot 渲染）
@@ -460,15 +273,7 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
-    return {
-      createElement,
-      Component: StubReactComponent,
-      useState: hooks.useState,
-      useEffect: hooks.useEffect,
-      useMemo: hooks.useMemo,
-      useCallback: hooks.useCallback,
-      useRef: hooks.useRef,
-    }
+    return reactFor(hooks)
   })
   mod.apply(makeStubCtx(wf))
   // 包装 read 让 index.json 返回 not-found 失败（保留其余文件）
@@ -496,21 +301,45 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
   assert.ok(!texts.some(s => s.includes('loadFailed')), '不应把 not-found 当作读取失败')
 })
 
+test('startSession 抛错时页面给出可读提示而非静默失败', async () => {
+  const { wf, workspaces } = makeFakeRemotes()
+  const hooks = makeHooks()
+  const mod = captured.factory((name) => {
+    if (name !== 'react') throw new Error(`意外 require: ${name}`)
+    return reactFor(hooks)
+  })
+  mod.apply(makeStubCtx(wf))
+  hooks.mount(RepoWikiPageOf(mod), {
+    t: (key) => key,
+    workspaces,
+    // 模拟 startSession 现场抛错（如会话服务降级）
+    startSession: () => { throw new Error('session boom') },
+    files: wf,
+    notice: null,
+  })
+  await flush()
+  const select = findNode(hooks.root, (n) => n.type === 'select' && n.props.id === 'repowiki-workspace')
+  select.props.onChange({ target: { value: 'w1' } })
+  await flush()
+
+  const runBtn = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0] === 'actionAll')
+  assert.ok(runBtn, '应渲染一键生成按钮')
+  runBtn.props.onClick()
+  await flush()
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('failed')), 'startSession 抛错应渲染失败提示')
+  assert.ok(!texts.some(s => s.includes('actionFailed')), 'run 自身的 try/catch 应先兜底，不应走到 guard')
+})
+
 /** 挂载页面（未选工作区），返回 hooks。 */
 function mountPage() {
   const { wf, workspaces, startSession } = makeFakeRemotes()
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
-    return {
-      createElement,
-      Component: StubReactComponent,
-      useState: hooks.useState,
-      useEffect: hooks.useEffect,
-      useMemo: hooks.useMemo,
-      useCallback: hooks.useCallback,
-      useRef: hooks.useRef,
-    }
+    return reactFor(hooks)
   })
   mod.apply(makeStubCtx(wf))
   hooks.mount(RepoWikiPageOf(mod), {

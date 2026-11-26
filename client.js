@@ -69,6 +69,7 @@ const DICTS = {
     note: '生成在所选工作区的新会话中执行（模型调用 repowiki-* 工具）；产物写入该工作区目录的 .dsh-repowiki/，随 Git 共享。',
     needWorkspace: '请先选择工作区。',
     failed: '发起失败，请重试。',
+    actionFailed: '操作失败',
     busy: '已在新会话中开始，可在会话中查看进度。',
     reload: '刷新',
     loading: '正在读取工作区知识库 …',
@@ -118,6 +119,7 @@ const DICTS = {
     note: 'Generation runs in a new session of the chosen workspace (the model calls the repowiki-* tools); artifacts land in that workspace .dsh-repowiki/ directory and travel with Git.',
     needWorkspace: 'Pick a workspace first.',
     failed: 'Failed to start, please retry.',
+    actionFailed: 'Action failed',
     busy: 'Started in a new session; follow progress there.',
     reload: 'Reload',
     loading: 'Reading the workspace knowledge base …',
@@ -595,6 +597,26 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /**
+       * 事件处理器兜底包装：React 错误边界不捕获事件处理器（onClick/onChange）
+       * 抛错——事件期异常只会进控制台，用户端表现为"点击无反应"。guard 把
+       * 同步抛错与异步拒绝都转为可读消息行（role=status），让失败模式可见。
+       * @param {string} label - 诊断用的处理器标识（写入消息正文）。
+       * @param {Function} fn - 原处理器。
+       * @returns {Function} 包装后的处理器。
+       */
+      const guard = (label, fn) => (e) => {
+        try {
+          const result = fn(e)
+          if (result && typeof result.catch === 'function') {
+            result.catch((err) => setMessage(`${t('actionFailed')} (${label}): ${err?.message ?? err}`))
+          }
+          return result
+        } catch (err) {
+          setMessage(`${t('actionFailed')} (${label}): ${err?.message ?? err}`)
+        }
+      }
+
       /* 派生视图数据 */
       const cardByPath = useMemo(() => new Map(cards.map(c => [c.path, c])), [cards])
       const rows = useMemo(() => (index?.files ?? []).map((f) => ({
@@ -663,7 +685,7 @@ window.__ModuleLoader__.load({
       const filterButton = (value, label, count) => h('button', {
         type: 'button',
         'aria-pressed': filter === value,
-        onClick: () => setFilter(value),
+        onClick: guard('filter', () => setFilter(value)),
         style: filter === value ? primaryStyle : buttonStyle,
       }, `${label}${count > 0 ? ` ${count}` : ''}`)
 
@@ -690,21 +712,21 @@ window.__ModuleLoader__.load({
                   `${w.title || w.path} — ${w.path}`)),
               ),
           h('button', {
-            type: 'button', style: buttonStyle, onClick: () => {
+            type: 'button', style: buttonStyle, onClick: guard('reload', () => {
               if (!current) return
               const ac = new AbortController()
               load(ac.signal)
-            },
+            }),
             'aria-label': t('reload'),
           }, t('reload')),
         ),
 
         // 生成动作
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 } },
-          h('button', { type: 'button', style: primaryStyle, onClick: () => run('all') }, t('actionAll')),
-          h('button', { type: 'button', style: buttonStyle, onClick: () => run('index') }, t('actionIndex')),
-          h('button', { type: 'button', style: buttonStyle, onClick: () => run('extract') }, t('actionExtract')),
-          h('button', { type: 'button', style: buttonStyle, onClick: () => run('generate') }, t('actionGenerate')),
+          h('button', { type: 'button', style: primaryStyle, onClick: guard('generate-all', () => run('all')) }, t('actionAll')),
+          h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-index', () => run('index')) }, t('actionIndex')),
+          h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-extract', () => run('extract')) }, t('actionExtract')),
+          h('button', { type: 'button', style: buttonStyle, onClick: guard('generate-wiki', () => run('generate')) }, t('actionGenerate')),
         ),
         h('p', { style: { margin: '0 0 16px', fontSize: 13, ...muted } }, t('note')),
 
@@ -748,17 +770,17 @@ window.__ModuleLoader__.load({
             h('button', {
               type: 'button', 'aria-pressed': tab === 'cards',
               style: tab === 'cards' ? primaryStyle : buttonStyle,
-              onClick: () => setTab('cards'),
+              onClick: guard('tab-cards', () => setTab('cards')),
             }, t('viewCards')),
             h('button', {
               type: 'button', 'aria-pressed': tab === 'wiki',
               style: tab === 'wiki' ? primaryStyle : buttonStyle,
-              onClick: () => setTab('wiki'),
+              onClick: guard('tab-wiki', () => setTab('wiki')),
             }, `${t('viewWiki')} ${wikis.length}`),
             h('button', {
               type: 'button', 'aria-pressed': tab === 'memory',
               style: tab === 'memory' ? primaryStyle : buttonStyle,
-              onClick: () => setTab('memory'),
+              onClick: guard('tab-memory', () => setTab('memory')),
             }, `${t('viewMemory')} ${memories.length}`),
           ),
           tab === 'cards' && h('div', null,
@@ -778,12 +800,12 @@ window.__ModuleLoader__.load({
             }),
             h('button', {
               type: 'button', style: view === 'grid' ? primaryStyle : buttonStyle,
-              onClick: () => setView('grid'), 'aria-pressed': view === 'grid',
+              onClick: guard('view-grid', () => setView('grid')), 'aria-pressed': view === 'grid',
               'aria-label': t('viewGrid'),
             }, t('viewGrid')),
             h('button', {
               type: 'button', style: view === 'list' ? primaryStyle : buttonStyle,
-              onClick: () => setView('list'), 'aria-pressed': view === 'list',
+              onClick: guard('view-list', () => setView('list')), 'aria-pressed': view === 'list',
               'aria-label': t('viewList'),
             }, t('viewList')),
           ),
@@ -797,33 +819,33 @@ window.__ModuleLoader__.load({
                     },
                   },
                   ...filtered.map((r) => h(CardTile, {
-                    key: r.path, row: r, t, tt, onOpen: () => setDetail(r),
+                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => setDetail(r)),
                   })),
                 )
                 : h('div', null,
                   ...filtered.map((r) => h(CardRow, {
-                    key: r.path, row: r, t, tt, onOpen: () => setDetail(r),
+                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => setDetail(r)),
                   })),
                 )),
           // 内联详情列（切片 1 不开新页面；Escape 或按钮关闭）
           detail && h(DetailPane, {
-            row: detail, t, tt, onClose: () => setDetail(null),
+            row: detail, t, tt, onClose: guard('close-detail', () => setDetail(null)),
           }),
           ),
           // Wiki 页签：页面列表与单页原文浏览（切片 3）
           tab === 'wiki' && h(WikiPanel, {
             entries: wikis,
             selected: wikiSelected,
-            onSelect: setWikiSelected,
-            onClose: () => setWikiSelected(null),
+            onSelect: guard('open-wiki', (entry) => setWikiSelected(entry)),
+            onClose: guard('close-wiki', () => setWikiSelected(null)),
             t, tt,
           }),
           // 记忆页签：条目列表（状态徽章）与单条原文浏览（Phase 4）
           tab === 'memory' && h(MemoryPanel, {
             entries: memories,
             selected: memorySelected,
-            onSelect: setMemorySelected,
-            onClose: () => setMemorySelected(null),
+            onSelect: guard('open-memory', (entry) => setMemorySelected(entry)),
+            onClose: guard('close-memory', () => setMemorySelected(null)),
             t, tt,
           }),
         ),
