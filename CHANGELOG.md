@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.30.0] - 2026-11-26
+
+### Changed
+
+- **Detail-pane focus management** (the accessibility observation from the
+  v0.27.0 review): opening a card's detail now moves focus to the detail's
+  close button so keyboard users can act immediately; closing the detail
+  (button or Escape) returns focus to the tile that opened it. The focus
+  capture duck-types a focusable element instead of relying on a global
+  `HTMLElement` (the DOM test harness only sets `document`, where
+  `instanceof HTMLElement` throws and the guard would have swallowed the
+  failure — the failing tests caught this before release).
+
+### Added
+
+- `test/client-dom.test.js`: focus regression — real click after focusing
+  a tile, assert `document.activeElement` is the detail's close button;
+  after Escape, assert it is back on the tile (135/135).
+
 ## [0.29.0] - 2026-11-26
 
 ### Added

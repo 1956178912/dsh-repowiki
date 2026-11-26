@@ -72,6 +72,31 @@ test('DOM 集成：详情经 Escape（真实 keydown）关闭、guard 不误触�
   assert.ok(!container.textContent.includes('actionFailed'), '全程不应出现事件兜底错误消息')
 })
 
+test('DOM 集成：详情打开聚焦关闭按钮、Escape 关闭后焦点归还触发瓦片', async () => {
+  const { container } = await mountLoaded({ Page })
+  const generated = cardTilesOf(container).filter((b) => !b.getAttribute('aria-label').includes('(pending)'))
+  assert.ok(generated.length > 0)
+  // 模拟键盘用户：先聚焦瓦片再打开详情
+  const tile = generated[0]
+  tile.focus()
+  assert.equal(document.activeElement, tile, '前置：瓦片已获焦点')
+  await act(async () => {
+    tile.click()
+    await new Promise((r) => setTimeout(r, 30))
+  })
+  const region = container.querySelector('[role="region"]')
+  assert.ok(region, '详情已打开')
+  const closeBtn = region.querySelector('button[aria-label]')
+  assert.ok(closeBtn, '详情应含关闭按钮')
+  assert.equal(document.activeElement, closeBtn, '详情打开后焦点应落在关闭按钮上')
+
+  await act(async () => {
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  })
+  assert.ok(!container.querySelector('[role="region"]'), 'Escape 后详情应关闭')
+  assert.equal(document.activeElement, tile, '关闭后焦点应归还触发的瓦片')
+})
+
 test('DOM 集成：总览行真实点击下钻到单库视图（多工作区）', async () => {
   const workspaces = {
     list: {

@@ -542,6 +542,20 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
       const [detail, setDetail] = useState(null)
+      // 打开详情前的焦点元素；关闭详情时归还焦点（无障碍：详情打开聚焦其内控件，
+      // 关闭后回到触发它的瓦片，键盘用户不必重新定位）
+      const prevFocusRef = useRef(null)
+      const openDetail = (row) => {
+        // 鸭子类型判断（不依赖全局 HTMLElement，测试环境可能未导出该类）
+        const active = typeof document !== 'undefined' ? document.activeElement : null
+        if (active && typeof active.focus === 'function') prevFocusRef.current = active
+        setDetail(row)
+      }
+      const closeDetail = () => {
+        setDetail(null)
+        prevFocusRef.current?.focus?.()
+        prevFocusRef.current = null
+      }
       const [overview, setOverview] = useState(true)
       const [overviewRows, setOverviewRows] = useState([])
       const [overviewStatus, setOverviewStatus] = useState('idle')
@@ -695,7 +709,7 @@ window.__ModuleLoader__.load({
         if (!detail && !memorySelected) return
         const onKey = (e) => {
           if (e.key !== 'Escape') return
-          if (detail) setDetail(null)
+          if (detail) closeDetail()
           if (memorySelected) setMemorySelected(null)
         }
         document.addEventListener('keydown', onKey)
@@ -971,17 +985,17 @@ window.__ModuleLoader__.load({
                     },
                   },
                   ...filtered.map((r) => h(CardTile, {
-                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => setDetail(r)),
+                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
                   })),
                 )
                 : h('div', null,
                   ...filtered.map((r) => h(CardRow, {
-                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => setDetail(r)),
+                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
                   })),
                 )),
           // 内联详情列（切片 1 不开新页面；Escape 或按钮关闭）
           detail && h(DetailPane, {
-            row: detail, t, tt, onClose: guard('close-detail', () => setDetail(null)),
+            row: detail, t, tt, onClose: guard('close-detail', () => closeDetail()),
           }),
           ),
           // Wiki 页签：页面列表与单页原文浏览（切片 3）
@@ -1203,9 +1217,11 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 详情列（选中条目的元数据与摘要）。 */
+    /** 详情列（选中条目的元数据与摘要）。打开时聚焦关闭按钮，便于键盘用户直接操作。 */
     function DetailPane({ row, t, tt, onClose }) {
       const { card } = row
+      const closeRef = useRef(null)
+      useEffect(() => { closeRef.current?.focus?.() }, [])
       return h('div', {
         role: 'region', 'aria-label': card ? card.title : row.path,
         style: {
@@ -1225,6 +1241,7 @@ window.__ModuleLoader__.load({
             }, row.path),
           ),
           h('button', {
+            ref: closeRef,
             type: 'button', onClick: onClose, style: chipButtonStyle(),
             'aria-label': t('detailClose'),
           }, '×'),
