@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.146.0] - 2026-11-27
+
+### Added
+
+- **Wiki structure and link integrity**: `verify:wiki` now validates manifest
+  page paths (must stay under `wiki/<locale>/`, no `..`/absolute paths, must
+  be `.md`) and that a page's recorded path matches its actual file. It also
+  extracts relative `.md` links from page bodies (ignoring code fences, inline
+  code, images, external URLs and pure anchors), fails on links that escape
+  the project root (`wiki/unsafe-link`) or point to missing files
+  (`wiki/broken-link`), and caps existence probes at 200 (strict mode fails
+  when the cap is hit). New problem codes: `wiki/invalid-page-path`,
+  `wiki/page-path-mismatch`, `wiki/unsafe-link`, `wiki/broken-link`,
+  `wiki/link-probe-capped`.
+
+### Tests
+
+- 510 cases pass (LANG=en and LANG=zh); new cases cover a dead internal link,
+  an escaping link, and invalid/mismatched manifest page paths.
+
 ## [0.145.0] - 2026-11-27
 
 ### Added

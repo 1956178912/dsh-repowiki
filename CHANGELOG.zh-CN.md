@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.146.0] - 2026-11-27
+
+- **页面结构与链接完整性**：`verify:wiki` 校验清单页面路径（必须在
+  `wiki/<locale>/` 下、不含 `..`/绝对路径、以 `.md` 结尾）以及清单记录
+  路径与实际文件位置一致；同时从正文提取相对 `.md` 链接（跳过代码块、
+  行内代码、图片、外链与纯锚点），对越出项目根的链接
+  （`wiki/unsafe-link`）与目标缺失的链接（`wiki/broken-link`）失败，
+  存在性探测上限 200（strict 下截断即失败）。新增问题码
+  `wiki/invalid-page-path`、`wiki/page-path-mismatch`、`wiki/unsafe-link`、
+  `wiki/broken-link`、`wiki/link-probe-capped`。
+- **测试**：510 例在 LANG=en 与 LANG=zh 下全通过；新增内部死链、越界
+  链接与清单路径非法/位置不符用例。
+
 ## [0.145.0] - 2026-11-27
 
 - **索引版本门禁**：`index.json` 早于 schema v6（无行数）时默认告警，

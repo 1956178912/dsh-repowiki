@@ -9,6 +9,7 @@
  * - 引用内容漂移（清单 v3 `citationDigests`）
  * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
  * - 清单登记但磁盘缺失的页面（孤儿页仅告警）
+ * - 清单页面路径非法/与页面位置不符，以及页面内相对 `.md` 死链
  * - 上次生成失败页（清单 `failed`/`failedTotal`）
  * - 空清单（默认告警，`--strict`/`--require` 失败）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
@@ -49,6 +50,37 @@ const MAX_FS_PROBES = 200
 
 /** 发现 Wiki 页面的目录深度上限（与 listWikiPages 一致）。 */
 const MAX_PAGE_DEPTH = 3
+
+/** 页面内部链接的存在性探测上限（防止异常页面放大 IO）。 */
+const MAX_LINK_PROBES = 200
+
+/**
+ * 提取 Markdown 正文中的相对 `.md` 链接（跳过代码、图片、外链、锚点与根路径）。
+ * @param {string} text - 页面正文。
+ * @returns {string[]} 目标路径（已剥离锚点与查询串，保留原始 URL 编码）。
+ */
+function extractMarkdownLinks(text) {
+  const sanitized = String(text ?? '')
+    // 代码块/行内代码里的示例链接不应被当成真实链接
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`[^`\n]*`/g, '')
+  const links = []
+  const re = /(!?)\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+  let match
+  while ((match = re.exec(sanitized))) {
+    if (match[1] === '!') continue
+    const raw = match[2].trim()
+    if (!raw || raw.startsWith('#') || raw.startsWith('/')) continue
+    if (/^(?:https?:|mailto:|tel:|data:)/i.test(raw)) continue
+    const hash = raw.indexOf('#')
+    const withoutHash = hash >= 0 ? raw.slice(0, hash) : raw
+    const query = withoutHash.indexOf('?')
+    const target = query >= 0 ? withoutHash.slice(0, query) : withoutHash
+    if (!target || !target.toLowerCase().endsWith('.md')) continue
+    links.push(target)
+  }
+  return links
+}
 
 const USAGE = [
   'Usage: node scripts/verify-wiki.mjs [options]',
@@ -320,7 +352,8 @@ function memoriesDigest(memories) {
  * 枚举某 locale 的 Wiki 页面文件（slug 优先取 frontmatter，与 listWikiPages 一致）。
  * @param {string} root - 项目根。
  * @param {string} locale - 语言。
- * @returns {Promise<Map<string, {path:string, title:string}>>} slug → 页面信息。
+ * @returns {Promise<Map<string, {path:string, rel:string, title:string, text:string}>>}
+ *   slug → 页面信息（rel 相对资产根，text 为正文）。
  */
 async function readWikiPages(root, locale) {
   const base = path.join(root, ASSET_DIR, WIKI_DIR, locale)
@@ -348,18 +381,23 @@ async function readWikiPages(root, locale) {
       const file = path.join(dir, entry.name)
       let slug = entry.name.replace(/\.md$/, '')
       let title = slug
+      let text = ''
       try {
-        const parsed = parseFrontmatter(await readFile(file, 'utf8'))
+        text = await readFile(file, 'utf8')
+        const parsed = parseFrontmatter(text)
         if (parsed) {
           if (typeof parsed.meta.slug === 'string' && parsed.meta.slug) slug = parsed.meta.slug
           if (typeof parsed.meta.title === 'string' && parsed.meta.title) title = parsed.meta.title
+          text = parsed.body
         }
       } catch {
         // 坏页仍以文件名参与缺失/孤儿判定
       }
       pages.set(slug, {
         path: path.relative(root, file).split(path.sep).join('/'),
+        rel: path.relative(path.join(root, ASSET_DIR), file).split(path.sep).join('/'),
         title,
+        text,
       })
     }
   }
@@ -482,6 +520,71 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   if (orphanedPages.length > 0) {
     addWarning('wiki/orphaned-pages', `${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
   }
+  // 清单路径与页面内部链接：generate 只写净化后的路径，但手工改清单/正文
+  // 可能引入跨 locale、路径穿越或指向已删除页面的死链。
+  const invalidPagePaths = []
+  const pagePathMismatches = []
+  for (const page of manifest.pages) {
+    const slug = typeof page?.slug === 'string' ? page.slug : ''
+    const rel = typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''
+    if (!slug || !rel) continue
+    if (rel.startsWith('/') || rel.split('/').includes('..')
+      || !rel.startsWith(`${WIKI_DIR}/${locale}/`) || !rel.endsWith('.md')) {
+      invalidPagePaths.push(`${slug} → ${rel}`)
+      continue
+    }
+    const disk = diskPages.get(slug)
+    if (disk && disk.rel !== rel) pagePathMismatches.push(`${slug} → ${rel} (file: ${disk.rel})`)
+  }
+  if (invalidPagePaths.length > 0) {
+    addIssue('wiki/invalid-page-path', `${invalidPagePaths.length} manifest page path(s) are invalid: ${invalidPagePaths.slice(0, 3).join(', ')}`)
+  }
+  if (pagePathMismatches.length > 0) {
+    addIssue('wiki/page-path-mismatch', `${pagePathMismatches.length} manifest page path(s) do not match the file location: ${pagePathMismatches.slice(0, 3).join(', ')}`)
+  }
+  const brokenLinks = []
+  const unsafeLinks = []
+  const seenLinks = new Set()
+  let linkProbes = 0
+  let linkCapped = false
+  for (const [slug, page] of diskPages) {
+    for (const rawTarget of extractMarkdownLinks(page.text)) {
+      let target = rawTarget
+      try {
+        target = decodeURIComponent(rawTarget)
+      } catch {
+        // 非法转义保留原值，存在性探测会自然失败
+      }
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.rel), target))
+      const key = `${page.rel}\u0000${resolved}`
+      if (seenLinks.has(key)) continue
+      seenLinks.add(key)
+      if (resolved === '..' || resolved.startsWith('../')) {
+        unsafeLinks.push(`${slug} → ${rawTarget}`)
+        continue
+      }
+      if (linkProbes >= MAX_LINK_PROBES) {
+        linkCapped = true
+        break
+      }
+      linkProbes++
+      if (!(await isFile(path.join(root, ASSET_DIR, resolved)))) {
+        brokenLinks.push(`${slug} → ${resolved}`)
+      }
+    }
+    if (linkCapped) break
+  }
+  if (unsafeLinks.length > 0) {
+    addIssue('wiki/unsafe-link', `${unsafeLinks.length} link(s) escape the project root: ${unsafeLinks.slice(0, 3).join(', ')}`)
+  }
+  if (brokenLinks.length > 0) {
+    addIssue('wiki/broken-link', `${brokenLinks.length} internal .md link(s) point to missing files: ${brokenLinks.slice(0, 3).join(', ')}`)
+  }
+  if (linkCapped) {
+    const message = `internal link existence check stopped after ${MAX_LINK_PROBES} probes; unverified links are not reported as broken`
+    if (strict) addIssue('wiki/link-probe-capped', message)
+    else addWarning('wiki/link-probe-capped', message)
+  }
   // 上次生成失败页：清单已按新输入指纹更新，但部分页面没写成功；
   // 不报告就会把一次不完整的生成当成新鲜 Wiki。
   const failedTotal = Number.isInteger(manifest.failedTotal)
@@ -540,6 +643,11 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
     pageFiles: diskPages.size,
     missingPages,
     orphanedPages,
+    invalidPagePaths,
+    pagePathMismatches,
+    brokenLinks,
+    unsafeLinks,
+    linkProbeCapped: linkCapped,
     failedPages: failedTotal,
     broken,
     ranges,
@@ -711,6 +819,8 @@ export function formatReport(result) {
     if (drift) lines.push(`    e.g. drift ${locale.drift.pages[0].title}: ${drift.source}`)
     const coverage = locale.coveragePages?.pages?.[0]
     if (coverage) lines.push(`    e.g. untracked ${coverage.title}: ${coverage.untracked}`)
+    const link = locale.brokenLinks?.[0]
+    if (link) lines.push(`    e.g. broken link ${link}`)
   }
   lines.push(result.ok ? 'Result: PASS' : 'Result: FAIL')
   return lines.join('\n')

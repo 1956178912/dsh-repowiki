@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page notices, index-version/range-unverified strictness and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.145.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page notices, index-version/range-unverified strictness, internal-link/page-path integrity and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.146.0)
 
 | Capability | Description |
 |---|---|
@@ -142,6 +142,7 @@ Roadmap:
 - Persisted generation failures (v0.143.0): `repowiki-generate` records failed page writes in the manifest; `verify:wiki` reports `wiki/generation-failed` (warning by default, failure under `--strict`) and status shows `wiki.failed`/`wiki.failedPages`
 - Panel wiki diagnostics (v0.144.0): the Wiki tab warns about failed pages from the last generation and manifest pages missing from disk, including when the page list is empty
 - Index-version and CI fixture gate (v0.145.0): a pre-v6 index or an unverifiable `#Lx-Ly` range warns by default and fails under `--strict`; the workflow now proves the strict gate both passes on a fresh fixture and fails after a card change
+- Link and path integrity (v0.146.0): manifest page paths must stay under `wiki/<locale>/` and match their files; relative `.md` links in page bodies fail when they escape the project root or point to missing files, with a 200-probe cap that fails under `--strict`
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights
@@ -207,10 +208,11 @@ npm run verify:host
 
 # Wiki freshness gate: fail on missing citations, out-of-range lines,
 # content drift, stale cards/accepted memory, manifest pages missing from
-# disk, failed page writes from the last generation or empty manifests under
+# disk, invalid/mismatched page paths, broken or escaping internal .md links,
+# failed page writes from the last generation or empty manifests under
 # --strict/--require; untracked/unverifiable citations, pre-v6 indexes and
 # unverifiable ranges warn unless --strict. --require fails when no manifest
-# exists. --root / --locale / --json supported. v0.145.0.
+# exists. --root / --locale / --json supported. v0.146.0.
 npm run verify:wiki -- --root . --strict --require
 npm run verify:wiki -- --root . --strict --require
 ```
@@ -219,7 +221,8 @@ npm run verify:wiki -- --root . --strict --require
 
 `npm run verify:wiki -- --json` prints a machine-readable report and exits
 non-zero when a wiki is broken or stale (including manifest pages missing from
-disk), so the gate can run after `repowiki-generate` in any pipeline. Exit
+disk, invalid page paths and broken internal links), so the gate can run after
+`repowiki-generate` in any pipeline. Exit
 codes: `0` pass, `1` verification failed, `2` usage or read error. `--strict`
 also fails on untracked citations, unverifiable digests or ranges, capped
 citation probes, pre-v6 indexes, manifests without staleness digests and
@@ -241,7 +244,7 @@ stale-failure exit code.
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
-scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/failures/coverage, v0.145.0)
+scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/paths/coverage, v0.146.0)
 scripts/check-coverage.mjs      Coverage gate (lines/branches/functions)
 scripts/scan-secrets.mjs        Git-tracked secret scan
 scripts/bench.mjs               Synthetic-repo index benchmark
@@ -296,7 +299,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (508 cases)
+test/                  Unit and integration tests (510 cases)
 ```
 
 ## License

@@ -356,6 +356,59 @@ test('verify-wiki：旧索引缺少行数时默认告警，严格模式失败', 
     && problem.severity === 'error'))
 })
 
+test('verify-wiki：页面内部死链与越界链接失败', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+  const pageFile = path.join(root, '.dsh-repowiki/wiki/zh/overview.md')
+  const front = encodeFrontmatter({ slug: 'overview', title: 'Overview' })
+  writeText(pageFile, `${front}\n# Overview\n\n[missing](missing.md) [web](https://example.com/x.md) [top](#overview) ![img](pic.md)\n`)
+
+  const broken = await verifyWiki({ root })
+  assert.equal(broken.ok, false)
+  assert.ok(broken.problems.some(problem => problem.code === 'wiki/broken-link'
+    && problem.severity === 'error'))
+  assert.ok(!broken.problems.some(problem => problem.code === 'wiki/unsafe-link'))
+  assert.match(formatReport(broken), /e\.g\. broken link overview → wiki\/zh\/missing\.md/)
+
+  writeText(pageFile, `${front}\n# Overview\n\n[outside](../../../../etc/passwd.md)\n`)
+  const unsafe = await verifyWiki({ root })
+  assert.equal(unsafe.ok, false)
+  assert.ok(unsafe.problems.some(problem => problem.code === 'wiki/unsafe-link'))
+})
+
+test('verify-wiki：清单页面路径非法或与文件位置不符失败', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  const base = {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+  }
+  writeManifest(root, 'zh', {
+    ...base,
+    pages: [{ ...pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1)), path: '../secret.md' }],
+  })
+  const invalid = await verifyWiki({ root })
+  assert.equal(invalid.ok, false)
+  assert.ok(invalid.problems.some(problem => problem.code === 'wiki/invalid-page-path'))
+
+  writeManifest(root, 'zh', {
+    ...base,
+    pages: [{ ...pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1)), path: 'wiki/zh/other.md' }],
+  })
+  const mismatch = await verifyWiki({ root })
+  assert.equal(mismatch.ok, false)
+  assert.ok(mismatch.problems.some(problem => problem.code === 'wiki/page-path-mismatch'))
+})
+
 test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
   const root = makeRoot()
   const optional = await verifyWiki({ root })
