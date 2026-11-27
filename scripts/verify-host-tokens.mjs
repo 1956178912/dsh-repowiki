@@ -72,7 +72,8 @@ function collectClientTokens() {
   const src = fs.readFileSync(CLIENT, 'utf8')
   const names = new Set()
   // 令牌须以逗号/括号/空白收尾，避免把文档注释里的 var(--dsw-alias-*) 通配写法误当令牌
-  for (const m of src.matchAll(/var\(\s*(--dsw-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?=[,)\s])/g)) names.add(m[1])
+  // 覆盖两类：--dsw-*（主题/语义）与 --dsh-*（布局，如 --dsh-frame-top-clearance）
+  for (const m of src.matchAll(/var\(\s*(--ds[hw]-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?=[,)\s])/g)) names.add(m[1])
   return [...names].sort()
 }
 
@@ -92,14 +93,17 @@ function main() {
 
   const { base, files } = readAsarIndex(asarPath)
   // 官方令牌定义源：主题包 src/styles（design-platform.css 的 264 个 alias
-  // 令牌 + base.css 的 radius 等尺寸令牌）
-  const themeCss = files.filter((f) => /dsh-client-ui-theme\/src\/styles\/.*\.css$/.test(f.path))
+  // 令牌 + base.css 的 radius 等尺寸令牌），以及布局包 AppFrame.module.css
+  // （--dsh-frame-top-clearance 等布局令牌）
+  const themeCss = files.filter((f) =>
+    /dsh-client-ui-theme\/src\/styles\/.*\.css$/.test(f.path)
+    || /dsh-client-ui-layout\/src\/client\/AppFrame\.module\.css$/.test(f.path))
   const allDefs = new Map() // 令牌名 -> 定义次数
   const darkSelector = 'body[data-ds-dark-theme]'
   let darkSeen = false
   for (const f of themeCss) {
     const text = readAsarFile(asarPath, f, base)
-    for (const m of text.matchAll(/(--dsw-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*:/g)) {
+    for (const m of text.matchAll(/(--ds[hw]-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\s*:/g)) {
       allDefs.set(m[1], (allDefs.get(m[1]) || 0) + 1)
     }
     if (text.includes(darkSelector)) darkSeen = true

@@ -35,6 +35,8 @@ test('DOM 集成：真实 React 渲染 + 真实 change 事件装载语料', asyn
   assert.equal(st.height, '100%', '页面根应 height:100%')
   assert.equal(st.overflowY, 'auto', '页面根应 overflow-y:auto')
   assert.equal(st.overflowX, 'hidden', '页面根应 overflow-x:hidden')
+  assert.ok(st.paddingTop.includes('dsh-frame-top-clearance'),
+    'macOS 顶条留白应走官方 --dsh-frame-top-clearance 令牌')
 })
 
 test('DOM 集成：真实 click 事件打开卡片详情（用户动作的端到端复现）', async () => {

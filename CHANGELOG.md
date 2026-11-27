@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.36.0] - 2026-11-27
+
+### Fixed
+
+- **macOS top-strip clearance** (same layout-audit pass as v0.35.0): the
+  shipped AppFrame CSS documents that entry pages in the main panel pad
+  their top by `--dsh-frame-top-clearance` (48px on darwin) so leading
+  content clears the window's top strip (traffic lights, sidebar toggle);
+  the two reference pages (PluginManager, TaskManager) both apply it.
+  Our page used a flat `24px` top padding. The root now uses
+  `padding-top: calc(24px + var(--dsh-frame-top-clearance, 0px))` —
+  platforms without the variable fall back to the previous 24px, and the
+  bottom padding widens to 48px to match the reference pages.
+
+### Changed
+
+- The drift checker now also tracks `--dsh-*` layout tokens (definition
+  source extended with the layout package's `AppFrame.module.css`);
+  13 tokens tracked (9 alias + 4 size).
+
 ## [0.35.0] - 2026-11-27
 
 ### Fixed

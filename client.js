@@ -846,8 +846,12 @@ window.__ModuleLoader__.load({
         // 宿主 mainPanel 为 flex 列 + overflow:hidden——页面须自管滚动
         // （官方 PluginManagerPage 同款：height:100% + overflow-y:auto，
         // 头部与内容共用一个滚动器）。缺此声明时内容超出即被裁掉、无法滑动。
+        // macOS 顶部窗口条（交通灯/侧栏开关）会压住入口页首行：官方参照页
+        // 以 var(--dsh-frame-top-clearance) 补 padding-top（非 darwin 回退 0）。
         style: {
-          padding: '24px 28px', maxWidth: 960, margin: '0 auto',
+          paddingTop: 'calc(24px + var(--dsh-frame-top-clearance, 0px))',
+          paddingRight: '28px', paddingBottom: '48px', paddingLeft: '28px',
+          maxWidth: 960, margin: '0 auto',
           height: '100%', boxSizing: 'border-box',
           overflowY: 'auto', overflowX: 'hidden',
         },
