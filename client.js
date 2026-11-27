@@ -1271,8 +1271,17 @@ window.__ModuleLoader__.load({
     function DetailPane({ row, t, tt, onClose }) {
       const { card } = row
       const closeRef = useRef(null)
+      const detailRef = useRef(null)
       useEffect(() => { closeRef.current?.focus?.() }, [])
+      // 当新卡片打开时，自动滚动到详情面板，让用户能看到完整内容
+      useEffect(() => {
+        const el = detailRef.current
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, [row])
       return h('div', {
+        ref: detailRef,
         role: 'region', 'aria-label': card ? card.title : row.path,
         style: {
           marginTop: 12, padding: 16, borderRadius: 'var(--dsw-radius-md, 12px)',

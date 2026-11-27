@@ -5,6 +5,12 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.40.0] - 2026-11-27
+
+### Changed
+
+- **Knowledge cards auto-scroll to detail** (user request): when clicking a card, the detail pane now smoothly scrolls into view (centered) so the full content is visible. Guarded for safety in test environments.
+
 ## [0.39.0] - 2026-11-27
 
 ### Changed
