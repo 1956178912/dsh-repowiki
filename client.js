@@ -348,6 +348,7 @@ const LANGUAGE_LABELS = {
   haskell: 'Haskell',
   erlang: 'Erlang',
   solidity: 'Solidity',
+  clojure: 'Clojure',
   c: 'C',
   cpp: 'C++',
 }

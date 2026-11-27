@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.214.0] - 2026-11-28
+
+- **Clojure 支持（第 28 种语言）**：`.clj`/`.cljs`/`.cljc` 提取 `ns`
+  （class）、`defn`/`defn-`/`defmacro`/`defmulti`/`defmethod`（function）、
+  `def`/`defonce`（variable）与 `defrecord`/`deftype`/`defprotocol`/
+  `definterface`（class）。`^:private` 与 `defn-` 标记非导出；`;` 注释与
+  字符串屏蔽，`(comment …)` 整体跳过，每个形式范围按括号配平。
+  `(:require …)`/`(:use …)` 命名空间经每个 `src/`/`test/` 根解析，同类
+  扩展优先（`.clj`/`.cljc`/`.cljs`），外部命名空间不建边。`deps.edn`
+  `:deps` 与 `project.clj` `:dependencies` 提供坐标（版本映射不参与
+  解析）、项目名/版本与 Clojure 技术映射。Prompt 围栏与面板语言筛选
+  识别 `clojure`。
+- **测试**：627 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖形式种类与
+  括号范围、`defn-`/`^:private` 可见性、`(comment …)` 跳过、require
+  提取、同类扩展解析、外部排除与 deps.edn/project.clj 元数据。
+
 ## [0.213.0] - 2026-11-28
 
 - **Solidity 支持（第 27 种语言）**：`.sol` 提取 `contract`/`library`/

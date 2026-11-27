@@ -174,6 +174,7 @@ export function fenceLang(lang) {
     case 'haskell': return 'haskell'
     case 'erlang': return 'erlang'
     case 'solidity': return 'solidity'
+    case 'clojure': return 'clojure'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

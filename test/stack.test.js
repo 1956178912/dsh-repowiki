@@ -429,6 +429,19 @@ test('rebar.config：deps 依赖与技术映射', () => {
   assert.ok(info.technologies.every(t => t.ecosystem === 'rebar'))
 })
 
+test('Clojure：deps.edn 与 project.clj 依赖与技术映射', () => {
+  const info = detectStack({
+    'deps.edn': '{:deps {org.clojure/clojure {:mvn/version "1.11.1"}\n        ring/ring-core {:mvn/version "1.10.0"}\n        metosin/malli {:mvn/version "0.13.0"}}}\n',
+    'project.clj': '(defproject demo "0.2.0"\n  :dependencies [[org.clojure/clojure "1.11.1"]\n                 [reagent/reagent "1.2.0"]])\n',
+  })
+  assert.equal(info.projectName, 'demo')
+  assert.equal(info.projectVersion, '0.2.0')
+  assert.equal(info.dependencyCounts.clojure, 5)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Clojure') && names.includes('Ring')
+    && names.includes('Malli') && names.includes('Reagent'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

@@ -1617,6 +1617,43 @@ test('Solidity：contract/函数/事件/结构体与可见性', () => {
   assert.ok(!byName.has('Hidden'), '注释内合约不登记')
 })
 
+test('Clojure：ns/defn/def/defrecord/defprotocol 与括号范围', () => {
+  const code = [
+    '; (defn hidden [] 1)',
+    '(ns app.core',
+    '  (:require [app.util :as util]))',
+    '',
+    '(defn greet',
+    '  [name]',
+    '  (str "Hello " name))',
+    '',
+    '(defn- private-fn [x] x)',
+    '',
+    '(def config {:port 8080})',
+    '',
+    '(defrecord User [id name])',
+    '(defprotocol Store',
+    '  (save [this item]))',
+    '(defmulti handle :type)',
+    '(defmethod handle :ok [m] m)',
+    '(comment',
+    '  (defn commented [] 1))',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'clojure')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('app.core').kind, 'class')
+  assert.equal(byName.get('greet').kind, 'function')
+  assert.equal(byName.get('greet').line, 5)
+  assert.equal(byName.get('greet').endLine, 7)
+  assert.equal(byName.get('private-fn').exported, false)
+  assert.equal(byName.get('config').kind, 'variable')
+  assert.equal(byName.get('User').kind, 'class')
+  assert.equal(byName.get('Store').kind, 'class')
+  assert.equal(byName.get('handle').kind, 'function')
+  assert.ok(!byName.has('hidden'), '注释内声明不登记')
+  assert.ok(!byName.has('commented'), 'comment 形式整体跳过')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

@@ -888,6 +888,90 @@ function rebarDependencies(text) {
   return deps
 }
 
+/** Clojure / ClojureScript 依赖坐标 → 技术展示名的映射。 */
+const CLOJURE_TECH = {
+  'org.clojure/clojure': 'Clojure',
+  'org.clojure/clojurescript': 'ClojureScript',
+  'org.clojure/core.async': 'core.async',
+  'org.clojure/core.match': 'core.match',
+  'org.clojure/core.logic': 'core.logic',
+  'ring/ring-core': 'Ring',
+  'compojure/compojure': 'Compojure',
+  'reitit/reitit': 'reitit',
+  'pedestal/pedestal': 'Pedestal',
+  'reagent/reagent': 'Reagent',
+  're-frame/re-frame': 're-frame',
+  'datomic/datomic': 'Datomic',
+  'cheshire/cheshire': 'Cheshire',
+  'clj-http/clj-http': 'clj-http',
+  'next.jdbc/next.jdbc': 'next.jdbc',
+  'honeysql/honeysql': 'HoneySQL',
+  'metosin/malli': 'Malli',
+  'clj-kondo/clj-kondo': 'clj-kondo',
+  'nrepl/nrepl': 'nREPL',
+}
+
+/**
+ * 从 `deps.edn` 的 `:deps { … }` 提取依赖坐标；值映射（`{:mvn/version …}`）
+ * 先剔除，避免把 `mvn/version` 误作依赖。
+ * @param {string} text - deps.edn 内容。
+ * @returns {string[]} 依赖坐标（去重）。
+ */
+function depsEdnDependencies(text) {
+  const start = text.search(/:deps\s*\{/)
+  if (start < 0) return []
+  const open = text.indexOf('{', start)
+  let depth = 0
+  let end = text.length
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) { end = i; break }
+    }
+  }
+  const segment = text.slice(open + 1, end).replace(/\{[^{}]*\}/g, ' ')
+  const deps = []
+  for (const m of segment.matchAll(/([A-Za-z][\w.-]*\/[\w.-]+)/g)) {
+    if (!deps.includes(m[1])) deps.push(m[1])
+  }
+  return deps
+}
+
+/**
+ * 从 `project.clj` 读取 `(defproject name "version"` 与
+ * `:dependencies [ … ]` 依赖坐标。
+ * @param {string} text - project.clj 内容。
+ * @returns {{name?:string, version?:string, dependencies:string[]}} 元数据。
+ */
+function projectCljInfo(text) {
+  const head = /\(defproject\s+([A-Za-z][\w.-]*)\s+"([^"]+)"/.exec(text)
+  const dependencies = []
+  const start = text.search(/:dependencies\s*\[/)
+  if (start >= 0) {
+    const open = text.indexOf('[', start)
+    let depth = 0
+    let end = text.length
+    for (let i = open; i < text.length; i++) {
+      const ch = text[i]
+      if (ch === '[') depth++
+      else if (ch === ']') {
+        depth--
+        if (depth === 0) { end = i; break }
+      }
+    }
+    const segment = text.slice(open + 1, end)
+    for (const m of segment.matchAll(/\[([A-Za-z][\w.-]*\/[\w.-]+)/g)) {
+      if (!dependencies.includes(m[1])) dependencies.push(m[1])
+    }
+  }
+  return {
+    ...(head ? { name: head[1], version: head[2] } : {}),
+    dependencies,
+  }
+}
+
 /**
  * 从 `*.cabal` 提取包名/版本与所有 `build-depends` 依赖。
  * 依赖段可跨行（缩进续行），按逗号切分后取首个 token（剔除版本约束）；
@@ -1197,6 +1281,22 @@ export function detectStack(manifests) {
     } else if (path === 'foundry.toml') {
       // Foundry 清单只表明工具链（依赖在 lib/ 子模块，不在清单内）
       info.technologies.push({ name: 'Foundry', ecosystem: 'foundry', source: path })
+    } else if (path === 'deps.edn') {
+      const deps = depsEdnDependencies(text)
+      info.dependencyCounts.clojure = (info.dependencyCounts.clojure ?? 0) + deps.length
+      for (const dep of deps) {
+        const name = CLOJURE_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'clojure', source: path })
+      }
+    } else if (path === 'project.clj') {
+      const proj = projectCljInfo(text)
+      info.dependencyCounts.clojure = (info.dependencyCounts.clojure ?? 0) + proj.dependencies.length
+      if (!info.projectName && proj.name) info.projectName = proj.name
+      if (!info.projectVersion && proj.version) info.projectVersion = proj.version
+      for (const dep of proj.dependencies) {
+        const name = CLOJURE_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'clojure', source: path })
+      }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)
       // 根清单 + 嵌套子项目清单：依赖按出现次数累加，技术名在末尾统一去重

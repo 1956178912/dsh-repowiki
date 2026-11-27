@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.214.0] - 2026-11-28
+
+### Added
+
+- **Clojure indexing (28th language)**: `.clj`/`.cljs`/`.cljc` files
+  produce `ns` (class), `defn`/`defn-`/`defmacro`/`defmulti`/`defmethod`
+  (functions), `def`/`defonce` (variables) and `defrecord`/`deftype`/
+  `defprotocol`/`definterface` (classes). `^:private` and `defn-` mark
+  non-exported forms; `;` comments and strings are masked, `(comment …)`
+  forms are skipped whole, and every form's range follows bracket
+  matching. `(:require …)`/`(:use …)` namespaces resolve through every
+  `src/`/`test/` root with same-flavour extension preference
+  (`.clj`/`.cljc`/`.cljs`); external namespaces stay edge-free.
+  `deps.edn` `:deps` and `project.clj` `:dependencies` supply coordinates
+  (version maps excluded from parsing), project name/version and Clojure
+  technology mappings. Prompt fences and the panel language filter know
+  `clojure`.
+
+### Tests
+
+- 627 cases pass (LANG=en and LANG=zh); new coverage pins form kinds and
+  bracket ranges, `defn-`/`^:private` visibility, `(comment …)` skipping,
+  require extraction, same-flavour resolution, external exclusion and
+  deps.edn/project.clj metadata.
+
 ## [0.213.0] - 2026-11-28
 
 ### Added

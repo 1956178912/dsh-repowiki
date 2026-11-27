@@ -1132,6 +1132,56 @@ function resolveSolidityImport(fromRel, specifier, indexed) {
 }
 
 /**
+ * 建立 Clojure 命名空间搜索根：任意层级的 `src/` 与 `test/` 目录，
+ * 最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 搜索根（末项为项目根 ''）。
+ */
+function buildClojureRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!/\.(?:clj|cljs|cljc)$/.test(rel)) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'src' || segments[i] === 'test') {
+        roots.add(segments.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+  return [
+    ...[...roots].filter(root => root !== '')
+      .sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Clojure 命名空间引用：点分名换算为目录路径，在每个 `src/`/`test/`
+ * 根与项目根下尝试与引用文件同类扩展的 `.clj`/`.cljc`/`.cljs`；外部
+ * 命名空间返回 null。
+ * @param {string} specifier - 命名空间（如 app.util）。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string[]} roots - 搜索根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveClojureSpecifier(specifier, fromRel, roots, indexed) {
+  if (typeof specifier !== 'string' || !/^[a-z][\w.-]*$/.test(specifier)) return null
+  const rel = specifier.replace(/\./g, '/')
+  const own = path.posix.extname(fromRel)
+  const exts = own === '.cljs'
+    ? ['.cljs', '.cljc', '.clj']
+    : own === '.cljc' ? ['.cljc', '.clj', '.cljs'] : ['.clj', '.cljc', '.cljs']
+  for (const base of roots) {
+    for (const ext of exts) {
+      const candidate = base === '' ? `${rel}${ext}` : `${base}/${rel}${ext}`
+      if (indexed.has(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+/**
  * 建立 Erlang include 搜索根：任意层级的 `src/` 与 `include/` 目录，
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2148,6 +2198,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   ocamlModules:Map<string,string[]>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
+ *   clojureRoots:string[],
  *   luaRoots:string[],
  *   gleamRoots:string[],
  *   nimRoots:string[],
@@ -2193,6 +2244,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'clojure') return resolveClojureSpecifier(imp.specifier, fromRel, ctx.clojureRoots, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
@@ -2477,6 +2529,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     ocamlModules: buildOcamlModules(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
+    clojureRoots: buildClojureRoots(indexed),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
     nimRoots: buildNimRoots(indexed),

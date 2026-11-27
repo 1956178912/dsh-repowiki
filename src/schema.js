@@ -142,6 +142,8 @@ export const MANIFEST_FILES = {
   'dune-project': 'dune',
   'rebar.config': 'rebar',
   'foundry.toml': 'foundry',
+  'deps.edn': 'clojure',
+  'project.clj': 'clojure',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -194,6 +196,9 @@ export const EXTENSION_LANGS = {
   erl: 'erlang',
   hrl: 'erlang',
   sol: 'solidity',
+  clj: 'clojure',
+  cljs: 'clojure',
+  cljc: 'clojure',
   c: 'c',
   h: 'c',
   cc: 'cpp',

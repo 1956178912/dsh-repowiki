@@ -1669,6 +1669,25 @@ test('Solidity：相对 import 解析与 foundry 技术栈', async () => {
   assert.ok(doc.stack.technologies.some(t => t.name === 'Foundry' && t.ecosystem === 'foundry'))
 })
 
+test('Clojure：src 根命名空间解析与 deps.edn 技术栈', async () => {
+  const dir = makeProject({
+    'deps.edn': '{:deps {org.clojure/clojure {:mvn/version "1.11.1"}}}\n',
+    'src/app/core.clj': '(ns app.core\n  (:require [app.util :as util]))\n\n(defn run [] (util/x))\n',
+    'src/app/util.clj': '(ns app.util)\n\n(defn x [] 1)\n',
+    'src/app/ui.cljs': '(ns app.ui\n  (:require [app.util :as util]))\n',
+    'src/app/util.cljs': '(ns app.util)\n\n(defn y [] 2)\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { clojure: 4 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/app/core.clj', 'src/app/util.clj')?.line, 2)
+  assert.equal(edge('src/app/ui.cljs', 'src/app/util.cljs')?.line, 2, 'cljs 优先同类扩展')
+
+  assert.equal(doc.stack.dependencyCounts.clojure, 1)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Clojure' && t.ecosystem === 'clojure'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

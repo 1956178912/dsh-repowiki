@@ -3738,6 +3738,100 @@ function extractSolidity(lines) {
 }
 
 /**
+ * 扫描 Clojure 源码行：`;` 行注释截断，字符串内容替换为空格（保留
+ * 引号，避免影响括号配平）。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行。
+ */
+export function clojureScan(lines) {
+  const out = []
+  let inString = false
+  for (const raw of lines) {
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (inString) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { inString = false; masked += '"' }
+        else masked += ' '
+        continue
+      }
+      if (ch === ';') break
+      if (ch === '"') { inString = true; masked += '"'; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 计算 Clojure 顶层形式的结束行：从起始行的括号开始配平（圆/方/花括号
+ * 统一计数），字符串与注释已屏蔽。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} startIdx - 起始行索引（0-based）。
+ * @returns {number} 结束行索引（0-based）。
+ */
+function clojureFormEnd(masked, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < masked.length; i++) {
+    for (const ch of masked[i]) {
+      if (ch === '(' || ch === '[' || ch === '{') { depth++; opened = true }
+      else if (ch === ')' || ch === ']' || ch === '}') depth--
+    }
+    if (opened && depth <= 0) return i
+  }
+  return masked.length - 1
+}
+
+/**
+ * 提取 Clojure 符号：`ns`（class）、`defn`/`defn-`/`defmacro`/`defmulti`/
+ * `defmethod`（function）、`def`/`defonce`（variable）、`defrecord`/
+ * `deftype`/`defprotocol`/`definterface`（class）。只识别行首 `(` 的
+ * 顶层形式；`(comment …)` 整体跳过；`defn-` 与 `^:private` 标记非导出；
+ * 形式范围按括号配平。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractClojure(lines) {
+  const masked = clojureScan(lines)
+  const symbols = []
+  const metaPrefix = '(?:\\^(?:\\{[^}]*\\}|[^\\s()\\[\\]{}"]+)\\s+)*'
+  const namePattern = `(${metaPrefix}[^\\s()\\[\\]{}"]+)`
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (!line.startsWith('(')) continue
+    if (/^\(comment\b/.test(line)) {
+      i = clojureFormEnd(masked, i)
+      continue
+    }
+    const endLine = clojureFormEnd(masked, i) + 1
+    const exported = !/^\((?:defn-|defmacro-)\s/.test(line) && !line.includes('^:private')
+    const ns = /^\(ns\s+([A-Za-z][\w.-]*)/.exec(line)
+    if (ns) {
+      symbols.push({ name: ns[1], kind: 'class', line: i + 1, endLine, exported: true })
+      continue
+    }
+    const fn = new RegExp(`^\\((defn|defn-|defmacro|defmacro-|defmulti|defmethod)\\s+${namePattern}`).exec(line)
+    if (fn) {
+      symbols.push({ name: fn[2], kind: 'function', line: i + 1, endLine, exported })
+      continue
+    }
+    const value = new RegExp(`^\\((def|defonce)\\s+${namePattern}`).exec(line)
+    if (value) {
+      symbols.push({ name: value[2], kind: 'variable', line: i + 1, endLine, exported })
+      continue
+    }
+    const type = new RegExp(`^\\((defrecord|deftype|defprotocol|definterface)\\s+(${metaPrefix}[A-Za-z][\\w.-]*)`).exec(line)
+    if (type) {
+      symbols.push({ name: type[2], kind: 'class', line: i + 1, endLine, exported })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3876,6 +3970,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'haskell') return extractHaskell(lines)
   if (lang === 'erlang') return extractErlang(lines)
   if (lang === 'solidity') return extractSolidity(lines)
+  if (lang === 'clojure') return extractClojure(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

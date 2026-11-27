@@ -9,7 +9,7 @@
 
 import { scriptBlockText } from './sfc.js'
 import {
-  shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
+  shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan, clojureScan,
 } from './symbols.js'
 
 /**
@@ -1085,6 +1085,48 @@ function extractSolidityImports(lines) {
 }
 
 /**
+ * 提取 Clojure `ns` 的 `(:require …)` / `(:use …)` 命名空间引用。
+ * 从 `:require` 起按括号深度跟踪到闭合，提取 `[ns.name …]` 与裸
+ * `ns.name` 形式；字符串/注释内的伪引用由 `clojureScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractClojureImports(lines) {
+  const result = []
+  const masked = clojureScan(lines)
+  let inRequire = false
+  let depth = 0
+  for (let i = 0; i < masked.length; i++) {
+    let line = masked[i]
+    if (!inRequire) {
+      const idx = line.search(/:(?:require|use)\b/)
+      if (idx < 0) continue
+      inRequire = true
+      depth = 1
+      line = line.slice(idx)
+    }
+    for (const m of line.matchAll(/\[([a-z][\w.-]*)/g)) {
+      result.push({
+        specifier: m[1],
+        line: i + 1,
+        kind: 'import',
+        relative: false,
+        imported: [],
+      })
+    }
+    for (const ch of line) {
+      if (ch === '(' || ch === '[' || ch === '{') depth++
+      else if (ch === ')' || ch === ']' || ch === '}') depth--
+    }
+    if (depth <= 0) {
+      inRequire = false
+      depth = 0
+    }
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1195,6 +1237,7 @@ export function extractImports(code, lang) {
   if (lang === 'haskell') return extractHaskellImports(lines)
   if (lang === 'erlang') return extractErlangImports(lines)
   if (lang === 'solidity') return extractSolidityImports(lines)
+  if (lang === 'clojure') return extractClojureImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -582,6 +582,22 @@ test('Solidity：import 变体与注释屏蔽', () => {
   ])
 })
 
+test('Clojure：ns require 提取与注释屏蔽', () => {
+  const code = [
+    '(ns app.core',
+    '  (:require [app.util :as util]',
+    '            [clojure.string :as str])',
+    '  (:import (java.util Date)))',
+    '; (ns fake (:require [hidden.ns]))',
+    '(def s ":require [no.such]")',
+  ].join('\n')
+  const imports = extractImports(code, 'clojure')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['app.util', 2],
+    ['clojure.string', 3],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',
