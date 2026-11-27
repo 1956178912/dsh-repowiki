@@ -28,7 +28,7 @@
 
 | 语言 | 符号 | 本地依赖边 |
 |---|---|---|
-| JavaScript / TypeScript | 函数/类/方法/interface/type/变量 | 相对 import / re-export / require / 动态 import；`tsconfig`/`jsconfig` 的 `paths` + `baseUrl` 别名；工作区包名经 `exports`/`main` → 源码入口；`export { x as y } from` 记录别名并归到目标 x |
+| JavaScript / TypeScript | 函数/类/方法/interface/type/变量 | 相对 import / re-export / require / 动态 import；`tsconfig`/`jsconfig` 的 `paths` + `baseUrl` 别名；工作区包名经 `exports`/`main` → 源码入口；`export { x as y } from` 记录别名并归到目标 x；具名 `export default` 标记 default，`export { default [as y] } from` 归到真实具名符号（匿名默认导出不登记） |
 | Vue SFC | 只解析 `<script>` / `<script setup>` 块，符号规则同 JS/TS，行号与源文件一致 | 脚本块内的 import 按 JS/TS 规则解析（相对路径、tsconfig 别名、工作区包）；`<template>`/`<style>` 不产符号、不建边 |
 | Svelte | 只解析 `<script context="module">` 与实例 `<script>` 块，符号规则同 JS/TS | 同上；标记与样式不产符号、不建边 |
 | Python | class / def / async def（含方法归属） | 相对 from-import；绝对 `import a.b` / `from a.b import c` 在项目根、pyproject 自定义根与 `src`/`lib` 布局根下解析，`from 包 import 名` 优先子模块；`from x import *` 记为 `*` 通配符（解析器 v10），`__init__.py` 的具名/星号导入作为包 barrel 参与引用/使用点/影响面，`as` 别名记录原名→本地名，`__all__` 未解析（潜在引用由词法扫描确认） |

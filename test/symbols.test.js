@@ -6,6 +6,21 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { extractSymbols } from '../src/symbols.js'
 
+test('JS：具名默认导出标记 default，普通导出不带标记', () => {
+  const code = [
+    'export default function Button() {}',
+    'export default class Dialog {}',
+    'export function parse() {}',
+    'export interface Props {}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'typescript')
+  const byName = new Map(symbols.map(symbol => [symbol.name, symbol]))
+  assert.equal(byName.get('Button').default, true)
+  assert.equal(byName.get('Dialog').default, true)
+  assert.equal(byName.get('parse').default, undefined)
+  assert.equal(byName.get('Props').default, undefined)
+})
+
 test('TS：提取函数、类与方法、interface/type、export 标记', () => {
   const code = [
     'export function foo(a) { return a }',

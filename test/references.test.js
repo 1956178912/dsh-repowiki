@@ -232,6 +232,31 @@ test('buildReferenceIndex：别名再导出归到目标原名', () => {
   ], 'pub use … as Renamed 归到 core.rs 的 Foo')
 })
 
+test('buildReferenceIndex：默认导出经再导出归到具名符号', () => {
+  const edges = [
+    { from: 'src/index.ts', to: 'src/Button.ts', kind: 'export-from', line: 1, symbols: ['default'], aliases: [{ from: 'default', to: 'Button' }] },
+    { from: 'src/app.ts', to: 'src/index.ts', kind: 'import', line: 1, symbols: ['Button'] },
+    { from: 'src/index2.ts', to: 'src/Button.ts', kind: 'export-from', line: 1, symbols: ['default'] },
+    { from: 'src/app2.ts', to: 'src/index2.ts', kind: 'import', line: 1, symbols: ['default'] },
+  ]
+  const files = [
+    { path: 'src/index.ts', lang: 'typescript', symbols: [] },
+    { path: 'src/index2.ts', lang: 'typescript', symbols: [] },
+    { path: 'src/Button.ts', lang: 'typescript', symbols: [{ name: 'Button', kind: 'class', exported: true, default: true }] },
+    { path: 'src/app.ts', lang: 'typescript', symbols: [] },
+    { path: 'src/app2.ts', lang: 'typescript', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/Button.ts').get('Button'), [
+    { path: 'src/app.ts', line: 1 },
+    { path: 'src/app2.ts', line: 1 },
+  ], 'default as Button 与同名 default 再导出都归到具名默认导出 Button')
+  assert.deepEqual(refs.get('src/Button.ts').get('default'), [
+    { path: 'src/index.ts', line: 1 },
+    { path: 'src/index2.ts', line: 1 },
+  ], '内部 default 键仅承载再导出边，不参与符号命中')
+})
+
 test('buildReferenceIndex：通配导入沿 barrel 链记为下游潜在引用', () => {
   const edges = [
     { from: 'src/barrel.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },

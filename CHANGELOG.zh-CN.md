@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.255.0] - 2026-11-28
+
+- **默认导出再导出**：具名 `export default function`/`class`/`interface`
+  标记为文件默认符号，`export { default as Button } from './Button'` 与
+  `export { default } from './Button'` 在引用、词法使用点与符号影响面中
+  解析到真实具名符号。
+- 匿名默认导出保持不登记（不编造 `default` 符号）；解析器 v13 重新解析
+  缓存符号。
+- **测试**：802 例通过（LANG=en）；新增默认标记、默认再导出引用与真实
+  索引 cards 集成覆盖。
+
 ## [0.254.0] - 2026-11-28
 
 - **别名再导出**：JS/TS `export { parse as parseValue } from`、Python

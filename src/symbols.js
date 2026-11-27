@@ -22,6 +22,8 @@ import { scriptBlockText } from './sfc.js'
  * @property {number} endLine - 定义块结束行（1-based，保守取下一个同级定义前一行的最小值）。
  * @property {boolean} exported - 是否被 export（用于检索优先级与生成摘要）。
  * @property {string} [parent] - 所属类名（仅 method）。
+ * @property {boolean} [default] - 是否为 `export default` 声明的符号
+ *   （用于默认导出的再导出解析；匿名默认导出无法具名，不登记）。
  */
 
 /** Dart 顶层/成员声明关键字（禁止被误识别为函数名）。 */
@@ -274,6 +276,7 @@ function extractJsLike(lines) {
     if (!m) continue
     const rest = m.groups.rest
     const exported = /\bexport\b/.test(m.groups.modifiers) || /^export\s/.test(raw)
+    const isDefault = /\bdefault\b/.test(m.groups.modifiers)
 
     // function 声明（含 async/生成器）
     let fm = /^(?:async\s+)?function\s*\*?\s*(?<name>[A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\(/.exec(rest)
@@ -284,6 +287,7 @@ function extractJsLike(lines) {
         line: i + 1,
         endLine: findBlockEnd(lines, i),
         exported,
+        ...(isDefault ? { default: true } : {}),
       })
       continue
     }
@@ -297,6 +301,7 @@ function extractJsLike(lines) {
         line: i + 1,
         endLine: findBlockEnd(lines, i),
         exported,
+        ...(isDefault ? { default: true } : {}),
         parent: undefined,
       }
       symbols.push(sym)
@@ -344,6 +349,7 @@ function extractJsLike(lines) {
         line: i + 1,
         endLine: findBlockEnd(lines, i),
         exported,
+        ...(isDefault ? { default: true } : {}),
       })
       continue
     }

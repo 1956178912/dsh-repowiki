@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.255.0] - 2026-11-28
+
+### Added
+
+- **Default-export re-exports**: named `export default function`/`class`/
+  `interface` declarations are marked as the file's default symbol, so
+  `export { default as Button } from './Button'` and
+  `export { default } from './Button'` resolve to the real named symbol in
+  references, lexical usages and symbol impact.
+- Anonymous default exports remain unindexed (no invented `default`
+  symbol); parser v13 re-parses cached symbols.
+
+### Tests
+
+- 802 cases pass (LANG=en); new coverage for default markers, default
+  re-export references and a real-index cards integration.
+
 ## [0.254.0] - 2026-11-28
 
 ### Added

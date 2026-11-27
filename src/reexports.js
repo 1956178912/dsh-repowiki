@@ -57,13 +57,15 @@ export function exportedNamesByFile(files = []) {
  *   同名再导出；`as` 别名记为导出名）；
  * - Rust：`pub use`（别名同样记录）。
  * @param {ReexportEdge[]} edges - 索引边。
- * @param {Array<{path?:string, lang?:string}>} [files] - 索引文件（用于
- *   识别 Python barrel；缺省时只处理显式再导出）。
+ * @param {Array<{path?:string, lang?:string,
+ *   symbols?:Array<{name?:string, default?:boolean}>}>} [files] - 索引文件
+ *   （用于识别 Python barrel 与具名默认导出；缺省时只处理显式再导出）。
  * @returns {{stars:Map<string, string[]>,
  *   named:Map<string, Map<string, Set<string>>>,
- *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}}
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>,
+ *   defaults:Map<string, string>}}
  *   barrel → 星号目标；barrel → 同名导出 → 目标；barrel → 别名导出 →
- *   {目标文件, 目标原名}。
+ *   {目标文件, 目标原名}；文件 → 具名默认导出符号。
  */
 export function buildReexportMaps(edges = [], files = []) {
   /** @type {Map<string, string[]>} */
@@ -92,11 +94,16 @@ export function buildReexportMaps(edges = [], files = []) {
       byName.set(exported, list)
     }
   }
-  const pythonFiles = new Set(
-    files
-      .filter(file => file && file.path && file.lang === 'python')
-      .map(file => file.path),
-  )
+  /** @type {Map<string, string>} */
+  const defaults = new Map()
+  const pythonFiles = new Set()
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string') continue
+    if (file.lang === 'python') pythonFiles.add(file.path)
+    const def = (Array.isArray(file.symbols) ? file.symbols : [])
+      .find(symbol => symbol && symbol.default === true && typeof symbol.name === 'string' && symbol.name)
+    if (def) defaults.set(file.path, def.name)
+  }
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.from === edge.to) continue
@@ -140,7 +147,7 @@ export function buildReexportMaps(edges = [], files = []) {
       targets.add(edge.to)
     }
   }
-  return { stars, named, aliases }
+  return { stars, named, aliases, defaults }
 }
 
 /**
@@ -150,7 +157,8 @@ export function buildReexportMaps(edges = [], files = []) {
  * @param {string} barrel - 起始 barrel 文件。
  * @param {string} name - barrel 导出的符号名。
  * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>,
- *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}} maps
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>,
+ *   defaults:Map<string, string>}} maps
  *   再导出映射。
  * @param {Map<string, Set<string>>} definitions - 文件 → 导出符号。
  * @returns {Array<{path:string, name:string}>} 唯一定义位置（0 或 1 项）。
@@ -176,6 +184,14 @@ export function resolveReexportOrigins(barrel, name, maps, definitions) {
   }
   for (let head = 0; head < queue.length; head++) {
     const current = queue[head]
+    // `default` 不是符号名：映射到该文件具名默认导出（本地默认导出优先）
+    if (current.name === 'default') {
+      const localDefault = maps.defaults.get(current.path)
+      if (localDefault) {
+        origins.set(`${current.path}\u0000${localDefault}`, { path: current.path, name: localDefault })
+        continue
+      }
+    }
     if (definitions.get(current.path)?.has(current.name)) {
       origins.set(`${current.path}\u0000${current.name}`, { path: current.path, name: current.name })
       continue

@@ -57,8 +57,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v9：Haskell 模块导出列表决定顶层/类方法可见性（Haskell 提取规则变化）。
  *  v10：Python `from x import *` 保留通配符（再导出链与潜在引用需要）。
  *  v11：Rust `pub use` 记为 `reexport`，星号再导出保留 `*`。
- *  v12：再导出别名（JS/Python/Rust）写入导入记录的 aliases。 */
-export const INDEX_PARSER_VERSION = 12
+ *  v12：再导出别名（JS/Python/Rust）写入导入记录的 aliases。
+ *  v13：JS/TS 具名默认导出符号标记 default（默认导出再导出解析）。 */
+export const INDEX_PARSER_VERSION = 13
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']
