@@ -94,6 +94,34 @@ test('repowiki-cards execute：有索引时按 query 过滤并给出 search 视�
   assert.equal(kindFiltered.matches[0].symbols[0].name, 'Parser')
 })
 
+test('repowiki-cards execute：offset 分页与 total/truncated 语义', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-tool-page-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parseA() {}\n')
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), 'export function parseB() {}\n')
+  nodefs.writeFileSync(path.join(dir, 'c.ts'), 'export function parseC() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const first = await cards.execute({ query: 'parse', limit: 1 }, fakeExec)
+  assert.equal(first.matches.length, 1)
+  assert.equal(first.total, 3)
+  assert.equal(first.truncated, true)
+  assert.equal(first.offset, 0)
+
+  const second = await cards.execute({ query: 'parse', limit: 1, offset: 1 }, fakeExec)
+  assert.equal(second.matches.length, 1)
+  assert.equal(second.total, 3, 'offset 不改变全集计数')
+  assert.equal(second.truncated, true, '仍有下一页')
+  assert.equal(second.offset, 1)
+  assert.notEqual(second.matches[0].path, first.matches[0].path)
+
+  const last = await cards.execute({ query: 'parse', limit: 1, offset: 2 }, fakeExec)
+  assert.equal(last.matches.length, 1)
+  assert.equal(last.truncated, false)
+  assert.match(cards.output.render({}, last)[0].text, /showing 3–3/)
+})
+
 test('repowiki-cards execute：lang 与 exportedOnly 过滤生效', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-tool-lang-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() {}\nfunction hiddenParse() {}\n')

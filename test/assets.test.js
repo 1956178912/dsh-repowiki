@@ -94,6 +94,14 @@ test('searchIndex：query/kind/path 过滤与 limit 截断', () => {
 
   const exact = searchIndex(index, { limit: 5 })
   assert.equal(exact.truncated, false)
+
+  const secondPage = searchIndex(index, { limit: 1, offset: 1 })
+  assert.equal(secondPage.matches.length, 1)
+  assert.equal(secondPage.total, 3, 'offset 不改变全集计数')
+  assert.equal(secondPage.truncated, true, '仍有下一页')
+  const lastPage = searchIndex(index, { limit: 1, offset: 2 })
+  assert.equal(lastPage.matches.length, 1)
+  assert.equal(lastPage.truncated, false, '最后一页不再标记截断')
 })
 
 test('searchIndex：查询按精确>前缀>子串排序，导出符号优先', () => {

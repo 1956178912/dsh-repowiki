@@ -92,11 +92,12 @@ function makeSnippet(doc, tokens) {
  * @param {Array<{id:string, type:string, path?:string, title:string, summary?:string, tags?:string[], body?:string}>} docs
  *   文档集合。
  * @param {string} query - 查询文本。
- * @param {{limit?:number}} [opts] - 结果上限（默认 50）。
+ * @param {{limit?:number, offset?:number}} [opts] - 结果上限（默认 50）与分页偏移（默认 0）。
  * @returns {{results:Array<object>, total:number, truncated:boolean}} 排序结果。
  */
 export function rankDocuments(docs, query, opts = {}) {
   const limit = Math.max(1, Math.floor(opts.limit ?? 50))
+  const offset = Number.isInteger(opts.offset) && opts.offset > 0 ? opts.offset : 0
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0 || docs.length === 0) {
     return { results: [], total: 0, truncated: false }
@@ -136,8 +137,8 @@ export function rankDocuments(docs, query, opts = {}) {
     || String(a.path).localeCompare(String(b.path))
     || String(a.title).localeCompare(String(b.title)))
   return {
-    results: scored.slice(0, limit),
+    results: scored.slice(offset, offset + limit),
     total: scored.length,
-    truncated: scored.length > limit,
+    truncated: scored.length > offset + limit,
   }
 }

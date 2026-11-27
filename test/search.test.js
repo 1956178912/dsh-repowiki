@@ -90,4 +90,15 @@ test('rankDocuments：无命中词返回空、同分按路径与标题稳定排�
   ]
   const ids = rankDocuments(docs, 'alpha').results.map(r => r.id)
   assert.deepEqual(ids, ['3', '2', '1'], '标题权重优先，其后按路径升序')
+
+  const firstPage = rankDocuments(docs, 'alpha', { limit: 1 })
+  assert.deepEqual(firstPage.results.map(r => r.id), ['3'])
+  assert.equal(firstPage.truncated, true)
+  const secondPage = rankDocuments(docs, 'alpha', { limit: 1, offset: 1 })
+  assert.deepEqual(secondPage.results.map(r => r.id), ['2'])
+  assert.equal(secondPage.total, 3, 'offset 不改变全集计数')
+  assert.equal(secondPage.truncated, true)
+  const lastPage = rankDocuments(docs, 'alpha', { limit: 1, offset: 2 })
+  assert.deepEqual(lastPage.results.map(r => r.id), ['1'])
+  assert.equal(lastPage.truncated, false, '最后一页不再标记截断')
 })

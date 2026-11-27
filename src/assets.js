@@ -149,7 +149,7 @@ function symbolMatchScore(name, query) {
  * 索引遍历顺序，避免无条件列举被重排。
  * @param {object} index - readIndex 返回的索引文档。
  * @param {{query?:string, kind?:string, pathPrefix?:string, module?:string,
- *   lang?:string, exportedOnly?:boolean, limit?:number}} opts
+ *   lang?:string, exportedOnly?:boolean, limit?:number, offset?:number}} opts
  *   - query：符号名子串（大小写不敏感）；为空则不做名称过滤。
  *   - kind：符号种类过滤（function/class/method/variable/interface/type）。
  *   - pathPrefix：文件路径子串过滤。
@@ -157,10 +157,12 @@ function symbolMatchScore(name, query) {
  *   - lang：语言标识过滤（如 typescript / python / go）。
  *   - exportedOnly：仅返回公开/导出符号。
  *   - limit：结果上限（默认 DEFAULT_RESULT_LIMIT）。
+ *   - offset：跳过前 N 个匹配（分页，默认 0）。
  * @returns {{matches:Array, total:number, truncated:boolean}} 检索结果。
  */
 export function searchIndex(index, opts = {}) {
   const limit = opts.limit ?? DEFAULT_RESULT_LIMIT
+  const offset = Number.isInteger(opts.offset) && opts.offset > 0 ? opts.offset : 0
   const query = opts.query?.trim().toLowerCase()
   const kind = opts.kind
   const prefix = opts.pathPrefix?.trim()
@@ -200,8 +202,8 @@ export function searchIndex(index, opts = {}) {
   // 文件按最佳命中排序；分数相同按路径，保证输出稳定
   if (query) matches.sort((a, b) => (b.best - a.best) || a.path.localeCompare(b.path))
   const total = matches.length
-  const truncated = total > limit
-  const page = truncated ? matches.slice(0, limit) : matches
+  const truncated = total > offset + limit
+  const page = matches.slice(offset, offset + limit)
   return {
     matches: page.map(({ path, lang, symbols }) => ({ path, lang, symbols })),
     total,

@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.160.0] - 2026-11-27
+
+### Added
+
+- **`repowiki-cards offset` pagination**: symbol-file and docs/BM25 results
+  now accept `offset` alongside `limit`, with `total` always reporting the
+  full match count and `truncated` meaning "more results remain after this
+  page". Text output shows the exact `start–end` range instead of always
+  claiming "the first N". Large repositories can now page through results
+  instead of only truncating at the limit.
+
+### Tests
+
+- 524 cases pass (LANG=en and LANG=zh); primitive tests cover middle/last
+  pages for both symbol search and BM25, and the cards tool case asserts the
+  returned `offset`, page boundaries and rendered range.
+
 ## [0.159.0] - 2026-11-27
 
 ### Fixed

@@ -105,6 +105,10 @@ export function repowikiCardsTool(ctx) {
         type: 'integer',
         description: `Max number of matching files returned; extra matches are reported as truncated. Defaults to ${DEFAULT_RESULT_LIMIT}.`,
       },
+      offset: {
+        type: 'integer',
+        description: 'Skip the first N matching files/knowledge hits for pagination (default 0). total always reports the full count.',
+      },
       includeMemory: {
         type: 'boolean',
         description: 'Also return accepted session memory entries (repowiki-memory) whose title, tags, or body contain the query substring; an empty query returns all of them. Default false.',
@@ -183,6 +187,7 @@ export function repowikiCardsTool(ctx) {
           },
           total: { type: 'integer' },
           truncated: { type: 'boolean' },
+          offset: { type: 'integer', description: 'Number of matches skipped before this page.' },
           technologies: {
             type: 'array',
             items: {
@@ -321,7 +326,7 @@ export function repowikiCardsTool(ctx) {
           },
           dependentsTruncated: { type: 'boolean', description: 'True when more dependents exist than were returned.' },
         },
-        required: ['indexed', 'matches', 'total', 'truncated'],
+        required: ['indexed', 'matches', 'total', 'truncated', 'offset'],
       },
       render: (_args, value) => {
         if (!value.indexed) {
@@ -332,9 +337,17 @@ export function repowikiCardsTool(ctx) {
         const knowledgeLines = Array.isArray(value.knowledge) && value.knowledge.length > 0
           ? value.knowledge.map(k => `[${k.type}] ${k.title} — ${k.path || '(no path)'} (score ${k.score})\n  ${k.snippet}`)
           : []
-        const tail = value.truncated ? `\n… ${value.total} matching file(s) total, showing the first ${value.matches.length}` : ''
-        const knowledgeTail = value.knowledgeTruncated
-          ? `\n… ${value.knowledgeTotal} knowledge hit(s) total, showing the first ${value.knowledge.length}`
+        const fileRange = value.matches.length > 0
+          ? `${value.offset + 1}–${value.offset + value.matches.length}`
+          : 'none'
+        const knowledgeRange = Array.isArray(value.knowledge) && value.knowledge.length > 0
+          ? `${value.offset + 1}–${value.offset + value.knowledge.length}`
+          : 'none'
+        const tail = value.truncated || value.offset > 0
+          ? `\n… ${value.total} matching file(s) total, showing ${fileRange}`
+          : ''
+        const knowledgeTail = value.knowledgeTruncated || value.offset > 0
+          ? `\n… ${value.knowledgeTotal} knowledge hit(s) total, showing ${knowledgeRange}`
           : ''
         const memoryLine = Array.isArray(value.memories) && value.memories.length > 0
           ? `\nMemory: ${value.memories.map(m => `${m.title}${m.path ? ` (${m.path})` : ''}`).join('; ')}`
@@ -371,11 +384,15 @@ export function repowikiCardsTool(ctx) {
           matches: [],
           total: 0,
           truncated: false,
+          offset: 0,
           hint: 'No usable index found for this project. Run the repowiki-index tool first to build .dsh-repowiki/index.json.',
         }
       }
       const target = ['symbols', 'docs', 'all'].includes(args.target) ? args.target : 'symbols'
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : undefined
+      const offset = typeof args.offset === 'number' && Number.isFinite(args.offset)
+        ? Math.max(0, Math.floor(args.offset))
+        : 0
       const { matches, total, truncated } = target === 'docs'
         ? { matches: [], total: 0, truncated: false }
         : searchIndex(index, {
@@ -387,6 +404,7 @@ export function repowikiCardsTool(ctx) {
           exportedOnly: args.exportedOnly === true,
           // limit=0 会得到 truncated=true 且空结果，钳制为 ≥1
           limit,
+          offset,
         })
 
       const requestedLocale = typeof args.locale === 'string' && SUPPORTED_LOCALES.includes(args.locale)
@@ -434,7 +452,7 @@ export function repowikiCardsTool(ctx) {
               body: entry.body ?? '',
             })),
           ]
-          const ranked = rankDocuments(docs, query, { limit: limit ?? DEFAULT_RESULT_LIMIT })
+          const ranked = rankDocuments(docs, query, { limit: limit ?? DEFAULT_RESULT_LIMIT, offset })
           knowledge = ranked.results
           knowledgeTotal = ranked.total
           knowledgeTruncated = ranked.truncated
@@ -514,6 +532,7 @@ export function repowikiCardsTool(ctx) {
         matches,
         total,
         truncated,
+        offset,
         technologies: (index.stack?.technologies ?? []).map(t => ({ name: t.name, ecosystem: t.ecosystem })),
         modules: Array.isArray(index.modules) ? index.modules : [],
         ...(knowledge ? { knowledge, knowledgeTotal, knowledgeTruncated } : {}),

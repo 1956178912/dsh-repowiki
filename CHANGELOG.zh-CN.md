@@ -3,6 +3,14 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.160.0] - 2026-11-27
+
+- **`repowiki-cards offset` 分页**：符号文件与文档/BM25 结果在 `limit`
+  之外支持 `offset`；`total` 始终为全集计数，`truncated` 表示本页之后
+  仍有结果。文本输出显示精确的 `起–止` 区间，不再固定写“前 N 条”。
+- **测试**：524 例在 LANG=en 与 LANG=zh 下全通过；符号检索与 BM25 的
+  中间页/末页、cards 工具的 offset 返回与渲染区间均有断言。
+
 ## [0.159.0] - 2026-11-27
 
 - **修复**：`docs/compatibility.md` 长期停留在索引 v5/清单 v2，实际已是
