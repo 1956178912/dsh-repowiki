@@ -794,6 +794,59 @@ function resolvePerlSpecifier(fromRel, specifier, roots, indexed) {
 }
 
 /**
+ * 建立 Object Pascal 单元名（小写，语言大小写不敏感）→ 文件索引：Delphi
+ * 要求 unit 名与文件名一致，因此按文件名主干登记（`.pas`/`.pp`/`.lpr`），
+ * 同名取字典序最小文件，保证确定性。
+ * @param {Array<{path:string, lang:string}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 小写单元名 → 文件相对路径。
+ */
+function buildPascalUnits(files) {
+  const units = new Map()
+  for (const file of files) {
+    if (file.lang !== 'pascal') continue
+    const base = path.posix.basename(file.path)
+    const dot = base.lastIndexOf('.')
+    const stem = dot > 0 ? base.slice(0, dot) : base
+    if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(stem)) continue
+    const key = stem.toLowerCase()
+    const existing = units.get(key)
+    if (existing === undefined || file.path < existing) units.set(key, file.path)
+  }
+  return units
+}
+
+/**
+ * 解析 Object Pascal `uses`：`Unit in 'path.pas'` 等路径形式先按项目根、
+ * 再按引用文件目录解析并补 `.pas`/`.pp`/`.lpr`；纯单元名按小写映射查找。
+ * 未索引的外部单元返回 null。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 单元名或路径。
+ * @param {Map<string,string>} units - 小写单元名 → 文件。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolvePascalUnit(fromRel, specifier, units, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim().replace(/\\/g, '/')
+  if (raw === '') return null
+  if (raw.startsWith('.') || raw.includes('/')) {
+    const scriptDir = path.posix.dirname(fromRel)
+    const bases = ['']
+    if (scriptDir !== '.') bases.push(scriptDir)
+    for (const base of bases) {
+      const target = path.posix.normalize(path.posix.join(base, raw))
+      if (target === '..' || target.startsWith('../')) continue
+      for (const candidate of [target, `${target}.pas`, `${target}.pp`, `${target}.lpr`]) {
+        if (indexed.has(candidate)) return candidate
+      }
+    }
+    return null
+  }
+  if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(raw)) return null
+  return units.get(raw.toLowerCase()) ?? null
+}
+
+/**
  * 建立 Lua `require` 的加载根：任意层级的 `lua/` 目录（Neovim 插件布局），
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2348,6 +2401,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   ocamlModules:Map<string,string[]>,
  *   fortranModules:Map<string,string>,
  *   perlRoots:string[],
+ *   pascalUnits:Map<string,string>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   clojureRoots:string[],
@@ -2396,6 +2450,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
   if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
+  if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
@@ -2687,6 +2742,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     ocamlModules: buildOcamlModules(files),
     fortranModules: buildFortranModules(files),
     perlRoots: buildPerlRoots(indexed),
+    pascalUnits: buildPascalUnits(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
     clojureRoots: buildClojureRoots(indexed),

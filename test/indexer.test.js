@@ -1819,6 +1819,25 @@ test('Perl：模块名经 lib/ 根解析、相对 require 与 t/ 测试路径', 
   ])
 })
 
+test('Pascal：uses 单元名（大小写不敏感）与 in 显式路径解析', async () => {
+  const dir = makeProject({
+    'src/Demo.Base.pas': 'unit Demo.Base;\ninterface\nimplementation\nend.\n',
+    'src/Demo.Utils.pas': 'unit Demo.Utils;\ninterface\nuses Demo.Base;\nimplementation\nend.\n',
+    'src/Demo.Helper.pas': 'unit Demo.Helper;\ninterface\nimplementation\nend.\n',
+    'src/app.dpr': "program App;\nuses\n  Demo.Utils in 'src/Demo.Utils.pas',\n  demo.helper;\nbegin\nend.\n",
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { pascal: 4 })
+
+  const utilsEdges = doc.edges.filter(e => e.from === 'src/Demo.Utils.pas')
+  assert.deepEqual(utilsEdges.map(e => [e.line, e.to]), [[3, 'src/Demo.Base.pas']])
+  const appEdges = doc.edges.filter(e => e.from === 'src/app.dpr')
+  assert.deepEqual(appEdges.map(e => [e.line, e.to]).sort(), [
+    [2, 'src/Demo.Helper.pas'],
+    [2, 'src/Demo.Utils.pas'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

@@ -4419,6 +4419,187 @@ function extractPerl(lines) {
 }
 
 /**
+ * 扫描 Object Pascal 源码行：`//` 行注释、`{ … }`（含 `{$…}` 指令）与
+ * `(* … *)` 块注释、单引号字符串（`''` 双写转义）内容替换为空格。
+ *
+ * 返回双视图：`masked` 供符号提取配平；`code` 保留字符串原文，供
+ * `uses Unit in 'path.pas'` 读取路径。
+ * @param {string[]} lines - 源码行。
+ * @returns {{code:string[], masked:string[]}} 双视图（行注释后截断）。
+ */
+export function pascalScan(lines) {
+  const codeOut = []
+  const maskedOut = []
+  let inBrace = false
+  let inParen = false
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBrace) {
+        code += ' '
+        masked += ' '
+        if (ch === '}') inBrace = false
+        continue
+      }
+      if (inParen) {
+        if (ch === '*' && next === ')') { inParen = false; i++; code += '  '; masked += '  ' }
+        else { code += ' '; masked += ' ' }
+        continue
+      }
+      if (quote) {
+        if (ch === "'") {
+          if (raw[i + 1] === "'") { i++; code += "''"; masked += '  ' }
+          else { quote = null; code += ch; masked += ch }
+        } else { code += ch; masked += ' ' }
+        continue
+      }
+      if (ch === '/' && next === '/') break
+      if (ch === '{') { inBrace = true; code += ' '; masked += ' '; continue }
+      if (ch === '(' && next === '*') { inParen = true; i++; code += '  '; masked += '  '; continue }
+      if (ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    codeOut.push(code)
+    maskedOut.push(masked)
+  }
+  return { code: codeOut, masked: maskedOut }
+}
+
+/**
+ * 计算 Pascal 类型声明（class/record/interface）的结束行：按
+ * `class`/`record`/`object`/`interface`/`dispinterface` 与 `end` 配平，
+ * `class function`/`class procedure`/`class var`/`class property` 与
+ * `class of` 不算新块。
+ * @param {string[]} lines - 掩码行。
+ * @param {number} startIdx - 类型声明起始行（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function pascalTypeEnd(lines, startIdx) {
+  let depth = 0
+  for (let i = startIdx; i < lines.length; i++) {
+    const normalized = lines[i].replace(
+      /\bclass\s+(?:function|procedure|var|property|operator|constructor|destructor)\b|\bclass\s+of\b/gi, ' ',
+    )
+    const tokens = normalized.match(/\b(?:class|record|object|interface|dispinterface|end)\b/gi) ?? []
+    for (const token of tokens) {
+      if (token.toLowerCase() === 'end') depth--
+      else depth++
+    }
+    if (depth <= 0) return i + 1
+  }
+  return startIdx + 1
+}
+
+/**
+ * 计算 Pascal 例程体（`begin … end`）的结束行：从声明行起找到首个
+ * `begin`，再按 `begin`/`case`/`try`/`asm` 与 `end` 配平；声明后直接
+ * 遇到下一个声明（无 body，interface 段）时止于声明行。
+ * @param {string[]} lines - 掩码行。
+ * @param {number} startIdx - 声明起始行（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function pascalRoutineEnd(lines, startIdx) {
+  let depth = 0
+  let started = false
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i]
+    if (!started) {
+      if (/\bbegin\b/i.test(line)) started = true
+      else if (i > startIdx && /^(?:procedure|function|constructor|destructor|property|type|uses|implementation|interface|end\.)\b/i.test(line.trim())) {
+        return startIdx + 1
+      } else continue
+    }
+    const tokens = line.match(/\b(?:begin|case|try|asm|end)\b/gi) ?? []
+    for (const token of tokens) {
+      if (token.toLowerCase() === 'end') depth--
+      else depth++
+    }
+    if (depth <= 0) return i + 1
+  }
+  return startIdx + 1
+}
+
+/**
+ * 提取 Object Pascal 符号：`unit`/`program`/`library`（class）、
+ * `type X = class/interface/record`（class/interface/type）与
+ * `procedure`/`function`/`constructor`/`destructor`（function；类内或
+ * `TFoo.Bar` 形式为 method + `parent`）、`property`（variable）。
+ * 注释、字符串与条件编译指令不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractPascal(lines) {
+  const { masked } = pascalScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const types = []
+  for (let i = 0; i < masked.length; i++) {
+    while (types.length > 0 && types[types.length - 1].end <= i + 1) types.pop()
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    const unitMatch = /^(?:unit|program|library)\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/i.exec(line)
+    if (unitMatch) {
+      symbols.push({
+        name: unitMatch[1], kind: 'class', line: i + 1, endLine: masked.length, exported: true,
+      })
+      continue
+    }
+
+    const typeMatch = /^([A-Za-z_]\w*)\s*=\s*(class|interface|record|object|dispinterface)\b/i.exec(line)
+    if (typeMatch) {
+      const keyword = typeMatch[2].toLowerCase()
+      const kind = keyword === 'interface' ? 'interface' : keyword === 'record' ? 'type' : 'class'
+      const end = pascalTypeEnd(masked, i)
+      const parent = types.length > 0 ? types[types.length - 1].name : undefined
+      /** @type {object} */
+      const symbol = { name: typeMatch[1], kind, line: i + 1, endLine: end, exported: true }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      types.push({ name: typeMatch[1], end })
+      continue
+    }
+
+    const routineMatch = /^(?:class\s+)?(procedure|function|constructor|destructor)\s+(?:[\w.]+\.)?([A-Za-z_]\w*)/i.exec(line)
+    if (routineMatch) {
+      const qualified = /^(?:class\s+)?(?:procedure|function|constructor|destructor)\s+([\w.]+)/i.exec(line)
+      const parts = (qualified?.[1] ?? routineMatch[2]).split('.')
+      const parent = parts.length > 1
+        ? parts[parts.length - 2]
+        : (types.length > 0 ? types[types.length - 1].name : undefined)
+      /** @type {object} */
+      const symbol = {
+        name: routineMatch[2],
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: pascalRoutineEnd(masked, i),
+        exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      continue
+    }
+
+    const propertyMatch = /^property\s+([A-Za-z_]\w*)/i.exec(line)
+    if (propertyMatch) {
+      const parent = types.length > 0 ? types[types.length - 1].name : undefined
+      /** @type {object} */
+      const symbol = {
+        name: propertyMatch[1], kind: 'variable', line: i + 1, endLine: i + 1, exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4563,6 +4744,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'powershell') return extractPowershell(lines)
   if (lang === 'fortran') return extractFortran(lines)
   if (lang === 'perl') return extractPerl(lines)
+  if (lang === 'pascal') return extractPascal(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

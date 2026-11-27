@@ -693,6 +693,27 @@ test('Perl：use/require、parent/base 与 pragma 过滤', () => {
   ])
 })
 
+test('Pascal：uses 跨行列表与 in 路径', () => {
+  const code = [
+    'uses',
+    "  System.SysUtils, Demo.Base in 'demo/Base.pas',",
+    '  Demo.Utils;',
+    '',
+    'implementation',
+    '',
+    'uses Demo.Helper;',
+    '// uses Commented.Unit;',
+    "const S = 'uses String.Unit;';",
+  ].join('\n')
+  const imports = extractImports(code, 'pascal')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['System.SysUtils', 1, false],
+    ['demo/Base.pas', 1, true],
+    ['Demo.Utils', 1, false],
+    ['Demo.Helper', 7, false],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

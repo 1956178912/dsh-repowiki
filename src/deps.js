@@ -10,7 +10,7 @@
 import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
-  clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan,
+  clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
 } from './symbols.js'
 
 /**
@@ -1297,6 +1297,42 @@ function extractPerlImports(lines) {
 }
 
 /**
+ * 提取 Object Pascal 的 `uses` 单元引用：支持跨行列表与
+ * `Unit in 'path.pas'` 显式路径（路径形式优先交给 indexer 解析）；
+ * 注释/字符串内的伪 uses 由 `pascalScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractPascalImports(lines) {
+  const result = []
+  const { code, masked } = pascalScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    if (!/^uses\b/i.test(masked[i].trim())) continue
+    const parts = []
+    let j = i
+    let terminated = false
+    while (j < masked.length) {
+      parts.push(code[j])
+      if (masked[j].includes(';')) { terminated = true; break }
+      j++
+    }
+    if (!terminated) continue
+    const text = parts.join(' ').replace(/^uses\b/i, '')
+    const itemRe = /([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)(?:\s+in\s+(['"])([^'"]*)\2)?/g
+    let m
+    while ((m = itemRe.exec(text)) !== null) {
+      if (m[3]) {
+        result.push({ specifier: m[3], line: i + 1, kind: 'import', relative: true, imported: [m[1]] })
+      } else if (m[1] && !/^in$/i.test(m[1])) {
+        result.push({ specifier: m[1], line: i + 1, kind: 'import', relative: false, imported: [] })
+      }
+    }
+    i = j
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1413,6 +1449,7 @@ export function extractImports(code, lang) {
   if (lang === 'powershell') return extractPowershellImports(lines)
   if (lang === 'fortran') return extractFortranImports(lines)
   if (lang === 'perl') return extractPerlImports(lines)
+  if (lang === 'pascal') return extractPascalImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

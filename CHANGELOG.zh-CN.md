@@ -3,6 +3,24 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.221.0] - 2026-11-28
+
+- **Object Pascal 支持（第 34 种语言）**：`.pas`/`.pp`/`.dpr`/`.dpk`/
+  `.lpr` 提取 `unit`/`program`/`library` 与 `type X = class/interface/
+  record/object` 声明（后两者映射 class/interface/type）、`procedure`/
+  `function`/`constructor`/`destructor`（接口声明止于本行；实现体按
+  `begin`/`case`/`try`/`asm` ↔ `end` 配平）与 `property` 成员；类内声明
+  的方法带类名 `parent`，`TFoo.Bar` 实现继承 `TFoo`。
+- **Object Pascal 屏蔽**：`//` 行注释、`{ … }`（含 `{$…}` 指令）与
+  `(* … *)` 块注释、单引号字符串（双写转义）在配平前屏蔽。
+- **Object Pascal `uses` 边**：跨行 `uses` 列表经按文件名构建的大小写
+  不敏感单元名映射解析（Delphi 要求单元名与文件名一致），`Unit in
+  'path.pas'` 显式路径先按项目根、再回退脚本目录并补 `.pas`/`.pp`/
+  `.lpr`；外部单元不建边。
+- **测试**：647 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖单元/类/记录/
+  接口/属性、声明与实现范围、注释屏蔽、`uses` 与 `in` 路径、Pascal
+  测试路径（`*Test.pas`/`*.Tests.pas`）。
+
 ## [0.220.0] - 2026-11-28
 
 - **Perl 支持（第 33 种语言）**：`.pl`/`.pm`/`.t` 提取 `package Foo::Bar;`

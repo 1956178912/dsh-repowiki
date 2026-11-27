@@ -1894,6 +1894,74 @@ test('Perl：package/sub 归属、块 package、POD 与 heredoc 屏蔽', () => {
   assert.ok(!byName.has('here_sub'), 'heredoc 内 sub 不登记')
 })
 
+test('Pascal：unit/class/record/interface 与声明/实现方法范围', () => {
+  const code = [
+    'unit Demo.Utils;',
+    '',
+    'interface',
+    '',
+    'uses',
+    '  System.SysUtils, Demo.Base in \'demo/Base.pas\';',
+    '',
+    'type',
+    '  TBase = class(TObject)',
+    '    procedure Run; virtual;',
+    '  end;',
+    '',
+    '  IRunner = interface',
+    '    procedure Start;',
+    '  end;',
+    '',
+    '  TPoint = record',
+    '    X, Y: Integer;',
+    '  end;',
+    '',
+    '  THelper = class',
+    '    constructor Create;',
+    '    destructor Destroy; override;',
+    '    property Name: string read FName;',
+    '  end;',
+    '',
+    'implementation',
+    '',
+    'procedure TBase.Run;',
+    'begin',
+    '  WriteLn(\'run\');',
+    'end;',
+    '',
+    'constructor THelper.Create;',
+    'begin',
+    '  inherited;',
+    'end;',
+    '',
+    'end.',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'pascal')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  const runs = symbols.filter(s => s.name === 'Run')
+
+  assert.equal(byName.get('Demo.Utils').kind, 'class')
+  assert.equal(byName.get('Demo.Utils').endLine, 39)
+  assert.equal(byName.get('TBase').kind, 'class')
+  assert.equal(byName.get('TBase').endLine, 11)
+  assert.equal(byName.get('IRunner').kind, 'interface')
+  assert.equal(byName.get('IRunner').endLine, 15)
+  assert.equal(byName.get('TPoint').kind, 'type')
+  assert.equal(byName.get('TPoint').endLine, 19)
+  assert.equal(byName.get('THelper').kind, 'class')
+  assert.equal(byName.get('THelper').endLine, 25)
+  assert.equal(byName.get('Name').kind, 'variable')
+  assert.equal(byName.get('Name').parent, 'THelper')
+  assert.equal(runs.length, 2, '声明与实现各登记一次')
+  assert.ok(runs.every(r => r.kind === 'method' && r.parent === 'TBase'))
+  assert.equal(runs[0].endLine, 10, 'interface 声明止于本行')
+  assert.equal(runs[1].endLine, 32, '实现体按 begin/end 配平')
+  assert.equal(byName.get('Create').parent, 'THelper')
+  assert.equal(byName.get('Create').endLine, 37, '同名声明被实现覆盖')
+  assert.equal(byName.get('Destroy').parent, 'THelper')
+  assert.equal(byName.get('Destroy').endLine, 23, 'destructor 声明无体')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

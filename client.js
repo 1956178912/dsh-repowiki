@@ -354,6 +354,7 @@ const LANGUAGE_LABELS = {
   powershell: 'PowerShell',
   fortran: 'Fortran',
   perl: 'Perl',
+  pascal: 'Pascal',
   c: 'C',
   cpp: 'C++',
 }

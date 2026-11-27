@@ -18,7 +18,7 @@ test('test-files：常见测试路径命中', () => {
     'src\\win\\a.test.js',
     'test/my_app/accounts_test.exs', 'apps/web/test/web/router_test.exs',
     'src/demo_SUITE.erl', 'src/demo_tests.erl', 'R/test-api.R', 'runtests.jl',
-    't/basic.t', 't/lib/Helper.pm',
+    't/basic.t', 't/lib/Helper.pm', 'src/FooTest.pas', 'src/Foo.Tests.pas',
   ]
   for (const path of hits) assert.equal(isTestPath(path), true, path)
 })

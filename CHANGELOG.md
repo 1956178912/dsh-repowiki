@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.221.0] - 2026-11-28
+
+### Added
+
+- **Object Pascal indexing (34th language)**: `.pas`/`.pp`/`.dpr`/`.dpk`/
+  `.lpr` files produce `unit`/`program`/`library` and
+  `type X = class/interface/record/object` declarations (the latter mapped
+  to class/interface/type), `procedure`/`function`/`constructor`/
+  `destructor` definitions (interface declarations end at their own line;
+  implementations pair `begin`/`case`/`try`/`asm` with `end`) and
+  `property` members. Methods declared inside a class carry its name as
+  `parent`, and `TFoo.Bar` implementations inherit `TFoo`.
+- **Object Pascal masking**: `//` line comments, `{ … }` (including
+  `{$…}` directives) and `(* … *)` block comments plus single-quoted
+  strings (doubled-quote escaping) are masked before range matching.
+- **Object Pascal `uses` edges**: multi-line `uses` lists resolve through
+  a case-insensitive unit-name map built from file names (Delphi requires
+  unit and file names to match), while `Unit in 'path.pas'` entries
+  resolve from the project root with a script-directory fallback and
+  `.pas`/`.pp`/`.lpr` completion. External units stay edge-free.
+
+### Tests
+
+- 647 cases pass (LANG=en and LANG=zh); new coverage for units, classes,
+  records, interfaces, properties, declaration vs implementation ranges,
+  comment masking, `uses` lists with `in` paths and Pascal test-path
+  detection (`*Test.pas`/`*.Tests.pas`).
+
 ## [0.220.0] - 2026-11-28
 
 ### Added

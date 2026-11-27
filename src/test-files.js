@@ -40,6 +40,7 @@ export function isTestPath(value) {
   if (/^test-.+\.[Rr]$/.test(file)) return true
   if (/^runtests\.jl$/i.test(file)) return true
   if (/\.t$/.test(file)) return true
+  if (/(?:Test|Tests|Spec)\.(?:pas|pp|dpr)$/.test(file)) return true
   return false
 }
 
