@@ -140,6 +140,7 @@ export const MANIFEST_FILES = {
   'NAMESPACE': 'r',
   'Project.toml': 'julia',
   'dune-project': 'dune',
+  'rebar.config': 'rebar',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -189,6 +190,8 @@ export const EXTENSION_LANGS = {
   mli: 'ocaml',
   hs: 'haskell',
   lhs: 'haskell',
+  erl: 'erlang',
+  hrl: 'erlang',
   c: 'c',
   h: 'c',
   cc: 'cpp',

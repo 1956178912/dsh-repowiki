@@ -412,6 +412,23 @@ test('.cabal：项目名/版本与跨行 build-depends 依赖', () => {
   assert.ok(info.technologies.every(t => t.ecosystem === 'cabal'))
 })
 
+test('rebar.config：deps 依赖与技术映射', () => {
+  const info = detectStack({
+    'rebar.config': [
+      '{erl_opts, [debug_info]}.',
+      '{deps, [',
+      '  {cowboy, "2.10.0"},',
+      '  {jsx, "3.1.0"},',
+      '  {proper, "1.4.0"}',
+      ']}.',
+    ].join('\n'),
+  })
+  assert.equal(info.dependencyCounts.erlang, 3)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Cowboy') && names.includes('jsx'))
+  assert.ok(info.technologies.every(t => t.ecosystem === 'rebar'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

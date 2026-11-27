@@ -551,6 +551,20 @@ test('Haskell：import qualified/package import/hiding 与注释屏蔽', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
 })
 
+test('Erlang：include/include_lib 与注释屏蔽', () => {
+  const code = [
+    '-include("records.hrl").',
+    '-include_lib("myapp/include/shared.hrl").',
+    '%% -include("hidden.hrl").',
+    '-define(STR, "-include(fake.hrl)").',
+  ].join('\n')
+  const imports = extractImports(code, 'erlang')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['records.hrl', 1, true],
+    ['myapp/include/shared.hrl', 2, false],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

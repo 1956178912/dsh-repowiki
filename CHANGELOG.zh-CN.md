@@ -3,6 +3,20 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.209.0] - 2026-11-28
+
+- **Erlang 支持（第 26 种语言）**：`.erl`/`.hrl` 提取 `-module`、
+  `-record`、`-type`/`-opaque`、`-define` 宏与顶层函数（多子句、`when`
+  守卫、跨行签名）。`-export([f/1, …])` 决定可见性（默认私有；同名不同
+  arity 合并为一个符号），`%` 注释、字符串、引号原子与 `$x` 字符字面量
+  先屏蔽。`-include("…")` 经引用文件目录与每个 `src/`/`include/` 根
+  解析，`-include_lib("app/…")` 还会尝试剥离应用名前缀的路径；外部头
+  文件不建边。`rebar.config` 的 `{deps, …}` 提供依赖计数与 rebar 技术
+  映射。Prompt 围栏与面板语言筛选识别 `erlang`。
+- **测试**：618 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖符号种类、
+  多子句范围、导出可见性、注释/字符串屏蔽、include/include_lib 提取、
+  rebar 依赖，以及根解析与应用名前缀剥离的索引端到端夹具。
+
 ## [0.208.0] - 2026-11-28
 
 - **Haskell 导出列表可见性**：`module M (a, B(..), (<+>)) where` 的导出

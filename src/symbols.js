@@ -3425,6 +3425,148 @@ function extractHaskell(lines) {
 }
 
 /**
+ * 扫描 Erlang 源码行：`%` 行注释截断，字符串 `"…"` 与引号原子 `'…'`
+ * 内容在掩码视图替换为空格（`$x` 字符字面量跳过）；同时返回保留字符串
+ * 原文的 code 视图，供 `-include("…")` 等提取使用。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 双视图行。
+ */
+export function erlangScan(lines) {
+  const out = []
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        code += ch
+        if (ch === '\\') {
+          if (i + 1 < raw.length) { code += raw[i + 1]; masked += '  '; i++ }
+          else masked += ' '
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      if (ch === '%') break
+      if (ch === '$' && i + 1 < raw.length) {
+        code += ch + raw[i + 1]
+        masked += ch + raw[i + 1]
+        i++
+        continue
+      }
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 去掉 Erlang 引号原子的引号。
+ * @param {string} atom - 原子文本（可带单引号）。
+ * @returns {string} 裸名称。
+ */
+function erlangAtom(atom) {
+  return atom.startsWith("'") && atom.endsWith("'") ? atom.slice(1, -1) : atom
+}
+
+/**
+ * 计算 Erlang 声明/函数子句的结束行：首个以 `.` 结尾的行（字符串与
+ * 注释已屏蔽）；未找到时返回起始行。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} startIdx - 起始行索引（0-based）。
+ * @returns {number} 结束行索引（0-based）。
+ */
+function erlangClauseEnd(masked, startIdx) {
+  for (let i = startIdx; i < masked.length; i++) {
+    if (masked[i].trim().endsWith('.')) return i
+  }
+  return startIdx
+}
+
+/**
+ * 提取 Erlang 符号：`-module`、`-record`、`-type`/`-opaque`、`-define`
+ * 宏与顶层函数（含多子句）。只识别缩进 0 的行；函数体内部与匿名函数
+ * 不登记。`exported` 由 `-export([f/1, …])` 决定（Erlang 默认私有），
+ * `-module` 自身视为公开；同名不同 arity 合并为一个符号。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractErlang(lines) {
+  const rows = erlangScan(lines)
+  const masked = rows.map(row => row.masked)
+  const exportedNames = new Set()
+  const text = masked.join('\n')
+  for (const m of text.matchAll(/-export\s*\(\s*\[([\s\S]*?)\]\s*\)/g)) {
+    for (const item of m[1].matchAll(/([a-z][\w@]*|'[^']*')\s*\/\s*\d+/g)) {
+      exportedNames.add(erlangAtom(item[1]))
+    }
+  }
+  /** @type {Array<{name:string, kind:string, index:number, endIndex:number, moduleDecl?:boolean}>} */
+  const decls = []
+  for (let i = 0; i < masked.length; i++) {
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    if (rawLine !== rawLine.trimStart()) continue
+    const moduleMatch = /^-module\s*\(\s*([a-z][\w@]*|'[^']*')\s*\)/.exec(line)
+    if (moduleMatch) {
+      decls.push({ name: erlangAtom(moduleMatch[1]), kind: 'class', index: i, endIndex: erlangClauseEnd(masked, i), moduleDecl: true })
+      continue
+    }
+    const recordMatch = /^-record\s*\(\s*([a-z][\w@]*|'[^']*')\s*,/.exec(line)
+    if (recordMatch) {
+      decls.push({ name: erlangAtom(recordMatch[1]), kind: 'class', index: i, endIndex: erlangClauseEnd(masked, i) })
+      continue
+    }
+    const typeMatch = /^-(?:type|opaque)\s+([a-z][\w@]*)\s*\(/.exec(line)
+    if (typeMatch) {
+      decls.push({ name: typeMatch[1], kind: 'type', index: i, endIndex: erlangClauseEnd(masked, i) })
+      continue
+    }
+    const defineMatch = /^-define\s*\(\s*([A-Z_][\w@]*)/.exec(line)
+    if (defineMatch) {
+      decls.push({ name: defineMatch[1], kind: 'variable', index: i, endIndex: erlangClauseEnd(masked, i) })
+      continue
+    }
+    const fnMatch = /^([a-z][\w@]*|'[^']*')\s*\(/.exec(line)
+    if (!fnMatch) continue
+    const next = nextNonEmptyLine(masked, i + 1)
+    const hasArrow = /->/.test(line) || (next >= 0 && masked[next].trim().startsWith('->'))
+    if (!hasArrow) continue
+    decls.push({
+      name: erlangAtom(fnMatch[1]),
+      kind: 'function',
+      index: i,
+      endIndex: erlangClauseEnd(masked, i),
+    })
+  }
+  const byName = new Map()
+  for (const decl of decls) {
+    const endLine = decl.endIndex + 1
+    const existing = byName.get(decl.name)
+    if (existing) {
+      existing.endLine = Math.max(existing.endLine, endLine)
+      existing.exported = existing.exported || decl.moduleDecl === true || exportedNames.has(decl.name)
+    } else {
+      byName.set(decl.name, {
+        name: decl.name,
+        kind: decl.kind,
+        line: decl.index + 1,
+        endLine,
+        exported: decl.moduleDecl === true || exportedNames.has(decl.name),
+      })
+    }
+  }
+  return [...byName.values()]
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3561,6 +3703,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'nim') return extractNim(lines)
   if (lang === 'ocaml') return extractOcaml(lines)
   if (lang === 'haskell') return extractHaskell(lines)
+  if (lang === 'erlang') return extractErlang(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

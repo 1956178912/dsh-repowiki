@@ -1618,6 +1618,27 @@ test('嵌套清单读取上限：pubspec 与 dune-project', async () => {
   assert.ok(duneReads <= 20, `dune-project 读取应有上限（实际 ${duneReads}）`)
 })
 
+test('Erlang：include 解析、src/include 根与 rebar 技术栈', async () => {
+  const dir = makeProject({
+    'rebar.config': '{deps, [{cowboy, "2.10.0"}]}.\n',
+    'include/shared.hrl': '-define(X, 1).\n',
+    'include/extra.hrl': '-define(Y, 2).\n',
+    'src/app.erl': '-module(app).\n-export([run/1]).\n-include("shared.hrl").\n-include_lib("myapp/include/extra.hrl").\n\nrun(X) -> X.\n',
+    'src/unused.hrl': '-define(Z, 3).\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { erlang: 4 })
+
+  const edges = doc.edges.filter(e => e.from === 'src/app.erl')
+  assert.deepEqual(edges.map(e => [e.line, e.to]).sort(), [
+    [3, 'include/shared.hrl'],
+    [4, 'include/extra.hrl'],
+  ], 'include 经 include 根，include_lib 剥离应用名')
+
+  assert.equal(doc.stack.dependencyCounts.erlang, 1)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Cowboy' && t.ecosystem === 'rebar'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

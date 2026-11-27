@@ -845,6 +845,49 @@ const HASKELL_TECH = {
   effectful: 'effectful',
 }
 
+/** Erlang / rebar3 依赖名 → 技术展示名的映射（主流框架与库）。 */
+const ERLANG_TECH = {
+  cowboy: 'Cowboy',
+  ranch: 'Ranch',
+  gun: 'Gun',
+  jsx: 'jsx',
+  jiffy: 'Jiffy',
+  lager: 'Lager',
+  hackney: 'hackney',
+  poolboy: 'poolboy',
+  uuid: 'uuid',
+  recon: 'Recon',
+  prometheus: 'Prometheus',
+  grpcbox: 'grpcbox',
+  'cowboy_swagger': 'Cowboy Swagger',
+  gproc: 'gproc',
+  'parse_trans': 'parse_trans',
+  'proper': 'PropEr',
+  'meck': 'meck',
+  'eunit': 'EUnit',
+  'common_test': 'Common Test',
+}
+
+/**
+ * 从 `rebar.config` 提取 `{deps, [ … ]}` 依赖名。
+ * 允许单行与跨行元组；同名去重。
+ * @param {string} text - rebar.config 内容。
+ * @returns {string[]} 依赖名列表。
+ */
+function rebarDependencies(text) {
+  const start = text.search(/\{deps\s*,\s*\[/)
+  if (start < 0) return []
+  const body = text.slice(start)
+  const open = body.indexOf('[')
+  const close = body.indexOf(']')
+  const segment = body.slice(open + 1, close > open ? close : body.length)
+  const deps = []
+  for (const m of segment.matchAll(/\{\s*([a-z][\w@]*)\s*,/g)) {
+    if (!deps.includes(m[1])) deps.push(m[1])
+  }
+  return deps
+}
+
 /**
  * 从 `*.cabal` 提取包名/版本与所有 `build-depends` 依赖。
  * 依赖段可跨行（缩进续行），按逗号切分后取首个 token（剔除版本约束）；
@@ -1143,6 +1186,13 @@ export function detectStack(manifests) {
       for (const dep of cabal.dependencies) {
         const name = HASKELL_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'cabal', source: path })
+      }
+    } else if (path === 'rebar.config' || path.endsWith('/rebar.config')) {
+      const deps = rebarDependencies(text)
+      info.dependencyCounts.erlang = (info.dependencyCounts.erlang ?? 0) + deps.length
+      for (const dep of deps) {
+        const name = ERLANG_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'rebar', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

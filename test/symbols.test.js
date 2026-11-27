@@ -1537,6 +1537,50 @@ test('Haskell：多行导出列表与操作符', () => {
   assert.equal(byName.get('other').exported, false)
 })
 
+test('Erlang：module/record/type/define/函数与 export 可见性', () => {
+  const code = [
+    '%% -module(hidden).',
+    '-module(demo).',
+    '-export([run/1, init/0]).',
+    '',
+    '-record(state, {count = 0}).',
+    '-type result() :: ok | error.',
+    '-opaque handle() :: reference().',
+    '-define(TIMEOUT, 5000).',
+    '',
+    'run(X) ->',
+    '    X + 1.',
+    '',
+    'init() ->',
+    '    ok;',
+    'init(Arg) ->',
+    '    Arg.',
+    '',
+    'private() -> ok.',
+    '',
+    'double(1) -> 2;',
+    'double(2) -> 4.',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'erlang')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('demo').kind, 'class')
+  assert.equal(byName.get('demo').exported, true)
+  assert.equal(byName.get('state').kind, 'class')
+  assert.equal(byName.get('state').exported, false, '未导出记录')
+  assert.equal(byName.get('result').kind, 'type')
+  assert.equal(byName.get('handle').kind, 'type')
+  assert.equal(byName.get('TIMEOUT').kind, 'variable')
+  assert.equal(byName.get('run').kind, 'function')
+  assert.equal(byName.get('run').exported, true)
+  assert.equal(byName.get('run').endLine, 11)
+  assert.equal(byName.get('init').exported, true)
+  assert.equal(byName.get('init').endLine, 16, '多子句范围')
+  assert.equal(byName.get('private').exported, false)
+  assert.equal(byName.get('double').exported, false)
+  assert.equal(byName.get('double').endLine, 21)
+  assert.ok(!byName.has('hidden'), '注释内 module 不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

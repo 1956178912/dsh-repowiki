@@ -346,6 +346,7 @@ const LANGUAGE_LABELS = {
   nim: 'Nim',
   ocaml: 'OCaml',
   haskell: 'Haskell',
+  erlang: 'Erlang',
   c: 'C',
   cpp: 'C++',
 }

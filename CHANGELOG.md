@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.209.0] - 2026-11-28
+
+### Added
+
+- **Erlang indexing (26th language)**: `.erl`/`.hrl` files produce
+  `-module`, `-record`, `-type`/`-opaque`, `-define` macros and top-level
+  functions, including multi-clause bodies, `when` guards and multi-line
+  signatures. `-export([f/1, …])` drives visibility (private by default;
+  same-name arities merge into one symbol), while `%` comments, strings,
+  quoted atoms and `$x` character literals are masked first.
+  `-include("…")` resolves through the importing file's directory plus
+  every `src/`/`include/` root, and `-include_lib("app/…")` also tries the
+  path without its application prefix; external headers stay edge-free.
+  `rebar.config` `{deps, …}` supplies dependency counts and rebar
+  technology mappings. Prompt fences and the panel language filter know
+  `erlang`.
+
+### Tests
+
+- 618 cases pass (LANG=en and LANG=zh); new coverage pins symbol kinds,
+  multi-clause ranges, export visibility, comment/string shielding,
+  include/include_lib extraction, rebar dependencies and an indexer
+  fixture proving root resolution and app-prefix stripping.
+
 ## [0.208.0] - 2026-11-28
 
 ### Added

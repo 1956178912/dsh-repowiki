@@ -8,7 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan, juliaScan, nimScan, ocamlScan, haskellScan } from './symbols.js'
+import { shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -1031,6 +1031,31 @@ function extractHaskellImports(lines) {
 }
 
 /**
+ * 提取 Erlang 的 `-include("…")` 与 `-include_lib("…")` 引用。
+ * 路径字符串保留在 code 视图（掩码视图用于屏蔽注释），`include_lib`
+ * 的首段应用名由 indexer 在解析时剥离。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractErlangImports(lines) {
+  const result = []
+  const rows = erlangScan(lines)
+  for (let i = 0; i < rows.length; i++) {
+    const code = rows[i].code.trim()
+    const inc = /^-include\s*\(\s*"([^"]+)"\s*\)/.exec(code)
+    if (inc) {
+      result.push({ specifier: inc[1], line: i + 1, kind: 'import', relative: true, imported: [] })
+      continue
+    }
+    const lib = /^-include_lib\s*\(\s*"([^"]+)"\s*\)/.exec(code)
+    if (lib) {
+      result.push({ specifier: lib[1], line: i + 1, kind: 'import', relative: false, imported: [] })
+    }
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1139,6 +1164,7 @@ export function extractImports(code, lang) {
   if (lang === 'nim') return extractNimImports(lines)
   if (lang === 'ocaml') return extractOcamlImports(lines)
   if (lang === 'haskell') return extractHaskellImports(lines)
+  if (lang === 'erlang') return extractErlangImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

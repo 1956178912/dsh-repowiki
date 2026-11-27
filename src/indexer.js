@@ -1079,6 +1079,58 @@ function buildHaskellRoots(paths, extraRoots = []) {
 }
 
 /**
+ * 建立 Erlang include 搜索根：任意层级的 `src/` 与 `include/` 目录，
+ * 最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 搜索根（末项为项目根 ''）。
+ */
+function buildErlangRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!rel.endsWith('.erl') && !rel.endsWith('.hrl')) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'src' || segments[i] === 'include') {
+        roots.add(segments.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+  return [
+    ...[...roots].filter(root => root !== '')
+      .sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Erlang include：先按引用文件目录，再经每个 `src/`/`include/` 根
+ * 与项目根；`-include_lib("app/include/x.hrl")` 额外尝试剥离首段应用名
+ * 的路径；原路径与补 `.hrl` 都尝试，外部头文件返回 null。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - include 路径。
+ * @param {string[]} roots - 搜索根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveErlangInclude(fromRel, specifier, roots, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '' || raw.startsWith('/') || raw.includes('\\')) return null
+  const candidates = [raw]
+  const parts = raw.split('/')
+  if (parts.length > 1) candidates.push(parts.slice(1).join('/'))
+  for (const base of [path.posix.dirname(fromRel), ...roots]) {
+    for (const candidate of candidates) {
+      for (const suffix of ['', '.hrl']) {
+        const joined = path.posix.normalize(path.posix.join(base, `${candidate}${suffix}`))
+        if (indexed.has(joined)) return joined
+      }
+    }
+  }
+  return null
+}
+
+/**
  * 解析 Haskell `import`：模块点分名按 GHC 约定换算为目录路径，在每个
  * source-dir 与项目根下尝试 `<Mod>/<Ule>.hs`/`.lhs`；外部包返回 null。
  * @param {string} specifier - 模块名（如 Data.Text 或 Foo.Bar）。
@@ -2042,6 +2094,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   elixirModules:Map<string,string>,
  *   ocamlModules:Map<string,string>,
  *   haskellRoots:string[],
+ *   erlangRoots:string[],
  *   luaRoots:string[],
  *   gleamRoots:string[],
  *   nimRoots:string[],
@@ -2085,6 +2138,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, ctx.ocamlModules)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
+  if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
@@ -2368,6 +2422,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     elixirModules: buildElixirModules(files),
     ocamlModules: buildOcamlModules(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
+    erlangRoots: buildErlangRoots(indexed),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
     nimRoots: buildNimRoots(indexed),
