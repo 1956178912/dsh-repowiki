@@ -338,6 +338,20 @@ function expandRustUse(prefix, body) {
       const [rawPath, alias] = part.split(/\s+as\s+/)
       const pathPart = rawPath.trim()
       if (!pathPart) continue
+      // `use a::b::{self}` 等价于 `use a::b;`：路径去掉 ::self，
+      // 导入名是模块名（与普通模块导入一致，供使用点扫描模块名）
+      if (pathPart === 'self') {
+        if (!prefix) continue
+        const local = (prefix.split('::').pop() ?? '').trim()
+        if (!local) continue
+        const aliasName = (alias ?? local).trim()
+        out.push({
+          path: prefix,
+          name: /^[A-Za-z_]\w*$/.test(aliasName) ? aliasName : local,
+          local,
+        })
+        continue
+      }
       const path = prefix ? `${prefix}::${pathPart}` : pathPart
       const local = (pathPart.split('::').pop() ?? '').trim()
       const leaf = (alias ?? local).trim()

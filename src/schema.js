@@ -65,8 +65,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v17：PHP `use … as` 与 Scala 重命名导入保留原名归因并写 aliases。
  *  v18：Go 导入别名写 aliases；`.`/`_` 导入分别为 `*` 与无符号引用。
  *  v19：Dart 无组合子导入/导出记 `*`，`hide` 排除名写 hidden。
- *  v20：JS `export * as ns` 不再记通配符（只导出命名空间对象）。 */
-export const INDEX_PARSER_VERSION = 20
+ *  v20：JS `export * as ns` 不再记通配符（只导出命名空间对象）。
+ *  v21：Rust `use a::b::{self}` 路径去掉 `::self`，导入名取模块名。 */
+export const INDEX_PARSER_VERSION = 21
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.265.0] - 2026-11-28
+
+### Fixed
+
+- **Rust `use a::b::{self}`**: `self` inside a use group used to produce a
+  phantom `a::b::self` specifier with no imported name, so the module import
+  could not resolve. It now resolves to `a::b` with the module name as the
+  imported symbol; `{self as local}` records the local alias. Parser v21
+  re-parses cached imports.
+
+### Tests
+
+- 817 cases pass (LANG=en); new assertions for `{self}`/`{self as local}`
+  paths, names and aliases.
+
 ## [0.264.0] - 2026-11-28
 
 ### Fixed

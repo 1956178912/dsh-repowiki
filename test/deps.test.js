@@ -185,6 +185,8 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
     'use super::util::Helper;',
     'use self::inner::Thing;',
     'use crate::{graph, lexer::{Lexer, Token as T}};',
+    'use crate::parser::{self, Token};',
+    'use crate::lexer::{self as lex};',
     'use serde::Serialize;',
     '// use not::real;',
   ].join('\n')
@@ -203,6 +205,13 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   assert.deepEqual(bySpec.get('crate::lexer::Token').aliases, [{ from: 'Token', to: 'T' }], '本地别名进入 aliases')
   assert.ok(bySpec.has('serde::Serialize'), '外部 crate 也记录（解析失败不计边）')
   assert.ok(!bySpec.has('not::real'), '注释不提取')
+  // `use a::b::{self}` 等价于 `use a::b;`，不能产生 `::self` 伪路径
+  assert.ok(!bySpec.has('crate::parser::self'), '{self} 不产生伪路径')
+  assert.deepEqual(bySpec.get('crate::parser').imported, ['parser'], '{self} 导入模块名')
+  assert.equal(bySpec.get('crate::parser').aliases, undefined, '无 as 不产生别名')
+  assert.deepEqual(bySpec.get('crate::lexer').imported, ['lexer'], '{self as lex} 导入别名')
+  assert.deepEqual(bySpec.get('crate::lexer').aliases, [{ from: 'lexer', to: 'lex' }],
+    '{self as lex} 记录原名→本地名')
 })
 
 test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
