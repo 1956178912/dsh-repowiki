@@ -1314,9 +1314,11 @@ test('Gleam：src/test 源根解析、未限定导入与技术栈', async () => 
       'pub fn show(user: User) { io.println(user.name) }',
     ].join('\n'),
     'test/demo_test.gleam': 'import demo/user\nimport demo/web\n',
+    'apps/web/gleam.toml': 'name = "web"\n[dependencies]\nlustre = "~> 4.0"\n',
+    'apps/web/src/web.gleam': 'pub fn page() { Nil }\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
-  assert.deepEqual(doc.stats.languages, { gleam: 4 })
+  assert.deepEqual(doc.stats.languages, { gleam: 5 })
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('src/demo/web.gleam', 'src/demo/user.gleam')?.line, 1)
@@ -1326,8 +1328,9 @@ test('Gleam：src/test 源根解析、未限定导入与技术栈', async () => 
 
   assert.equal(doc.stack.projectName, 'demo')
   assert.equal(doc.stack.projectVersion, '1.2.0')
-  assert.equal(doc.stack.dependencyCounts.gleam, 3)
+  assert.equal(doc.stack.dependencyCounts.gleam, 4, '子包清单依赖累加')
   assert.ok(doc.stack.technologies.some(t => t.name === 'Wisp' && t.source === 'gleam.toml'))
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Lustre' && t.source === 'apps/web/gleam.toml'), '子包技术栈可追溯')
 
   const web = doc.files.find(f => f.path === 'src/demo/web.gleam')
   assert.deepEqual(web.imports[0].imported, ['User'], '未限定导入去重（type User + User）')

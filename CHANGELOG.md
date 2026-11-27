@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.187.0] - 2026-11-28
+
+### Added
+
+- **Gleam monorepos and multi-line imports**: nested `apps/*/gleam.toml`
+  manifests (capped at 20, root excluded) now merge their dependency
+  counts and technologies into the stack while the root manifest stays the
+  only source of project name/version. Multi-line unqualified imports
+  (`import my_app/{\n  type User,\n  User as U,\n}`) are joined up to the
+  closing brace (50-line cap) before parsing, so `imported` symbols are
+  complete and symbol-level impact evidence no longer depends on
+  formatting.
+
+### Tests
+
+- 576 cases pass (LANG=en and LANG=zh); new coverage pins the multi-line
+  import join and a nested `apps/web/gleam.toml` fixture proving dependency
+  accumulation, root-only project metadata and source-traceable subpackage
+  technologies.
+
 ## [0.186.0] - 2026-11-28
 
 ### Changed

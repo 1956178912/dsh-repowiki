@@ -92,6 +92,12 @@ const MAX_COMPOSER_MANIFESTS = 50
 const MAX_MIX_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的嵌套 `gleam.toml` 数（Gleam monorepo 子包）。
+ * 根清单不受此上限影响；嵌套清单提供各包的依赖与技术栈。
+ */
+const MAX_GLEAM_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -111,6 +117,7 @@ function isJsConfigName(name) {
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
+    || name === 'gleam.toml'
 }
 
 /**
@@ -1804,6 +1811,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let goModsRead = 0
   let composerManifestsRead = 0
   let mixManifestsRead = 0
+  let gleamManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -1832,6 +1840,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedMix) {
       if (mixManifestsRead >= MAX_MIX_MANIFESTS) continue
       mixManifestsRead++
+    }
+    const nestedGleam = !MANIFEST_FILES[rel] && baseName === 'gleam.toml'
+    if (nestedGleam) {
+      if (gleamManifestsRead >= MAX_GLEAM_MANIFESTS) continue
+      gleamManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }

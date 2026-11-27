@@ -289,6 +289,17 @@ test('gleam.toml：项目名/版本与依赖段计数', () => {
   assert.ok(!info.technologies.some(t => t.name === 'gleam_stdlib'), 'stdlib 只计数不列技术')
 })
 
+test('gleam.toml：monorepo 子包依赖合并、根项目名优先', () => {
+  const info = detectStack({
+    'gleam.toml': 'name = "root"\nversion = "0.1.0"\n[dependencies]\nwisp = "~> 1.0"\n',
+    'apps/web/gleam.toml': 'name = "web"\n[dependencies]\nlustre = "~> 4.0"\n',
+  })
+  assert.equal(info.projectName, 'root', '项目名只取根清单')
+  assert.equal(info.projectVersion, '0.1.0')
+  assert.equal(info.dependencyCounts.gleam, 2, '子包依赖累加')
+  assert.ok(info.technologies.some(t => t.name === 'Lustre' && t.source === 'apps/web/gleam.toml'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

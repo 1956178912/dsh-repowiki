@@ -792,11 +792,12 @@ export function detectStack(manifests) {
       info.dependencyCounts.zig = zon.dependencies.length
       if (!info.projectName && zon.name) info.projectName = zon.name
       if (!info.projectVersion && zon.version) info.projectVersion = zon.version
-    } else if (path === 'gleam.toml') {
+    } else if (path === 'gleam.toml' || path.endsWith('/gleam.toml')) {
       const gleam = gleamTomlInfo(text)
-      info.dependencyCounts.gleam = gleam.dependencies.length
-      if (!info.projectName && gleam.name) info.projectName = gleam.name
-      if (!info.projectVersion && gleam.version) info.projectVersion = gleam.version
+      // monorepo：根清单管项目元数据，子包清单合并依赖计数/技术栈
+      info.dependencyCounts.gleam = (info.dependencyCounts.gleam ?? 0) + gleam.dependencies.length
+      if (path === 'gleam.toml' && !info.projectName && gleam.name) info.projectName = gleam.name
+      if (path === 'gleam.toml' && !info.projectVersion && gleam.version) info.projectVersion = gleam.version
       for (const dep of gleam.dependencies) {
         const name = GLEAM_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'gleam', source: path })

@@ -414,6 +414,21 @@ test('Gleam：模块 import、别名与未限定导入', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
 })
 
+test('Gleam：跨行未限定导入', () => {
+  const code = [
+    'import my_app/user.{',
+    '  type User,',
+    '  User as U,',
+    '}',
+    'import my_app/config',
+  ].join('\n')
+  const imports = extractImports(code, 'gleam')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.imported]), [
+    ['my_app/user', 1, ['User']],
+    ['my_app/config', 5, []],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

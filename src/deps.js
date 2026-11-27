@@ -746,7 +746,18 @@ function extractGleamImports(lines) {
   const result = []
   const re = /^\s*import\s+([a-z][\w]*(?:\/[\w]+)*)(?:\s+as\s+[\w]+)?(?:\s*\.\{([^}]*)\})?/
   for (let i = 0; i < lines.length; i++) {
-    const m = re.exec(stripGleamComment(lines[i]))
+    let code = stripGleamComment(lines[i])
+    if (!/^\s*import\b/.test(code)) continue
+    // 未限定导入列表常被格式化到多行：拼接到闭合 `}`（上限 50 行），
+    // 起始行号保持不变；后续行不以 import 开头，不会被重复匹配。
+    if (code.includes('.{') && !code.includes('}')) {
+      const end = Math.min(lines.length, i + 50)
+      for (let j = i + 1; j < end; j++) {
+        code += ` ${stripGleamComment(lines[j])}`
+        if (code.includes('}')) break
+      }
+    }
+    const m = re.exec(code)
     if (!m) continue
     const imported = new Set()
     if (m[2]) {

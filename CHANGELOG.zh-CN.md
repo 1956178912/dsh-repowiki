@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.187.0] - 2026-11-28
+
+- **Gleam monorepo 与跨行导入**：嵌套 `apps/*/gleam.toml`（上限 20，
+  根清单不受限）的依赖计数与技术栈并入项目技术栈，项目名/版本仍只取
+  根清单；跨行未限定导入（`import my_app/{\n  type User,\n  User as U,\n}`）
+  在解析前拼接到闭合 `}`（上限 50 行），`imported` 符号完整，符号级
+  影响证据不再受代码格式化影响。
+- **测试**：576 例在 LANG=en 与 LANG=zh 下全通过；新增跨行导入拼接与
+  `apps/web/gleam.toml` 夹具，验证依赖累加、根清单元数据优先与子包技术
+  栈来源可追溯。
+
 ## [0.186.0] - 2026-11-28
 
 - **status 结构化 Wiki 陈旧原因**：`repowiki-status` 输出
