@@ -82,7 +82,9 @@ C#/Kotlin/Scala 的命名空间解析优先按“点分路径后缀/前缀”匹
 归属被扩展类型，`given` 实例登记为 variable 且内部方法归属该实例（匿名
 given 以类型名登记）。宏展开与条件编译仍不解析；`.m`/`.h` 与 MATLAB/Mathematica 等共用扩展名，按内容识别（含 Objective-C 标记的 `.h` 改判为 objc 且合并 C 符号；MATLAB 写法的 `.m` 归为 `matlab` 并提取函数/类/属性符号（含转置感知的字符串屏蔽；无 `end` 风格函数按下一个同缩进 `function` 收尾）；无法判断时 `.m` 保持 objc），`@class` 前向声明与 `NS_ENUM` 等宏不登记；`.v` 与 Coq 共用扩展名，索引时按内容识别（含 Coq 声明且无 HDL 结构标记的文件记为 `coq` 且不提取符号，无法判断时保持 Verilog）；Scala 声明头可跨行
 （参数逐行书写、`extends` 续行），缩进体从签名结束行开始计算。JS/TS 别名按文件
-所在目录的就近配置解析（根配置兜底），不跟随 `extends` 链；工作区包只
+所在目录的就近配置解析（根配置兜底），相对 `extends`（字符串或数组，最多
+5 跳）继承 `baseUrl`/`paths`，子配置 `paths` 覆盖父配置，包名 extends 不读取
+（不访问 node_modules）；工作区包只
 按 `exports`/`main` 等入口与源码目录解析，不读取 `node_modules`，入口
 指向未索引构建产物时回退 `src/index`/`index`。Python 绝对导入只识别
 项目根与 `src`/`lib` 布局根，不读取 `site-packages`；`pyproject.toml` 的

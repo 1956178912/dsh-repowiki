@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.256.0] - 2026-11-28
+
+### Added
+
+- **tsconfig/jsconfig `extends`**: relative base configs (single string or
+  array, up to 5 hops) now contribute `baseUrl`/`paths`. Child `paths`
+  replace parent entries, inherited patterns keep the directory where they
+  were declared, and extends arrays follow TypeScript's later-wins order.
+- Package-name extends are never read from `node_modules`; configs that are
+  only used as a base do not apply standalone unless they are
+  `tsconfig.json`/`jsconfig.json`; cycles and depth caps degrade silently.
+
+### Tests
+
+- 805 cases pass (LANG=en); new coverage for inherited aliases, child
+  overrides, extends arrays and base-config non-leakage.
+
 ## [0.255.0] - 2026-11-28
 
 ### Added

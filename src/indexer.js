@@ -479,46 +479,155 @@ function parseJsonc(text) {
  * tsconfig/jsconfig 的路径别名配置。
  * @typedef {Object} JsAliasConfig
  * @property {string} dir - 配置所在目录（相对根，根为 ''）。
- * @property {string} baseDir - paths 目标的解析基准目录（baseUrl 或配置目录）。
- * @property {{key:string, prefix:string, wildcard:boolean, targets:string[]}[]} patterns
- *   `paths` 条目（按固定前缀长度降序，越具体越先匹配）。
+ * @property {string} baseDir - 直接 specifier 的解析基准目录（有效 baseUrl 或配置目录）。
+ * @property {{key:string, prefix:string, wildcard:boolean, targets:string[],
+ *   baseDir?:string}[]} patterns
+ *   `paths` 条目（按固定前缀长度降序，越具体越先匹配）；`baseDir` 为该
+ *   条目定义处的 baseUrl/配置目录（继承条目保留父配置基准）。
  */
 
+/** tsconfig `extends` 链的最大跳数（防异常/循环配置）。 */
+const MAX_JS_CONFIG_EXTENDS = 5
+
 /**
- * 从 tsconfig/jsconfig 文本构建别名配置。
+ * 解析单个 tsconfig/jsconfig：只读取 extends、baseUrl 与 paths。
  * @param {string} rel - 配置文件相对路径。
  * @param {string} text - 文件内容（可含注释/尾逗号）。
- * @returns {JsAliasConfig|null} 无有效 compilerOptions 时返回 null。
+ * @returns {{rel:string, dir:string, baseUrl?:string, paths?:Record<string, unknown>,
+ *   extends:string[]}|null} 无相关字段时返回 null。
  */
-function buildAliasConfig(rel, text) {
+function parseAliasConfig(rel, text) {
   const json = parseJsonc(text)
   if (!json || typeof json !== 'object') return null
-  const opts = json.compilerOptions
-  if (!opts || typeof opts !== 'object') return null
+  const opts = json.compilerOptions && typeof json.compilerOptions === 'object'
+    ? json.compilerOptions
+    : {}
+  const rawExtends = json.extends
+  const extendsList = (Array.isArray(rawExtends) ? rawExtends : [rawExtends])
+    .filter(value => typeof value === 'string' && value.trim())
+    .map(value => value.trim())
+  const baseUrl = typeof opts.baseUrl === 'string' && opts.baseUrl.trim()
+    ? opts.baseUrl.trim()
+    : undefined
+  const paths = opts.paths && typeof opts.paths === 'object' ? opts.paths : undefined
+  if (!paths && baseUrl === undefined && extendsList.length === 0) return null
   const dir = path.posix.dirname(rel)
-  const configDir = dir === '.' ? '' : dir
-  // TS 4.1+：paths 相对 baseUrl；未设 baseUrl 时相对配置文件所在目录
-  const baseDir = typeof opts.baseUrl === 'string' && opts.baseUrl.trim()
-    ? normalizeRel(configDir, opts.baseUrl)
-    : configDir
-  const patterns = []
-  if (opts.paths && typeof opts.paths === 'object') {
-    for (const [key, targets] of Object.entries(opts.paths)) {
-      if (!Array.isArray(targets)) continue
-      const list = targets.filter(t => typeof t === 'string' && t.length > 0)
-      if (list.length === 0) continue
-      const star = key.indexOf('*')
-      patterns.push({
-        key,
-        prefix: star >= 0 ? key.slice(0, star) : key,
-        wildcard: star >= 0,
-        targets: list,
-      })
-    }
-    // 固定前缀越长越具体：`@/` 先于 `*`
-    patterns.sort((a, b) => b.prefix.length - a.prefix.length || a.key.localeCompare(b.key))
+  return {
+    rel,
+    dir: dir === '.' ? '' : dir,
+    ...(baseUrl !== undefined ? { baseUrl } : {}),
+    ...(paths ? { paths } : {}),
+    extends: extendsList,
   }
-  return { dir: configDir, baseDir, patterns }
+}
+
+/**
+ * 把 `paths` 对象转成匹配模式（目标相对 `baseDir`）。
+ * @param {Record<string, unknown>} paths - paths 配置。
+ * @param {string} baseDir - 目标基准目录。
+ * @returns {Array<{key:string, prefix:string, wildcard:boolean, targets:string[], baseDir:string}>}
+ *   排序后的模式。
+ */
+function aliasPatterns(paths, baseDir) {
+  const patterns = []
+  for (const [key, targets] of Object.entries(paths)) {
+    if (!Array.isArray(targets)) continue
+    const list = targets.filter(t => typeof t === 'string' && t.length > 0)
+    if (list.length === 0) continue
+    const star = key.indexOf('*')
+    patterns.push({
+      key,
+      prefix: star >= 0 ? key.slice(0, star) : key,
+      wildcard: star >= 0,
+      targets: list,
+      baseDir,
+    })
+  }
+  // 固定前缀越长越具体：`@/` 先于 `*`
+  patterns.sort((a, b) => b.prefix.length - a.prefix.length || a.key.localeCompare(b.key))
+  return patterns
+}
+
+/**
+ * 递归解析 `extends` 链，得到有效 baseUrl 与 paths 模式。
+ * 只跟随同一仓库内的相对路径（包名 extends 不读取，避免依赖 node_modules）；
+ * 子配置定义 baseUrl/paths 时覆盖父配置；继承的 patterns 保留各自基准目录。
+ * @param {{rel:string, dir:string, baseUrl?:string, paths?:Record<string, unknown>,
+ *   extends:string[]}} raw - 当前配置。
+ * @param {Map<string, object>} byPath - 全部配置。
+ * @param {Set<string>} visiting - 当前递归路径（循环检测）。
+ * @param {number} depth - 当前深度。
+ * @param {Map<string, {baseUrl:string|null, patterns:Array<object>}>} memo - 结果缓存。
+ * @returns {{baseUrl:string|null, patterns:Array<object>}} 有效配置。
+ */
+function resolveAliasConfig(raw, byPath, visiting, depth, memo) {
+  const cached = memo.get(raw.rel)
+  if (cached) return cached
+  /** @type {{baseUrl:string|null, patterns:Array<object>}} */
+  const effective = { baseUrl: null, patterns: [] }
+  if (depth <= MAX_JS_CONFIG_EXTENDS) {
+    for (const ext of raw.extends) {
+      if (!ext.startsWith('.')) continue
+      let target = normalizeRel(raw.dir, ext)
+      if (!byPath.has(target) && !target.endsWith('.json')) target = `${target}.json`
+      const parent = byPath.get(target)
+      if (!parent || visiting.has(parent.rel)) continue
+      visiting.add(parent.rel)
+      const inherited = resolveAliasConfig(parent, byPath, visiting, depth + 1, memo)
+      visiting.delete(parent.rel)
+      if (inherited.baseUrl) effective.baseUrl = inherited.baseUrl
+      if (inherited.patterns.length > 0) effective.patterns = inherited.patterns
+    }
+  }
+  if (raw.baseUrl !== undefined) effective.baseUrl = normalizeRel(raw.dir, raw.baseUrl)
+  if (raw.paths) {
+    effective.patterns = aliasPatterns(raw.paths, effective.baseUrl ?? raw.dir)
+  }
+  memo.set(raw.rel, effective)
+  return effective
+}
+
+/**
+ * 从全部 tsconfig/jsconfig 文本构建别名配置（含 extends 继承）。
+ * 被其他配置 extends 的基础配置不单独生效（除非本身是 tsconfig.json/
+ * jsconfig.json 入口），避免基础配置覆盖子配置。
+ * @param {Record<string,string>} manifestTexts - 清单路径 → 文本。
+ * @returns {JsAliasConfig[]} 别名配置（按目录深度降序，就近优先）。
+ */
+function buildJsAliasConfigs(manifestTexts) {
+  /** @type {Array<{rel:string, dir:string, baseUrl?:string, paths?:Record<string, unknown>, extends:string[]}>} */
+  const rawConfigs = []
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (!isJsConfigName(path.posix.basename(rel))) continue
+    const parsed = parseAliasConfig(rel, text)
+    if (parsed) rawConfigs.push(parsed)
+  }
+  const byPath = new Map(rawConfigs.map(config => [config.rel, config]))
+  /** @type {Set<string>} */
+  const extended = new Set()
+  for (const config of rawConfigs) {
+    for (const ext of config.extends) {
+      if (!ext.startsWith('.')) continue
+      let target = normalizeRel(config.dir, ext)
+      if (!byPath.has(target) && !target.endsWith('.json')) target = `${target}.json`
+      if (byPath.has(target)) extended.add(target)
+    }
+  }
+  const memo = new Map()
+  const configs = []
+  for (const config of rawConfigs) {
+    const baseName = path.posix.basename(config.rel)
+    const entry = baseName === 'tsconfig.json' || baseName === 'jsconfig.json'
+    if (extended.has(config.rel) && !entry) continue
+    const effective = resolveAliasConfig(config, byPath, new Set([config.rel]), 0, memo)
+    if (!effective.baseUrl && effective.patterns.length === 0) continue
+    configs.push({
+      dir: config.dir,
+      baseDir: effective.baseUrl ?? config.dir,
+      patterns: effective.patterns,
+    })
+  }
+  return configs.sort((a, b) => dirDepth(b.dir) - dirDepth(a.dir) || a.dir.localeCompare(b.dir))
 }
 
 /**
@@ -545,7 +654,7 @@ function resolveJsAlias(fromRel, specifier, configs, indexed) {
       }
       for (const target of pattern.targets) {
         const replaced = pattern.wildcard ? target.replace('*', captured) : target
-        const hit = resolveJsBase(normalizeRel(cfg.baseDir, replaced), indexed)
+        const hit = resolveJsBase(normalizeRel(pattern.baseDir ?? cfg.baseDir, replaced), indexed)
         if (hit) return hit
       }
     }
@@ -3173,13 +3282,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   // 依赖边第二遍：需要完整文件集合与清单（go.mod 的 module 前缀、
   // Rust crate 根、Java 包路径），因此放在第一遍解析之后统一解析。
   // JS/TS 额外建立别名配置（就近优先）与工作区包索引。
-  const jsAliases = []
-  for (const [rel, text] of Object.entries(manifestTexts)) {
-    if (!isJsConfigName(path.posix.basename(rel))) continue
-    const cfg = buildAliasConfig(rel, text)
-    if (cfg) jsAliases.push(cfg)
-  }
-  jsAliases.sort((a, b) => dirDepth(b.dir) - dirDepth(a.dir) || a.dir.localeCompare(b.dir))
+  const jsAliases = buildJsAliasConfigs(manifestTexts)
   const resolveCtx = {
     indexed,
     javaPaths: buildJavaPaths(indexed),

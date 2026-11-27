@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.256.0] - 2026-11-28
+
+- **tsconfig/jsconfig `extends`**：跟随相对基础配置（字符串或数组，最多
+  5 跳）继承 `baseUrl`/`paths`；子配置 `paths` 替换父条目，继承模式保留
+  声明目录，数组按 TypeScript 的后者覆盖前者顺序合并。
+- 包名 extends 不读取（不访问 `node_modules`）；仅作基础配置的文件不
+  单独生效（除非名为 `tsconfig.json`/`jsconfig.json`）；循环与深度上限
+  静默降级。
+- **测试**：805 例通过（LANG=en）；新增继承别名、子覆盖、extends 数组
+  与基础配置不泄漏覆盖。
+
 ## [0.255.0] - 2026-11-28
 
 - **默认导出再导出**：具名 `export default function`/`class`/`interface`

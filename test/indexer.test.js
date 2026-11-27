@@ -1020,6 +1020,49 @@ test('JS/TS 别名：tsconfig paths（通配/精确）与 baseUrl 解析为本�
   )
 })
 
+test('JS/TS 别名：tsconfig extends 继承 baseUrl/paths', async () => {
+  const dir = makeProject({
+    'tsconfig.base.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } } }',
+    'tsconfig.json': '{ "extends": "./tsconfig.base.json" }',
+    'src/app.ts': "import { x } from '@/util';\n",
+    'src/util.ts': 'export const x = 1\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.equal(
+    doc.edges.find(edge => edge.from === 'src/app.ts')?.to,
+    'src/util.ts',
+    '子配置继承基础配置的别名',
+  )
+})
+
+test('JS/TS 别名：extends 子配置的 paths 覆盖父配置，不泄漏父别名', async () => {
+  const dir = makeProject({
+    'tsconfig.base.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } } }',
+    'tsconfig.json': '{ "extends": "./tsconfig.base.json", "compilerOptions": { "paths": { "~/*": ["lib/*"] } } }',
+    'src/app.ts': "import { x } from '@/util';\nimport { y } from '~/tool';\n",
+    'src/util.ts': 'export const x = 1\n',
+    'lib/tool.ts': 'export const y = 1\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edges = doc.edges.filter(edge => edge.from === 'src/app.ts')
+  assert.deepEqual(edges.map(edge => [edge.line, edge.to]), [[2, 'lib/tool.ts']],
+    '子配置 paths 替换父 paths，父 @/ 不再生效')
+})
+
+test('JS/TS 别名：extends 数组后者覆盖前者', async () => {
+  const dir = makeProject({
+    'tsconfig.a.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "a/*": ["src/*"] } } }',
+    'tsconfig.b.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "b/*": ["src/*"] } } }',
+    'tsconfig.json': '{ "extends": ["./tsconfig.a.json", "./tsconfig.b.json"] }',
+    'src/app.ts': "import { x } from 'a/util';\nimport { y } from 'b/util';\n",
+    'src/util.ts': 'export const x = 1\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edges = doc.edges.filter(edge => edge.from === 'src/app.ts')
+  assert.deepEqual(edges.map(edge => [edge.line, edge.to]), [[2, 'src/util.ts']],
+    'extends 数组后面的配置覆盖前面，a/* 不生效')
+})
+
 test('JS/TS 别名：就近 tsconfig 优先，跨包别名不互相污染', async () => {
   const dir = makeProject({
     'tsconfig.json': '{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"] } } }',
