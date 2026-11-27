@@ -1241,15 +1241,17 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 卡片行（列表视图）。 */
+    /** 卡片行（列表视图）。优化后移除卡片风格，采用紧凑列表样式。 */
     function CardRow({ row, t, tt, onOpen }) {
       const { card } = row
       return h('button', {
         type: 'button', onClick: onOpen,
         style: {
-          ...cardChipStyle(),
-          display: 'flex', alignItems: 'center', gap: 16, width: '100%',
-          marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+          display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+          padding: '8px 12px', textAlign: 'left',
+          background: 'transparent', border: 'none', borderRadius: 0, cursor: 'pointer',
+          borderBottom: '0.5px solid var(--dsw-alias-border-l2, #f3f4f6)',
+          transition: 'background 150ms ease',
         },
         'aria-label': card ? card.title : `${row.path} (${t('pending')})`,
       },

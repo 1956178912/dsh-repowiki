@@ -5,6 +5,18 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.42.0] - 2026-11-27
+
+### Optimized
+
+- **Empty state styling** (user feedback on "无法滑动"): improved the empty state messages with better padding and presentation. The "loading" and "empty" messages now have consistent visual treatment with the rest of the UI.
+
+## [0.41.0] - 2026-11-27
+
+### Optimized
+
+- **Card row list style** (user feedback: "列表视图下宽度太长了"): converted the card row from bordered cards with `border-radius: 12px` and `marginBottom` to a compact list with a thin `0.5px` bottom border and minimal padding. The new style eliminates visual bulk and aligns with more traditional list views.
+
 ## [0.40.0] - 2026-11-27
 
 ### Changed
