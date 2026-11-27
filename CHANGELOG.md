@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.148.0] - 2026-11-27
+
+### Added
+
+- **Panel stale-cards notice**: the Wiki tab now recomputes the card
+  `inputDigest` in the browser (Web Crypto SHA-256, same `path:sourceDigest`
+  ordering as generate) and warns when it differs from the manifest, i.e. the
+  wiki fell behind after cards changed. If Web Crypto is unavailable the check
+  degrades to silence instead of showing a false warning.
+
+### Tests
+
+- 512 cases pass (LANG=en and LANG=zh); a panel case mounts a manifest with a
+  deliberately wrong digest and asserts the stale notice.
+
 ## [0.147.0] - 2026-11-27
 
 ### Added

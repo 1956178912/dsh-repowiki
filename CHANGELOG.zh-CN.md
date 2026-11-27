@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.148.0] - 2026-11-27
+
+- **面板卡片陈旧提示**：Wiki 页签在浏览器侧重算卡片 `inputDigest`
+  （Web Crypto SHA-256，与 generate 相同的 `path:sourceDigest` 排序），
+  与清单不一致时提示“Wiki 落后于当前卡片”。Web Crypto 不可用时静默
+  降级，不显示可能错误的告警。
+- **测试**：512 例在 LANG=en 与 LANG=zh 下全通过；新增清单写入错误
+  digest 后面板显示陈旧提示的用例。
+
 ## [0.147.0] - 2026-11-27
 
 - **状态缺页计数**：`repowiki-status` 新增 `wiki.missing` 与

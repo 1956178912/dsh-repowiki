@@ -158,6 +158,7 @@ const DICTS = {
     wikiFailedHint: '失败页：{pages}',
     wikiMissingSummary: '清单中 {n} 页在磁盘缺失',
     wikiMissingHint: '缺失页：{pages}',
+    wikiStaleCards: 'Wiki 落后于当前卡片：生成后卡片已变化，请重新生成',
     wikiOnlyUntracked: '仅看未覆盖（{n}）',
     wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
@@ -276,6 +277,7 @@ const DICTS = {
     wikiFailedHint: 'Failed pages: {pages}',
     wikiMissingSummary: '{n} manifest page(s) missing from disk',
     wikiMissingHint: 'Missing pages: {pages}',
+    wikiStaleCards: 'Wiki is behind the current cards: cards changed after generation, run repowiki-generate',
     wikiOnlyUntracked: 'Only untracked ({n})',
     wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
@@ -1393,6 +1395,46 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 计算 sha256 前缀（浏览器/Node 的 Web Crypto；不可用时返回空串）。
+     * @param {string} text - 输入文本。
+     * @param {number} [chars=16] - 截取位数。
+     * @returns {Promise<string>} 十六进制前缀；不可用或失败时为空串。
+     */
+    async function digestHex(text, chars = 16) {
+      const subtle = globalThis.crypto?.subtle
+      const Encoder = globalThis.TextEncoder
+      if (!subtle || typeof Encoder === 'undefined') return ''
+      try {
+        const data = new Encoder().encode(String(text))
+        const buffer = await subtle.digest('SHA-256', data)
+        return [...new Uint8Array(buffer)]
+          .map(byte => byte.toString(16).padStart(2, '0'))
+          .join('')
+          .slice(0, chars)
+      } catch {
+        return ''
+      }
+    }
+
+    /**
+     * 计算卡片集合的输入指纹（与 repowiki-generate 的 inputDigest 同口径）。
+     * @param {object[]} cards - 面板已加载的卡片（path/sourceDigest）。
+     * @returns {Promise<string>} sha256-16；Web Crypto 不可用时为空串。
+     */
+    async function cardsInputDigest(cards) {
+      const byPath = new Map()
+      for (const card of cards) {
+        if (typeof card?.path === 'string' && card.path) byPath.set(card.path, card)
+      }
+      return digestHex(
+        [...byPath.entries()]
+          .map(([cardPath, card]) => `${cardPath}:${card.sourceDigest ?? ''}`)
+          .sort()
+          .join('\n'),
+      )
+    }
+
+    /**
      * 汇总清单级诊断：上次生成失败页与磁盘缺失页（面板不读源码）。
      * @param {object[]} entries - 已加载的页面（file 为相对资产根路径）。
      * @param {object|null} manifest - wiki/<locale>/_index.json。
@@ -1629,7 +1671,13 @@ window.__ModuleLoader__.load({
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
-          setWikiMeta(wikiDiagnostics(wikiResult.entries, manifest))
+          const cardDigest = await cardsInputDigest(loaded)
+          setWikiMeta({
+            ...wikiDiagnostics(wikiResult.entries, manifest),
+            cardsStale: manifest && typeof manifest.inputDigest === 'string' && cardDigest
+              ? cardDigest !== manifest.inputDigest
+              : null,
+          })
           setLastExtract(knowledgeManifest?.lastRun && typeof knowledgeManifest.lastRun === 'object'
             ? knowledgeManifest.lastRun
             : null)
@@ -2930,6 +2978,10 @@ window.__ModuleLoader__.load({
       }
       // 清单级诊断：上次生成失败页与磁盘缺失页（数据只来自清单与目录列表）
       const diagnostics = h('div', null,
+        meta && meta.cardsStale === true && h('p', {
+          role: 'status',
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, t('wikiStaleCards')),
         meta && meta.failedTotal > 0 && h('p', {
           role: 'status',
           title: meta.failedPages.length > 0
