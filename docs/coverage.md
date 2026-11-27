@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.228.0）；测试 679/679（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.05%、分支约 87.9%、函数 95.89%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.229.0）；测试 683/683（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.06%、分支约 87.9%、函数 95.89%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（679/679，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、含新信号的健康分、37 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（683/683，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、含新信号的健康分、37 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -257,6 +257,7 @@
 | Nix 支持 | 37 语言：属性集/`let` 绑定（点分键、`{`/`rec {` class、lambda function、嵌套 `parent`）与注释/字符串/缩进字符串屏蔽；`import`/`callPackage`/`builtins.readFile|readDir|path` 相对路径解析（补 `.nix` 与 `default.nix`），`<nixpkgs>`/绝对路径不建边 | v0.222.0 |
 | VB.NET 支持 | 37 语言：`Namespace`/`Class`/`Module`/`Structure`/`Interface`/`Enum`、`Sub`/`Function`/`Property`/`Event`（`End <type>` 配平；接口/MustOverride 单行；Property 覆盖 Get/Set）、构造器 `Sub New`、修饰符与可见性；注释/字符串屏蔽；`Imports`/`Inherits`/`Implements` 点分 + 命名空间后缀解析，外部程序集不建边 | v0.223.0 |
 | 圈复杂度 | `repowiki-status` 对每个 function/method 符号范围统计行首分支关键字与 `&&`/`||`，输出函数数/平均/最大与 ≤10 个 ≥15 的函数；注释/字符串未屏蔽，定位为复核启发式 | v0.227.0 |
+| 坏相对导入 | 索引 import 记录与边表对照：以 `.` 开头且无 edge 的说明符计入 `status.unresolved`（总数精确、明细 ≤50、含 `path:line specifier`）；裸包导入不在此范围 | v0.229.0 |
 | 健康分新信号 | 架构分量计入分层违规（5/条，≤30）、重复块（3/块，≤20）与高复杂度函数（2/个，≤20），各生成待办；新输入可选，缺省时分数与旧版一致 | v0.228.0 |
 | 重复代码检测 | `repowiki-status` 有界读取（≤150 文件、≤400 行/文件、8 路并发）后按 8 行窗口归一化指纹，跨文件共享窗口合并为块：总数精确、≤20 组、每组 ≤5 处；空窗口与单文件重复不计，定位为复核线索 | v0.226.0 |
 | 架构分层 | `repowiki-plan.json` 的 `layers`（名称/路径前缀/`mayDependOn`）驱动跨层依赖检查：最长前缀归属、同层允许、未声明跨层违规计入 `status.layers`（总数精确、明细上限 50、未知层引用告警）；非法条目在读取时丢弃 | v0.225.0 |

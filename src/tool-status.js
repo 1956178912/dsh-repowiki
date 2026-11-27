@@ -28,6 +28,7 @@ import { moduleCoupling } from './coupling.js'
 import { evaluateLayers } from './layers.js'
 import { findDuplicates, MAX_DUPLICATE_FILES } from './duplicates.js'
 import { computeComplexity } from './complexity.js'
+import { findUnresolvedImports } from './unresolved.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -180,7 +181,8 @@ const DESCRIPTION = [
   'Ca/Ce coupling and instability are reported for cross-module imports; and architecture layers',
   'declared in repowiki-plan.json are checked so cross-layer imports outside mayDependOn are listed',
   'as violations; cross-file duplicate code candidates are reported from bounded line-window',
-  'fingerprints, and function-level complexity is estimated from symbol ranges. Use it to diagnose',
+  'fingerprints, function-level complexity is estimated from symbol ranges, and relative imports',
+  'without a resolved edge are listed as broken-reference candidates. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. The weighted health score also counts',
   'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
@@ -792,6 +794,30 @@ export function repowikiStatusTool(ctx) {
             },
             required: ['total', 'threshold', 'average', 'max', 'high'],
           },
+          unresolved: {
+            type: 'object',
+            description: 'Relative imports (specifiers starting with ".") that produced no dependency edge. Usually a wrong path, an excluded target or an unsupported extension; bare package imports are out of scope. Present when a compatible index exists.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Unresolved relative imports (exact).' },
+              checked: { type: 'integer', description: 'Relative imports considered.' },
+              details: {
+                type: 'array',
+                description: 'Unresolved entries (up to 50).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    path: { type: 'string' },
+                    line: { type: 'integer' },
+                    specifier: { type: 'string' },
+                  },
+                  required: ['path', 'line', 'specifier'],
+                },
+              },
+            },
+            required: ['total', 'checked', 'details'],
+          },
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
@@ -845,6 +871,11 @@ export function repowikiStatusTool(ctx) {
             : '(none)'}`,
           ...(value.complexity
             ? [`Complexity: ${value.complexity.total} function(s), avg ${value.complexity.average}, max ${value.complexity.max}${value.complexity.high.length > 0 ? ` — ${value.complexity.high.length} ≥ ${value.complexity.threshold} (e.g. ${value.complexity.high[0].path}#${value.complexity.high[0].name} ${value.complexity.high[0].complexity})` : ''}`]
+            : []),
+          ...(value.unresolved
+            ? [`Unresolved imports: ${value.unresolved.total === 0
+              ? `(none, ${value.unresolved.checked} relative import(s) checked)`
+              : `${value.unresolved.total} of ${value.unresolved.checked} relative import(s)${value.unresolved.details.length > 0 ? ` — e.g. ${value.unresolved.details[0].path}:${value.unresolved.details[0].line} ${value.unresolved.details[0].specifier}` : ''}`}`]
             : []),
           ...(value.duplicates
             ? [`Duplicates: ${value.duplicates.total === 0
@@ -1154,6 +1185,13 @@ export function repowikiStatusTool(ctx) {
       if (layerReport && layerReport.total > 0) {
         warnings.push(`${layerReport.total} cross-layer import edge(s) violate the declared layers; see status.layers.`)
       }
+      // 未解析相对导入：坏路径/被排除目标的直接信号（不读源码）
+      const unresolved = index
+        ? findUnresolvedImports(index.files ?? [], index.edges ?? [])
+        : null
+      if (unresolved && unresolved.total > 0) {
+        warnings.push(`${unresolved.total} relative import(s) could not be resolved; see status.unresolved.`)
+      }
       // 重复代码与复杂度：共用一次有界源码读取（数量上限内）
       const statusSources = index && (index.files ?? []).length > 0
         ? await readStatusSources(fs, root, index.files ?? [])
@@ -1250,6 +1288,7 @@ export function repowikiStatusTool(ctx) {
         },
         coverage,
         ...(layerReport ? { layers: layerReport } : {}),
+        ...(unresolved ? { unresolved } : {}),
         ...(duplicates ? { duplicates } : {}),
         ...(complexity ? { complexity } : {}),
         ...(health ? { health } : {}),

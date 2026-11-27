@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.229.0] - 2026-11-28
+
+### Added
+
+- **Broken relative imports**: `repowiki-status` compares every indexed
+  import record with the resolved edge table and reports relative
+  specifiers (starting with `.`) that produced no edge — usually a wrong
+  path, an excluded target or an unsupported extension. Bare package
+  imports are deliberately out of scope, so the report stays actionable.
+- **Reporting**: `status.unresolved` carries the exact total, the number
+  of relative imports considered and up to 50 `path`/`line`/`specifier`
+  details; a positive total raises a warning and adds an
+  `Unresolved imports:` line to the text report.
+
+### Tests
+
+- 683 cases pass (LANG=en and LANG=zh); new coverage for resolved versus
+  missing edges, non-relative/bare specifiers, missing line numbers,
+  bounded details with exact totals and status integration.
+
 ## [0.228.0] - 2026-11-28
 
 ### Changed

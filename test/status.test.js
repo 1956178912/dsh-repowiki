@@ -98,6 +98,25 @@ test('repowiki-status：跨文件重复代码块进入报告与渲染', async ()
   assert.match(rendered[0].text, /Duplicates: 1 block/)
 })
 
+test('repowiki-status：未解析相对导入进入报告与渲染', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-unresolved-'))
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), 'export const b = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), "import { b } from './b'\nimport { c } from './missing'\nexport const a = b\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+
+  assert.ok(out.unresolved)
+  assert.equal(out.unresolved.total, 1)
+  assert.equal(out.unresolved.checked, 2)
+  assert.deepEqual(out.unresolved.details, [
+    { path: 'a.ts', line: 2, specifier: './missing' },
+  ])
+  assert.ok(out.warnings.some(w => /could not be resolved/.test(w)))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /Unresolved imports: 1 of 2/)
+})
+
 test('repowiki-status：高复杂度函数进入报告与渲染', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-complex-'))
   const lines = ['export function huge(x: number) {']
