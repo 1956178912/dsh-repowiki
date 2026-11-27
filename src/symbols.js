@@ -3567,6 +3567,177 @@ function extractErlang(lines) {
 }
 
 /**
+ * 扫描 Solidity 源码行：`//` 行注释截断、`/* … *\/` 块注释与字符串内容
+ * 在掩码视图替换为空格；同时返回保留字符串原文的 code 视图，供
+ * `import "…"` 路径提取使用。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 双视图行。
+ */
+export function solidityScan(lines) {
+  const out = []
+  let inBlock = false
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') { inBlock = false; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (quote) {
+        code += ch
+        if (ch === '\\') {
+          if (i + 1 < raw.length) { code += raw[i + 1]; masked += '  '; i++ }
+          else masked += ' '
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      if (ch === '/' && next === '/') break
+      if (ch === '/' && next === '*') { inBlock = true; i++; masked += '  '; continue }
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 统计一行的花括号净增量（入参应已屏蔽注释与字符串）。
+ * @param {string} line - 掩码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function braceDeltaOf(line) {
+  let delta = 0
+  for (const ch of line) {
+    if (ch === '{') delta++
+    else if (ch === '}') delta--
+  }
+  return delta
+}
+
+/**
+ * 计算 Solidity 函数/成员的结束行：有函数体时按花括号配平，接口/抽象
+ * 声明（以 `;` 结尾）记为单行。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {string} line - 已 trim 的声明行。
+ * @returns {number} 结束行（1-based）。
+ */
+function solidityMemberEnd(masked, startIdx, line) {
+  if (!line.includes('{') && line.endsWith(';')) return startIdx + 1
+  return findBlockEnd(masked, startIdx)
+}
+
+/**
+ * 提取 Solidity 符号：`contract`/`library`/`interface`（class）及其中
+ * 的 `function`/`constructor`/`receive`/`fallback`/`modifier`（method）、
+ * `event`/`error`/`type`（type）、`struct`/`enum`（class）；文件级函数与
+ * 类型同样登记。`private`/`internal` 标记非导出；注释与字符串先屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractSolidity(lines) {
+  const masked = solidityScan(lines).map(row => row.masked)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const contracts = []
+  let depth = 0
+  for (let i = 0; i < masked.length; i++) {
+    while (contracts.length > 0 && contracts[contracts.length - 1].end <= i + 1) contracts.pop()
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') { depth += braceDeltaOf(rawLine); continue }
+    const parent = contracts.length > 0 ? contracts[contracts.length - 1].name : undefined
+    const exported = !/\b(?:private|internal)\b/.test(line)
+
+    if (depth === 0) {
+      const typeMatch = /^(?:abstract\s+)?(contract|library|interface)\s+([A-Za-z_$][\w$]*)/.exec(line)
+      if (typeMatch) {
+        const end = findBlockEnd(masked, i)
+        symbols.push({ name: typeMatch[2], kind: 'class', line: i + 1, endLine: end, exported: true })
+        contracts.push({ name: typeMatch[2], end })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const fn = /^function\s+([A-Za-z_$][\w$]*)\s*\(/.exec(line)
+      if (fn) {
+        symbols.push({
+          name: fn[1], kind: 'function', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+    } else if (depth === 1 && parent) {
+      const fn = /^function\s+([A-Za-z_$][\w$]*)\s*\(/.exec(line)
+      if (fn) {
+        symbols.push({
+          name: fn[1], kind: 'method', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const special = /^(constructor|receive|fallback)\s*\(/.exec(line)
+      if (special) {
+        symbols.push({
+          name: special[1], kind: 'method', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const modifier = /^modifier\s+([A-Za-z_$][\w$]*)/.exec(line)
+      if (modifier) {
+        symbols.push({
+          name: modifier[1], kind: 'method', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const event = /^(?:event|error)\s+([A-Za-z_$][\w$]*)/.exec(line)
+      if (event) {
+        symbols.push({
+          name: event[1], kind: 'type', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const struct = /^(?:struct|enum)\s+([A-Za-z_$][\w$]*)/.exec(line)
+      if (struct) {
+        symbols.push({
+          name: struct[1], kind: 'class', line: i + 1,
+          endLine: solidityMemberEnd(masked, i, line), exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+      const udvt = /^type\s+([A-Za-z_$][\w$]*)\s+is\s+/.exec(line)
+      if (udvt) {
+        symbols.push({
+          name: udvt[1], kind: 'type', line: i + 1, endLine: i + 1, exported, parent,
+        })
+        depth += braceDeltaOf(rawLine)
+        continue
+      }
+    }
+    depth += braceDeltaOf(rawLine)
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3704,6 +3875,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'ocaml') return extractOcaml(lines)
   if (lang === 'haskell') return extractHaskell(lines)
   if (lang === 'erlang') return extractErlang(lines)
+  if (lang === 'solidity') return extractSolidity(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

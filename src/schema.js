@@ -141,6 +141,7 @@ export const MANIFEST_FILES = {
   'Project.toml': 'julia',
   'dune-project': 'dune',
   'rebar.config': 'rebar',
+  'foundry.toml': 'foundry',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -192,6 +193,7 @@ export const EXTENSION_LANGS = {
   lhs: 'haskell',
   erl: 'erlang',
   hrl: 'erlang',
+  sol: 'solidity',
   c: 'c',
   h: 'c',
   cc: 'cpp',

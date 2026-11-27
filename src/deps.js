@@ -8,7 +8,9 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan } from './symbols.js'
+import {
+  shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
+} from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -1056,6 +1058,33 @@ function extractErlangImports(lines) {
 }
 
 /**
+ * 提取 Solidity 的 `import` 引用：`import "./X.sol";`、
+ * `import {A} from "./X.sol";`、`import * as X from "…";`；
+ * 注释内的伪 import 由 `solidityScan` 截断。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractSolidityImports(lines) {
+  const result = []
+  const rows = solidityScan(lines)
+  for (let i = 0; i < rows.length; i++) {
+    const code = rows[i].code.trim()
+    if (code === '') continue
+    const m = /^import\s+(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]/.exec(code)
+    if (!m) continue
+    const specifier = m[1]
+    result.push({
+      specifier,
+      line: i + 1,
+      kind: 'import',
+      relative: specifier.startsWith('.'),
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1165,6 +1194,7 @@ export function extractImports(code, lang) {
   if (lang === 'ocaml') return extractOcamlImports(lines)
   if (lang === 'haskell') return extractHaskellImports(lines)
   if (lang === 'erlang') return extractErlangImports(lines)
+  if (lang === 'solidity') return extractSolidityImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

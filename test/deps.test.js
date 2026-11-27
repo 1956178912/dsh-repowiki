@@ -565,6 +565,23 @@ test('Erlang：include/include_lib 与注释屏蔽', () => {
   ])
 })
 
+test('Solidity：import 变体与注释屏蔽', () => {
+  const code = [
+    'import "./IERC20.sol";',
+    'import {Ownable} from "./access/Ownable.sol";',
+    'import * as Math from "./Math.sol";',
+    'import "hardhat/console.sol";',
+    '// import "./Hidden.sol";',
+  ].join('\n')
+  const imports = extractImports(code, 'solidity')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['./IERC20.sol', 1, true],
+    ['./access/Ownable.sol', 2, true],
+    ['./Math.sol', 3, true],
+    ['hardhat/console.sol', 4, false],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

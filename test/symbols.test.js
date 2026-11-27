@@ -1581,6 +1581,42 @@ test('Erlang：module/record/type/define/函数与 export 可见性', () => {
   assert.ok(!byName.has('hidden'), '注释内 module 不登记')
 })
 
+test('Solidity：contract/函数/事件/结构体与可见性', () => {
+  const code = [
+    'pragma solidity ^0.8.20;',
+    '// contract Hidden {}',
+    'import "./IERC20.sol";',
+    'interface IERC20 {',
+    '    function transfer(address to, uint256 amount) external returns (bool);',
+    '}',
+    'contract Token {',
+    '    event Transfer(address indexed from, address indexed to, uint256 value);',
+    '    struct Account { uint256 balance; }',
+    '    uint256 private total;',
+    '    constructor() { total = 0; }',
+    '    function mint(uint256 amount) public {',
+    '        total += amount;',
+    '    }',
+    '    function _burn(uint256 amount) internal {',
+    '        total -= amount;',
+    '    }',
+    '}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'solidity')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('IERC20').kind, 'class')
+  assert.equal(byName.get('Token').kind, 'class')
+  assert.equal(byName.get('Token').endLine, 18)
+  assert.equal(byName.get('Transfer').kind, 'type')
+  assert.equal(byName.get('Transfer').parent, 'Token')
+  assert.equal(byName.get('Account').kind, 'class')
+  assert.equal(byName.get('mint').kind, 'method')
+  assert.equal(byName.get('mint').exported, true)
+  assert.equal(byName.get('_burn').exported, false, 'internal 非导出')
+  assert.equal(byName.get('constructor').kind, 'method')
+  assert.ok(!byName.has('Hidden'), '注释内合约不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

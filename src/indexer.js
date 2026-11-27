@@ -1112,6 +1112,26 @@ function buildHaskellRoots(paths, extraRoots = []) {
 }
 
 /**
+ * 解析 Solidity 相对 import：按引用文件目录尝试原路径与补 `.sol`；
+ * 非相对路径（npm/`hardhat/…` 等外部依赖）不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - import 路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveSolidityImport(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (!raw.startsWith('.') || raw.includes('\\')) return null
+  const base = path.posix.dirname(fromRel)
+  for (const candidate of [raw, `${raw}.sol`]) {
+    const joined = path.posix.normalize(path.posix.join(base, candidate))
+    if (indexed.has(joined)) return joined
+  }
+  return null
+}
+
+/**
  * 建立 Erlang include 搜索根：任意层级的 `src/` 与 `include/` 目录，
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2172,6 +2192,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
+  if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)

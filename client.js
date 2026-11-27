@@ -347,6 +347,7 @@ const LANGUAGE_LABELS = {
   ocaml: 'OCaml',
   haskell: 'Haskell',
   erlang: 'Erlang',
+  solidity: 'Solidity',
   c: 'C',
   cpp: 'C++',
 }

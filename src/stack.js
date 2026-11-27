@@ -1194,6 +1194,9 @@ export function detectStack(manifests) {
         const name = ERLANG_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'rebar', source: path })
       }
+    } else if (path === 'foundry.toml') {
+      // Foundry 清单只表明工具链（依赖在 lib/ 子模块，不在清单内）
+      info.technologies.push({ name: 'Foundry', ecosystem: 'foundry', source: path })
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)
       // 根清单 + 嵌套子项目清单：依赖按出现次数累加，技术名在末尾统一去重

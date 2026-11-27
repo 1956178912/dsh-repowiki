@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.213.0] - 2026-11-28
+
+- **Solidity 支持（第 27 种语言）**：`.sol` 提取 `contract`/`library`/
+  `interface`（含 `abstract contract`）容器，成员 `function`/
+  `constructor`/`receive`/`fallback`/`modifier`/`event`/`error`/`struct`/
+  `enum`/自定义值类型（`parent` 归属），以及文件级函数/类型。
+  `private`/`internal` 成员非导出；注释与字符串屏蔽；容器与成员范围
+  按花括号配平（以 `;` 结尾的声明记为单行）。`import "./X.sol"`（含
+  `import {A} from` 与 `import * as X from`）按引用文件相对路径解析并
+  补 `.sol`，外部路径不建边。`foundry.toml` 标记 Foundry 工具链。
+  Prompt 围栏与面板语言筛选识别 `solidity`。
+- **测试**：623 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖容器/成员
+  种类、归属与范围、`internal` 可见性、注释屏蔽、import 变体、相对
+  解析、外部排除与 foundry 识别。
+
 ## [0.212.0] - 2026-11-28
 
 - **OCaml 同名模块近邻解析**：`buildOcamlModules` 现在保留每个模块名的

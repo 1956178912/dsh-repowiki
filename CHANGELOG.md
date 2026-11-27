@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.213.0] - 2026-11-28
+
+### Added
+
+- **Solidity indexing (27th language)**: `.sol` files produce
+  `contract`/`library`/`interface` containers (including
+  `abstract contract`), member `function`/`constructor`/`receive`/
+  `fallback`/`modifier`/`event`/`error`/`struct`/`enum`/user-defined value
+  types with `parent` ownership, and file-level functions/types.
+  `private`/`internal` members are non-exported; comments and strings are
+  masked; container and member ranges follow brace matching (declarations
+  ending in `;` stay single-line). `import "./X.sol"` — also
+  `import {A} from` and `import * as X from` — resolves relative to the
+  importing file with a `.sol` fallback, while external paths stay
+  edge-free. `foundry.toml` marks the Foundry toolchain. Prompt fences and
+  the panel language filter know `solidity`.
+
+### Tests
+
+- 623 cases pass (LANG=en and LANG=zh); new coverage pins container and
+  member kinds/ownership/ranges, `internal` visibility, comment shielding,
+  import variants, relative resolution, external exclusion and foundry
+  detection.
+
 ## [0.212.0] - 2026-11-28
 
 ### Added

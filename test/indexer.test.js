@@ -1653,6 +1653,22 @@ test('Erlang：include 解析、src/include 根与 rebar 技术栈', async () =>
   assert.ok(doc.stack.technologies.some(t => t.name === 'Cowboy' && t.ecosystem === 'rebar'))
 })
 
+test('Solidity：相对 import 解析与 foundry 技术栈', async () => {
+  const dir = makeProject({
+    'foundry.toml': '[profile.default]\nsrc = "src"\n',
+    'src/Token.sol': 'pragma solidity ^0.8.20;\nimport "./IERC20.sol";\ncontract Token {}\n',
+    'src/IERC20.sol': 'interface IERC20 {}\n',
+    'src/Other.sol': 'import "hardhat/console.sol";\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { solidity: 3 })
+
+  const edge = doc.edges.find(e => e.from === 'src/Token.sol' && e.to === 'src/IERC20.sol')
+  assert.equal(edge?.line, 2)
+  assert.equal(doc.edges.filter(e => e.from === 'src/Other.sol').length, 0, '外部包不建边')
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Foundry' && t.ecosystem === 'foundry'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

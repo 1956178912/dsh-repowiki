@@ -173,6 +173,7 @@ export function fenceLang(lang) {
     case 'ocaml': return 'ocaml'
     case 'haskell': return 'haskell'
     case 'erlang': return 'erlang'
+    case 'solidity': return 'solidity'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''
