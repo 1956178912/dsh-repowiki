@@ -223,6 +223,8 @@ test('repowiki-context：符号锚点可在无 query 时定位定义并生成片
     'export function parseConfig() { return 1 }\nexport function shared() { return 2 }\n')
   nodefs.writeFileSync(path.join(dir, 'src/other.ts'),
     'export function shared() { return 3 }\n')
+  nodefs.writeFileSync(path.join(dir, 'src/use.ts'),
+    "import { parseConfig } from './config'\nexport const value = parseConfig()\n")
   const ctx = makeCtx(dir)
   await repowikiIndexTool(ctx).execute({}, fakeExec)
   const tool = repowikiContextTool(ctx)
@@ -240,6 +242,19 @@ test('repowiki-context：符号锚点可在无 query 时定位定义并生成片
     && snippet.line <= 1 && snippet.endLine >= 1))
   assert.match(anchored.text, /Task: symbols: src\/config\.ts#parseConfig/)
   assert.match(anchored.text, /parseConfig/)
+  assert.equal(anchored.usages, undefined, '默认不扫使用点')
+
+  const withUsages = await tool.execute({
+    symbols: ['src/config.ts#parseConfig'], usages: true, budget: 3000, includeDocs: false,
+  }, fakeExec)
+  assert.equal(withUsages.usages.length, 1)
+  assert.equal(withUsages.usages[0].symbol, 'parseConfig')
+  assert.deepEqual(withUsages.usages[0].importers, [{ path: 'src/use.ts', line: 1 }])
+  assert.deepEqual(withUsages.usages[0].usages, [
+    { path: 'src/use.ts', line: 2, text: 'export const value = parseConfig()' },
+  ])
+  assert.match(withUsages.text, /usage parseConfig in src\/config\.ts/)
+  assert.match(withUsages.text, /parseConfig used at src\/use\.ts:2/)
 
   const bare = await tool.execute({ symbols: ['shared'], budget: 3000, includeDocs: false }, fakeExec)
   assert.deepEqual(bare.symbolAnchors, [])

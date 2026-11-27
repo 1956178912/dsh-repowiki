@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.245.0] - 2026-11-28
+
+- **上下文包使用点**：`repowiki-context usages=true` 对已解析符号锚点复用
+  `repowiki-cards` 的有界使用点收集器（直接具名/命名空间导入方 + 定义文件，
+  排除定义范围）。使用点摘要、每符号最多 2 条示例站点与不可读文件提示追加
+  到证据包的关系段，并返回结构化 `usages` 与 `usagesSkipped`/
+  `usagesSkippedFiles`/`usagesTruncated`。
+- **共享收集器**：`collectSymbolUsages` 与 `MAX_USAGE_TARGETS` 从 cards
+  工具移入 `src/usages.js`，两个工具共用一份实现与预算策略。
+- **测试**：770 例在 LANG=en 与 LANG=zh 下全通过；上下文符号锚点测试新增
+  `usages=true` 的结构化结果与渲染行断言。
+
 ## [0.244.0] - 2026-11-28
 
 - **podspec 元数据**：根与嵌套 `*.podspec`（上限 20）现在提供

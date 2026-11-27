@@ -202,3 +202,185 @@ export function selectUsageFiles(importers = [], limit = MAX_USAGE_FILES) {
     skipped: Math.max(0, paths.length - max),
   }
 }
+
+/** 单次 cards 查询最多扫描的匹配符号数（其余计入 skipped）。 */
+export const MAX_USAGE_TARGETS = 5
+
+/**
+ * 收集命中符号的词法使用点。
+ *
+ * 在**直接具名导入方**与**符号定义文件**里定位：依赖边必须显式列出该
+ * 符号，副作用导入与引用同文件其他符号的边不算证据；定义文件用于发现
+ * 同文件内的局部调用，定义所在行范围通过 `skipRanges` 排除。导入方文件
+ * 数、每符号站点数与总站点数均有上限（定义文件不计入导入方上限）；读取
+ * 失败的文件逐个披露（unknown，不是未使用），因文件上限未扫描的导入方
+ * 计入 `skippedFiles` 并把相关符号标记为 truncated。
+ * @param {any} fs - ctx.fs 服务。
+ * @param {string} root - 项目根。
+ * @param {Array<{from:string, to:string, line?:number, symbols?:string[]}>} edges - 索引依赖边。
+ * @param {Array<{path:string, symbols?:Array<{name:string, line?:number, endLine?:number}>}>} matches
+ *   - 定义文件命中（searchIndex 结果或符号锚点）。
+ * @returns {Promise<{entries:Array, skipped:number, skippedFiles:number, truncated:boolean}>}
+ *   逐符号使用点、目标数缺口、文件数缺口与截断标记。
+ */
+export async function collectSymbolUsages(fs, root, edges, matches) {
+  /** @type {Array<{path:string, name:string, line?:number, endLine?:number}>} */
+  const targets = []
+  for (const match of matches) {
+    for (const symbol of match.symbols ?? []) {
+      if (typeof symbol?.name !== 'string' || symbol.name === '') continue
+      targets.push({
+        path: match.path,
+        name: symbol.name,
+        ...(Number.isInteger(symbol.line) ? { line: symbol.line } : {}),
+        ...(Number.isInteger(symbol.endLine) ? { endLine: symbol.endLine } : {}),
+      })
+    }
+  }
+  const selected = targets.slice(0, MAX_USAGE_TARGETS)
+  const skipped = Math.max(0, targets.length - selected.length)
+  if (selected.length === 0) return { entries: [], skipped: 0, skippedFiles: 0, truncated: false }
+
+  /** 目标键（定义路径 + 符号名）→ 该定义的直接具名导入方。 */
+  const targetKey = target => `${target.path}\u0000${target.name}`
+  /** @type {Map<string, Array<{path:string, importLines:number[]}>>} */
+  const importersByTarget = new Map()
+  /** 文件 → 符号 → 跳过行/闭区间（import 行与定义范围）。 */
+  /** @type {Map<string, Map<string, {lines:Set<number>, ranges:Array<[number, number]>}>>} */
+  const scanPlan = new Map()
+  /**
+   * 登记一次文件扫描；同一文件可同时是定义文件与多个符号的导入方。
+   * @param {string} filePath - 待读文件。
+   * @param {string} name - 符号名。
+   * @param {{lines?:Iterable<number>, range?:[number, number]|null}} [skip] - 跳过行与定义闭区间。
+   * @returns {void}
+   */
+  const planScan = (filePath, name, skip = {}) => {
+    let names = scanPlan.get(filePath)
+    if (!names) {
+      names = new Map()
+      scanPlan.set(filePath, names)
+    }
+    const entry = names.get(name) ?? { lines: new Set(), ranges: [] }
+    for (const line of skip.lines ?? []) {
+      if (Number.isInteger(line) && line > 0) entry.lines.add(line)
+    }
+    const range = skip.range
+    if (Array.isArray(range) && range.length === 2
+      && Number.isInteger(range[0]) && Number.isInteger(range[1])
+      && range[0] >= 1 && range[1] >= range[0]
+      && !entry.ranges.some(([start, end]) => start === range[0] && end === range[1])) {
+      entry.ranges.push([range[0], range[1]])
+    }
+    names.set(name, entry)
+  }
+
+  const definitionFiles = new Set(selected.map(target => target.path))
+  for (const target of selected) {
+    const importers = usageImporters(edges, target)
+    importersByTarget.set(targetKey(target), importers)
+    // 定义文件也扫描（局部调用/同文件使用），定义本身的范围跳过
+    planScan(target.path, target.name, {
+      range: Number.isInteger(target.line)
+        ? [
+          target.line,
+          Number.isInteger(target.endLine) && target.endLine >= target.line ? target.endLine : target.line,
+        ]
+        : null,
+    })
+    for (const importer of importers) {
+      planScan(importer.path, target.name, { lines: importer.importLines })
+    }
+  }
+  /** @type {Set<string>} */
+  const importerPaths = new Set()
+  for (const importers of importersByTarget.values()) {
+    for (const importer of importers) importerPaths.add(importer.path)
+  }
+  const selection = selectUsageFiles([...importerPaths].map(path => ({ path })))
+  // 定义文件不计入 20 个导入方文件上限（最多 5 个，单独读取）
+  const selectedFiles = new Set([...definitionFiles, ...selection.scanned])
+  const skippedFiles = new Set([...importerPaths].filter(path => !selectedFiles.has(path)))
+  /** @type {Map<string, Array<{path:string, line:number, text:string}>>} */
+  const sitesByName = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const scannedByName = new Map()
+  /** @type {Map<string, string[]>} */
+  const unreadableByName = new Map()
+  /** @type {Set<string>} */
+  const truncatedNames = new Set()
+  let budget = MAX_USAGE_ENTRIES
+
+  // 定义文件优先，其次按路径排序的具名导入方
+  const scanOrder = [
+    ...[...definitionFiles].sort(),
+    ...selection.scanned.filter(path => !definitionFiles.has(path)),
+  ]
+  for (const path of scanOrder) {
+    const names = scanPlan.get(path)
+    if (!names) continue
+    let source
+    try {
+      source = await fs.readText(await fs.resolve(path, { cwd: root }))
+    } catch {
+      for (const name of names.keys()) {
+        const list = unreadableByName.get(name) ?? []
+        list.push(path)
+        unreadableByName.set(name, list)
+      }
+      continue
+    }
+    for (const [name, skip] of [...names.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const scanned = scannedByName.get(name) ?? new Set()
+      scanned.add(path)
+      scannedByName.set(name, scanned)
+      if (budget <= 0) {
+        truncatedNames.add(name)
+        continue
+      }
+      const found = findSymbolUsages(source, name, {
+        skipLines: skip.lines,
+        skipRanges: skip.ranges,
+        limit: Math.min(MAX_USAGES_PER_SYMBOL, budget),
+      })
+      const sites = sitesByName.get(name) ?? []
+      for (const site of found.usages) sites.push({ path, ...site })
+      sitesByName.set(name, sites)
+      budget -= found.usages.length
+      if (found.truncated) truncatedNames.add(name)
+    }
+  }
+  for (const target of selected) {
+    const importers = importersByTarget.get(targetKey(target)) ?? []
+    if (importers.some(importer => skippedFiles.has(importer.path))) truncatedNames.add(target.name)
+  }
+
+  const entries = selected.map(target => {
+    const seen = new Set()
+    const importers = []
+    for (const importer of importersByTarget.get(targetKey(target)) ?? []) {
+      const lines = Array.isArray(importer.importLines) && importer.importLines.length > 0
+        ? importer.importLines
+        : [undefined]
+      for (const line of lines) {
+        const key = `${importer.path}\u0000${line ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        importers.push({
+          path: importer.path,
+          ...(typeof line === 'number' ? { line } : {}),
+        })
+      }
+    }
+    return {
+      path: target.path,
+      symbol: target.name,
+      importers,
+      usages: sitesByName.get(target.name) ?? [],
+      filesScanned: scannedByName.get(target.name)?.size ?? 0,
+      unreadable: [...new Set(unreadableByName.get(target.name) ?? [])].sort(),
+      truncated: truncatedNames.has(target.name),
+    }
+  })
+  return { entries, skipped, skippedFiles: selection.skipped, truncated: truncatedNames.size > 0 }
+}

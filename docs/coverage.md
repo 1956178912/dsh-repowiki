@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.244.0）；测试 770/770（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.08%、分支 87.9%、函数 95.55%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.245.0）；测试 770/770（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.07%、分支 87.91%、函数 95.55%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -273,6 +273,7 @@
 | 面板架构基线漂移 | 单库视图读取 `.dsh-repowiki/arch-baseline.json`（缺失/损坏/超大均忽略）：当前 SCC 循环组与 `cycles` 签名对比得出新增/已修复数量（新增示例进 tooltip），并展示基线 `architectureScore` 与 `ceilings`（重复块/高复杂度/最大复杂度）；`cycleAnalysisFor` 以 WeakMap 按 index 缓存，徽章与基线共用一次 Tarjan；无基线时整行隐藏，DOM 测试覆盖有/无基线两种状态 | v0.241.0 |
 | iOS 依赖元数据与测试路由 | `*.podspec`（根/嵌套，上限 20）：`s.name`/`s.version` 项目元数据、`s.dependency` 与 subspec `sp.dependency` 计入 `dependencyCounts.cocoapods`，`IOS_TECH` 映射技术并保留版本约束；`Podfile`（根/嵌套，`pod 'Name', '~> 1.0'`、`Firebase/Core` 子规格、`:path` 本地 pod）与 `Cartfile`/`Cartfile.private`（`github`/`git`/`binary`，仓库名取 URL 末段）计入 `dependencyCounts.cocoapods`/`carthage`，`IOS_TECH` 只映射经过核对的主流库；嵌套清单上限各 20；`*Tests.m`/`*Tests.mm`/`*Spec.m` 纳入测试路径，影响面据此路由 `affectedTests` | v0.240.0 |
 | Objective-C 支持 | 第 42 种语言：`@interface`/`@implementation`（class；类扩展成员非导出，category 归到所属类）、`@protocol`（interface）、`-`/`+` 方法（method，完整选择器，原型止于 `;`、实现按花括号配平）、`@property`（variable，含 block `(^name)`）；`//`、`/* */`、字符串/字符字面量屏蔽；与 `extractCpp` 合并（结构体/typedef/函数保留）；`.h` 按 `@` 声明改判、MATLAB 写法的 `.m` 归为 `matlab`；`#import`/`#include` 经引用方目录与 `include`/`src`/`inc` 根，框架头与 `@import` 不建边 | v0.239.0 |
+| 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 通配引用证据 | `import * as ns` 与 `export * from` 在 `deps.js` 记为 `*`（不再当作无符号副作用导入）：`referencesFor` 把 `*` 合并到目标全部符号（与具名引用去重排序），`usageImporters` 接受 `*` 作为潜在导入方（`usages` 仍经词法扫描确认实际使用），`computeSymbolImpact` 把 `*` 展开为所选符号的直接影响；默认导入保持文件级边、不猜默认导出名 | v0.243.0 |
 | 同文件使用点 | `repowiki-cards usages=true` 追加扫描定义文件：`findSymbolUsages` 新增 `skipRanges`（闭区间、非法区间忽略），定义范围不参与匹配，因此递归/签名文本不会被误算；定义文件优先读取且不占 20 个导入方上限，`filesScanned` 同时计入定义文件；DOM/工具测试覆盖定义行跳过、局部调用命中与上限记账 | v0.242.0 |
 | 符号使用点查询 | `repowiki-cards usages=true`：对命中符号取直接具名导入方（`usageImporters`，要求 `edge.symbols` 含该符号），在导入方源码中按标识符边界定位使用行（`findSymbolUsages`，排除 import 行/块与整行注释），输出 `symbolUsages`（定义文件、导入位置、站点、已扫描文件数、不可读导入方、单符号截断）；上限 5 符号 / 20 文件 / 100 站点（单符号 10），超出部分计入 `symbolUsagesSkipped` / `symbolUsagesSkippedFiles`，不可读文件披露为 unknown；import 边不带具名符号的语言不产生证据 | v0.238.0 |

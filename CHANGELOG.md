@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.245.0] - 2026-11-28
+
+### Added
+
+- **Usage evidence in context packs**: `repowiki-context usages=true` runs the
+  same bounded usage collector as `repowiki-cards` for resolved symbol anchors
+  (direct named/namespace importers plus the defining file, definition range
+  excluded). Usage summaries, up to two example sites per symbol and
+  unreadable-file warnings are appended to the pack's relations section, and
+  structured `usages` entries with `usagesSkipped`/`usagesSkippedFiles`/
+  `usagesTruncated` are returned.
+- **Shared collector**: `collectSymbolUsages` and `MAX_USAGE_TARGETS` moved
+  from the cards tool into `src/usages.js`, so both tools share one
+  implementation and budget policy.
+
+### Tests
+
+- 770 cases pass (LANG=en and LANG=zh; the context symbol-anchor test now also
+  covers `usages=true`, structured entries and rendered usage lines).
+
 ## [0.244.0] - 2026-11-28
 
 ### Added

@@ -12,6 +12,7 @@ import { readCardDocuments, readWikiDocuments } from './knowledge.js'
 import { listMemory } from './memory.js'
 import { rankDocuments } from './search.js'
 import { importsFor, dependentsFor } from './references.js'
+import { collectSymbolUsages } from './usages.js'
 import { resolveContentLocale } from './locale.js'
 import { getLocale } from './spawn.js'
 import { cwdOf } from './util.js'
@@ -83,6 +84,10 @@ export function repowikiContextTool(ctx) {
       limit: { type: 'integer', description: `Maximum primary source files (1-${MAX_CONTEXT_FILES}, default 8).` },
       includeSource: { type: 'boolean', description: 'Include line-numbered source excerpts (default true).' },
       includeDocs: { type: 'boolean', description: 'Include cards, wiki and accepted memory via BM25 (default true).' },
+      usages: {
+        type: 'boolean',
+        description: 'Also scan lexical usage sites for resolved symbol anchors (direct named/namespace importers and the defining file, definition range excluded). Bounded to 5 symbols and 20 importer files; unreadable files are reported as unknown. Default false.',
+      },
     },
     output: {
       schema: {
@@ -175,6 +180,41 @@ export function repowikiContextTool(ctx) {
             },
           },
           unmatchedSymbols: { type: 'array', items: { type: 'string' } },
+          usages: {
+            type: 'array',
+            description: 'Lexical usage evidence for resolved symbol anchors when usages=true.',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string' }, symbol: { type: 'string' },
+                importers: {
+                  type: 'array',
+                  items: {
+                    type: 'object', additionalProperties: false,
+                    properties: { path: { type: 'string' }, line: { type: 'integer' } },
+                    required: ['path'],
+                  },
+                },
+                usages: {
+                  type: 'array',
+                  items: {
+                    type: 'object', additionalProperties: false,
+                    properties: {
+                      path: { type: 'string' }, line: { type: 'integer' }, text: { type: 'string' },
+                    },
+                    required: ['path', 'line', 'text'],
+                  },
+                },
+                filesScanned: { type: 'integer' },
+                unreadable: { type: 'array', items: { type: 'string' } },
+                truncated: { type: 'boolean' },
+              },
+              required: ['path', 'symbol', 'importers', 'usages', 'filesScanned', 'unreadable', 'truncated'],
+            },
+          },
+          usagesSkipped: { type: 'integer' },
+          usagesSkippedFiles: { type: 'integer' },
+          usagesTruncated: { type: 'boolean' },
           ambiguousSymbols: {
             type: 'array',
             description: 'Bare symbol anchors defined in more than one file; candidates are listed instead of guessing.',
@@ -228,6 +268,21 @@ export function repowikiContextTool(ctx) {
       // 符号锚点先解析再排序：解析失败/裸名歧义如实报告，绝不静默回退为
       // 词法搜索或扩大成整个文件。
       const symbolResolution = resolveSymbolAnchors(index, symbolInputs, root)
+      // 符号锚点的词法使用点（可选）：与 repowiki-cards usages=true 共用收集器
+      let usageResult = null
+      if (args.usages === true && symbolResolution.resolved.length > 0) {
+        /** @type {Map<string, Array<{name:string, line?:number}>>} */
+        const byPath = new Map()
+        for (const item of symbolResolution.resolved) {
+          const list = byPath.get(item.path) ?? []
+          list.push({ name: item.name, ...(Number.isInteger(item.line) ? { line: item.line } : {}) })
+          byPath.set(item.path, list)
+        }
+        usageResult = await collectSymbolUsages(
+          fs, root, index.edges ?? [],
+          [...byPath.entries()].map(([path, symbols]) => ({ path, symbols })),
+        )
+      }
       const anchorPaths = symbolResolution.resolved.map(item => item.path)
       const hasAnchors = pathInputs.length > 0 || symbolInputs.length > 0
       const taskLabel = query || (symbolInputs.length > 0
@@ -313,6 +368,15 @@ export function repowikiContextTool(ctx) {
       }
       for (const hub of hubs) relationLines.push(`fan-in ${hub.path}: ${hub.dependents} direct importer(s)`)
       for (const cycle of cycles) relationLines.push(`cycle (${cycle.size} files): ${cycle.sample.length > 0 ? cycle.sample.join(' → ') : cycle.files.join(' ↔ ')}`)
+      for (const entry of usageResult?.entries ?? []) {
+        relationLines.push(`usage ${entry.symbol} in ${entry.path}: ${entry.usages.length} site(s) in ${entry.filesScanned} file(s)`)
+        for (const site of entry.usages.slice(0, 2)) {
+          relationLines.push(`${entry.symbol} used at ${site.path}:${site.line}: ${site.text}`)
+        }
+        if (entry.unreadable.length > 0) {
+          relationLines.push(`usage unknown for ${entry.symbol}: ${entry.unreadable.join(', ')}`)
+        }
+      }
       const warnings = [...sourceWarnings]
       if (ranked.unmatched.length > 0) warnings.push(`Unmatched anchor paths: ${ranked.unmatched.join(', ')}`)
       for (const item of ranked.ambiguous) warnings.push(`Ambiguous anchor ${item.query}: ${item.candidates.join(' | ')}`)
@@ -321,6 +385,9 @@ export function repowikiContextTool(ctx) {
       if (localeInfo.source === 'fallback') warnings.push(`Knowledge locale ${requestedLocale} has no assets; using ${localeInfo.locale}.`)
       if (includeDocs && documents.length === 0) warnings.push('No knowledge document matched; source and static relations are still included when available.')
       if (fallback === 'repo-map') warnings.push('Repo-map fallback: the task matched no indexed file; these files rank highest on the static import graph, not on task relevance.')
+      if (usageResult?.skipped) warnings.push(`Usage scan covered ${usageResult.entries.length} symbol(s); ${usageResult.skipped} more were skipped by the cap.`)
+      if (usageResult?.skippedFiles) warnings.push(`Usage scan skipped ${usageResult.skippedFiles} importer file(s) by the cap.`)
+      if (usageResult?.truncated) warnings.push('Usage evidence is capped at 10 sites per symbol and 100 in total.')
       const fileLines = selectedFiles.map(file => {
         const names = file.symbols.map(symbol => symbol.name).slice(0, 5)
         return `- ${file.path}${names.length > 0 ? ` — ${names.join(', ')}` : ''}${fallback ? ' (repo map)' : ` (rank ${file.score})`}`
@@ -342,6 +409,12 @@ export function repowikiContextTool(ctx) {
         symbolAnchors: symbolResolution.resolved,
         unmatchedSymbols: symbolResolution.unmatched,
         ambiguousSymbols: symbolResolution.ambiguous,
+        ...(usageResult ? {
+          usages: usageResult.entries,
+          usagesSkipped: usageResult.skipped,
+          usagesSkippedFiles: usageResult.skippedFiles,
+          usagesTruncated: usageResult.truncated,
+        } : {}),
         files: selectedFiles.map(file => ({
           path: file.path, score: file.score,
           symbols: file.symbols.map(symbol => ({
@@ -362,6 +435,7 @@ export function repowikiContextTool(ctx) {
         query: args.query ?? '',
         paths: Array.isArray(args.paths) ? args.paths.join(', ') : '',
         symbols: Array.isArray(args.symbols) ? args.symbols.join(', ') : '',
+        usages: args.usages ?? false,
         budget: args.budget ?? DEFAULT_CONTEXT_BUDGET,
       },
     }),
