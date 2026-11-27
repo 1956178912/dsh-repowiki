@@ -5,6 +5,33 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.250.0] - 2026-11-28
+
+### Added
+
+- **Barrel re-export chains**: `repowiki-cards references` and `usages` now
+  resolve named imports through `export * from` and same-name
+  `export { x } from` barrels (up to 4 hops), attributing the final importer
+  to the defining file. A barrel's own export shadows star re-exports,
+  ambiguous star origins are skipped, and re-export edges are not reported
+  as usage sites.
+- **Edge kinds preserved**: the indexer now stores the reference form
+  (`import`/`export-from`/`require`/`mod`) instead of collapsing everything
+  to `import`, so barrels can be distinguished from namespace imports;
+  existing consumers that only read endpoints/symbols are unaffected.
+
+### Changed
+
+- `usageImporters`, `collectSymbolUsages`, `repowiki-impact` usage evidence
+  and the cards/context tools accept the index file entries to resolve
+  barrels; shared logic lives in `src/reexports.js`.
+
+### Tests
+
+- 782 cases pass (LANG=en); new coverage for single/multi-hop barrels,
+  named re-exports, local shadowing, ambiguous origins, wildcard importers,
+  edge-kind preservation and a real-index cards integration.
+
 ## [0.249.0] - 2026-11-28
 
 ### Added

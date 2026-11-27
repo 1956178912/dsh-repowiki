@@ -80,6 +80,83 @@ test('referencesFor：命名空间/再导出通配符作为潜在引用合并', 
   ])
 })
 
+test('buildReferenceIndex：barrel 再导出链把具名导入归到真实定义文件', () => {
+  const edges = [
+    { from: 'src/index.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'src/app.ts', to: 'src/index.ts', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'src/index.ts', symbols: [] },
+    { path: 'src/core.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [{ name: 'run', exported: true }] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/core.ts').get('parse'), [{ path: 'src/app.ts', line: 1 }])
+
+  const withoutFiles = buildReferenceIndex(edges)
+  assert.equal(withoutFiles.get('src/core.ts').get('parse'), undefined, '不提供文件条目时保持只按直接边记账')
+})
+
+test('buildReferenceIndex：多级 barrel 链与具名再导出', () => {
+  const edges = [
+    { from: 'src/index.ts', to: 'src/impl/index.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'src/impl/index.ts', to: 'src/impl/core.ts', kind: 'export-from', line: 2, symbols: ['parse'] },
+    { from: 'src/app.ts', to: 'src/index.ts', kind: 'import', line: 3, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'src/index.ts', symbols: [] },
+    { path: 'src/impl/index.ts', symbols: [] },
+    { path: 'src/impl/core.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [{ name: 'run', exported: true }] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/impl/core.ts').get('parse'), [
+    { path: 'src/app.ts', line: 3 },
+    { path: 'src/impl/index.ts', line: 2 },
+  ], '最终使用方与直接具名再导出的中间 barrel 都是引用')
+})
+
+test('buildReferenceIndex：barrel 本地导出遮蔽星号、歧义来源不下传', () => {
+  const edges = [
+    { from: 'src/barrel.ts', to: 'src/a.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'src/barrel.ts', to: 'src/b.ts', kind: 'export-from', line: 2, symbols: ['*'] },
+    { from: 'src/app.ts', to: 'src/barrel.ts', kind: 'import', line: 1, symbols: ['foo'] },
+  ]
+  const shadowFiles = [
+    { path: 'src/barrel.ts', symbols: [{ name: 'foo', exported: true }] },
+    { path: 'src/a.ts', symbols: [{ name: 'foo', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ]
+  const shadowed = buildReferenceIndex(edges, shadowFiles)
+  assert.deepEqual(shadowed.get('src/barrel.ts').get('foo'), [{ path: 'src/app.ts', line: 1 }], '本地导出保留直接引用')
+  assert.equal(shadowed.get('src/a.ts').get('foo'), undefined, '被遮蔽的星号来源不接收引用')
+
+  const ambiguous = buildReferenceIndex(edges, [
+    { path: 'src/barrel.ts', symbols: [] },
+    { path: 'src/a.ts', symbols: [{ name: 'foo', exported: true }] },
+    { path: 'src/b.ts', symbols: [{ name: 'foo', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ])
+  assert.equal(ambiguous.get('src/a.ts').get('foo'), undefined, '两个来源都导出 foo 时按歧义处理')
+  assert.equal(ambiguous.get('src/b.ts').get('foo'), undefined)
+})
+
+test('buildReferenceIndex：通配导入沿 barrel 链记为下游潜在引用', () => {
+  const edges = [
+    { from: 'src/barrel.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'src/app.ts', to: 'src/barrel.ts', kind: 'import', line: 5, symbols: ['*'] },
+  ]
+  const refs = buildReferenceIndex(edges, [
+    { path: 'src/barrel.ts', symbols: [] },
+    { path: 'src/core.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ])
+  assert.deepEqual(refs.get('src/core.ts').get('*'), [
+    { path: 'src/app.ts', line: 5 },
+    { path: 'src/barrel.ts', line: 1 },
+  ])
+})
+
 test('referencesFor：无命中/无引用/坏符号返回空且不抛错', () => {
   const refIndex = buildReferenceIndex([{ from: 'b.ts', to: 'a.ts', symbols: ['x'] }])
   assert.deepEqual(referencesFor(refIndex, []), { references: [], truncated: false })

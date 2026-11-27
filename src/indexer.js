@@ -3174,7 +3174,9 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
         edges.push({
           from: file.path,
           to: resolved,
-          kind: EDGE_KIND_IMPORT,
+          // 保留引用形态（import/export-from/require/mod）：再导出链解析
+          // 需要区分 barrel 的 `export * from` 与普通命名空间导入
+          kind: typeof imp.kind === 'string' && imp.kind ? imp.kind : EDGE_KIND_IMPORT,
           // import/use/require 所在行：反向引用可定位到具体语句（v5）
           line: imp.line,
           symbols: imp.imported,

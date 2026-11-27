@@ -150,6 +150,42 @@ test('usages：usageImporters 只认具名导入、排除自引用并聚合行�
   )
 })
 
+test('usages：usageImporters 沿 barrel 再导出链纳入最终导入方', () => {
+  const edges = [
+    { from: 'index.ts', to: 'core.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'app.ts', to: 'index.ts', kind: 'import', line: 2, symbols: ['parse'] },
+    { from: 'other.ts', to: 'index.ts', kind: 'import', line: 3, symbols: ['other'] },
+  ]
+  const files = [
+    { path: 'index.ts', symbols: [] },
+    { path: 'core.ts', symbols: [{ name: 'parse', exported: true }] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'core.ts', name: 'parse' }, files), [
+    { path: 'app.ts', importLines: [2] },
+    { path: 'index.ts', importLines: [1] },
+  ], '链上导入方与 barrel 本身都进入候选（后者靠词法扫描确认）')
+  assert.deepEqual(usageImporters(edges, { path: 'core.ts', name: 'other' }, files), [
+    { path: 'index.ts', importLines: [1] },
+  ], '未在定义文件出现的符号不因同名边被误认')
+})
+
+test('usages：多级 barrel 与具名再导出链', () => {
+  const edges = [
+    { from: 'index.ts', to: 'impl/index.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'impl/index.ts', to: 'impl/core.ts', kind: 'export-from', line: 2, symbols: ['parse'] },
+    { from: 'app.ts', to: 'index.ts', kind: 'import', line: 4, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'index.ts', symbols: [] },
+    { path: 'impl/index.ts', symbols: [] },
+    { path: 'impl/core.ts', symbols: [{ name: 'parse', exported: true }] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'impl/core.ts', name: 'parse' }, files), [
+    { path: 'app.ts', importLines: [4] },
+    { path: 'impl/index.ts', importLines: [2] },
+  ], '中间 barrel 的再导出边不作为使用点，最终导入方沿链补齐')
+})
+
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {
   const selected = selectUsageFiles([{ path: 'b.ts' }, { path: 'a.ts' }, { path: 'b.ts' }], 1)
   assert.deepEqual(selected, { scanned: ['a.ts'], skipped: 1 })

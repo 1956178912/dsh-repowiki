@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.250.0] - 2026-11-28
+
+- **barrel 再导出链**：`repowiki-cards references`/`usages` 现在沿
+  `export * from` 与同名 `export { x } from` 链（最多 4 跳）解析具名导入，
+  把最终导入方归到真实定义文件；barrel 自身导出遮蔽星号再导出，歧义
+  星号来源跳过，再导出边本身不算使用点。
+- **保留边形态**：索引器不再把边统一写成 `import`，而是保留
+  `import`/`export-from`/`require`/`mod`，从而区分 barrel 与命名空间导入；
+  只读端点/符号的既有消费者不受影响。
+- **接入**：`usageImporters`、`collectSymbolUsages`、`repowiki-impact`
+  的使用点证据与 cards/context 工具均可读取索引文件条目解析 barrel；
+  共享逻辑位于 `src/reexports.js`。
+- **测试**：782 例通过（LANG=en）；新增单级/多级 barrel、具名再导出、
+  本地遮蔽、歧义来源、通配导入方、边形态保持与真实索引集成覆盖。
+
 ## [0.249.0] - 2026-11-28
 
 - **MATLAB 支持（第 43 种语言）**：按内容识别为 MATLAB 的 `.m` 现在登记

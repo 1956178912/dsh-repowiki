@@ -590,7 +590,7 @@ export function repowikiImpactTool(ctx) {
         /** @type {Map<string, {symbols:Set<string>, importLines:Set<number>}>} */
         const byFile = new Map()
         for (const symbol of symbolChanges.resolved) {
-          for (const importer of usageImporters(index.edges ?? [], symbol)) {
+          for (const importer of usageImporters(index.edges ?? [], symbol, index.files ?? [])) {
             let entry = byFile.get(importer.path)
             if (!entry) {
               entry = { symbols: new Set(), importLines: new Set() }

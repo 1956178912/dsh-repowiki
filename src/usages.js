@@ -10,6 +10,10 @@
  * 明显噪声而不假装精确。
  */
 
+import {
+  barrelFiles, buildReexportMaps, exportedNamesByFile, resolveReexportOrigins,
+} from './reexports.js'
+
 /** 单次影响面分析返回的使用点条目上限。 */
 export const MAX_USAGE_ENTRIES = 100
 
@@ -158,16 +162,34 @@ export function findSymbolUsages(source, symbolName, options = {}) {
  * 找出直接具名导入某符号的依赖方文件及其 import 行号。
  *
  * 只接受 `edge.symbols` 明确包含该符号的边：副作用导入（无符号）与
- * 引用同文件其他符号的边不属于本符号的使用者。自引用忽略。
- * @param {Array<{from:string, to:string, line?:number, symbols?:string[]}>} edges
+ * 引用同文件其他符号的边不属于本符号的使用者。自引用忽略。提供索引
+ * 文件条目时，还会沿 `export * from`/同名具名再导出链把"从 barrel
+ * 导入该符号"的文件纳入扫描；barrel 自身的再导出边不算使用点。
+ * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[]}>} edges
  *   index.json 的依赖边。
  * @param {{path:string, name:string}} symbol - 已解析的符号定义。
+ * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ *   索引文件条目（用于解析再导出链）。
  * @returns {Array<{path:string, importLines:number[]}>} 按路径排序的依赖方。
  */
-export function usageImporters(edges = [], symbol) {
+export function usageImporters(edges = [], symbol, files = []) {
   if (!symbol || typeof symbol.path !== 'string' || typeof symbol.name !== 'string') return []
   /** @type {Map<string, Set<number>>} */
   const byPath = new Map()
+  /**
+   * 登记一个依赖方及其 import 行号。
+   * @param {string} path - 依赖方文件。
+   * @param {number|undefined} line - import 行号。
+   * @returns {void}
+   */
+  const addImporter = (path, line) => {
+    let lines = byPath.get(path)
+    if (!lines) {
+      lines = new Set()
+      byPath.set(path, lines)
+    }
+    if (Number.isInteger(line) && line > 0) lines.add(line)
+  }
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.to !== symbol.path || edge.from === symbol.path) continue
@@ -175,12 +197,24 @@ export function usageImporters(edges = [], symbol) {
     // `*`（命名空间导入/`export *`）可能引用任意符号：作为潜在导入方参与
     // 词法扫描，是否真的使用由扫描结果决定
     if (!names.includes(symbol.name) && !names.includes('*')) continue
-    let lines = byPath.get(edge.from)
-    if (!lines) {
-      lines = new Set()
-      byPath.set(edge.from, lines)
+    addImporter(edge.from, edge.line)
+  }
+  if (files.length > 0) {
+    const maps = buildReexportMaps(edges)
+    const definitions = exportedNamesByFile(files)
+    for (const barrel of barrelFiles(maps)) {
+      if (barrel === symbol.path) continue
+      const origins = resolveReexportOrigins(barrel, symbol.name, maps, definitions)
+      if (origins.length !== 1 || origins[0] !== symbol.path) continue
+      for (const edge of edges) {
+        if (!edge || edge.to !== barrel || edge.from === symbol.path) continue
+        // 再导出边只说明符号继续下传，不构成使用证据
+        if (edge.kind === 'export-from') continue
+        const names = Array.isArray(edge.symbols) ? edge.symbols : []
+        if (!names.includes(symbol.name) && !names.includes('*')) continue
+        addImporter(edge.from, edge.line)
+      }
     }
-    if (Number.isInteger(edge.line) && edge.line > 0) lines.add(edge.line)
   }
   return [...byPath.entries()]
     .map(([path, lines]) => ({ path, importLines: [...lines].sort((a, b) => a - b) }))
@@ -217,13 +251,15 @@ export const MAX_USAGE_TARGETS = 5
  * 计入 `skippedFiles` 并把相关符号标记为 truncated。
  * @param {any} fs - ctx.fs 服务。
  * @param {string} root - 项目根。
- * @param {Array<{from:string, to:string, line?:number, symbols?:string[]}>} edges - 索引依赖边。
+ * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[]}>} edges - 索引依赖边。
  * @param {Array<{path:string, symbols?:Array<{name:string, line?:number, endLine?:number}>}>} matches
  *   - 定义文件命中（searchIndex 结果或符号锚点）。
+ * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ *   - 索引文件条目；提供时沿再导出链纳入 barrel 导入方。
  * @returns {Promise<{entries:Array, skipped:number, skippedFiles:number, truncated:boolean}>}
  *   逐符号使用点、目标数缺口、文件数缺口与截断标记。
  */
-export async function collectSymbolUsages(fs, root, edges, matches) {
+export async function collectSymbolUsages(fs, root, edges, matches, files = []) {
   /** @type {Array<{path:string, name:string, line?:number, endLine?:number}>} */
   const targets = []
   for (const match of matches) {
@@ -277,7 +313,7 @@ export async function collectSymbolUsages(fs, root, edges, matches) {
 
   const definitionFiles = new Set(selected.map(target => target.path))
   for (const target of selected) {
-    const importers = usageImporters(edges, target)
+    const importers = usageImporters(edges, target, files)
     importersByTarget.set(targetKey(target), importers)
     // 定义文件也扫描（局部调用/同文件使用），定义本身的范围跳过
     planScan(target.path, target.name, {

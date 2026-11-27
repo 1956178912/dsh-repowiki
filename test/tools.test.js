@@ -815,6 +815,31 @@ test('repowiki-cards execute：usages 的导入方文件数有界并标记截断
   assert.equal(out.symbolUsagesTruncated, true)
 })
 
+test('repowiki-cards execute：引用与使用点穿过 barrel 再导出链', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-barrel-'))
+  nodefs.writeFileSync(path.join(dir, 'core.ts'), 'export function parse() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'index.ts'), "export * from './core'\n")
+  nodefs.writeFileSync(path.join(dir, 'app.ts'), "import { parse } from './index'\nexport const value = parse()\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'core.ts',
+    symbol: 'parse',
+    referencedBy: [{ path: 'app.ts', line: 1 }, { path: 'index.ts', line: 1 }],
+  }], '从 barrel 导入的最终使用方计入引用')
+  assert.deepEqual(out.symbolUsages[0].importers, [
+    { path: 'app.ts', line: 1 },
+    { path: 'index.ts', line: 1 },
+  ])
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'app.ts', line: 2, text: 'export const value = parse()' },
+  ], 'barrel 的再导出行不产生使用点')
+  assert.equal(out.symbolUsages[0].filesScanned, 3)
+})
+
 test('repowiki-cards execute：命名空间导入作为潜在引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ns-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')

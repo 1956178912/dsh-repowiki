@@ -13,6 +13,10 @@
  * 但不声称具体使用了哪一个。
  */
 
+import {
+  barrelFiles, buildReexportMaps, exportedNamesByFile, reexportTargets, resolveReexportOrigins,
+} from './reexports.js'
+
 /** 单次检索返回的反向引用条目上限（与其它有界输出一致）。 */
 export const MAX_REFERENCE_ENTRIES = 100
 
@@ -44,10 +48,13 @@ function compareSite(a, b) {
 /**
  * 构建反向引用索引。
  * @param {IndexEdge[]} [edges] - 索引中的依赖边。
+ * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ *   索引文件条目；提供时沿 `export * from`/具名再导出链把引用归到真实
+ *   定义文件（缺省保持只按直接边记账）。
  * @returns {Map<string, Map<string, ReferenceSite[]>>}
  *   目标文件 → 符号名 → 已排序引用位置（同一文件同一行只记一次）。
  */
-export function buildReferenceIndex(edges = []) {
+export function buildReferenceIndex(edges = [], files = []) {
   /** @type {Map<string, Map<string, Map<string, ReferenceSite>>>} */
   const byTarget = new Map()
   for (const edge of edges) {
@@ -72,6 +79,65 @@ export function buildReferenceIndex(edges = []) {
         byName.set(name, refs)
       }
       refs.set(siteKey, site)
+    }
+  }
+  // barrel 再导出链：把 `import { x } from './barrel'` 的引用归到真实定义文件
+  if (files.length > 0) {
+    const definitions = exportedNamesByFile(files)
+    const maps = buildReexportMaps(edges)
+    const barrels = new Set(barrelFiles(maps))
+    if (barrels.size > 0) {
+      /** @type {Map<string, IndexEdge[]>} */
+      const byBarrel = new Map()
+      for (const edge of edges) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to || !barrels.has(edge.to)) continue
+        const list = byBarrel.get(edge.to)
+        if (list) list.push(edge)
+        else byBarrel.set(edge.to, [edge])
+      }
+      /**
+       * 写入一条引用位置（同文件同行只保留一次）。
+       * @param {string} target - 目标文件。
+       * @param {string} name - 符号名（`*` 表示潜在引用）。
+       * @param {ReferenceSite} site - 引用位置。
+       * @returns {void}
+       */
+      const addSite = (target, name, site) => {
+        let byName = byTarget.get(target)
+        if (!byName) {
+          byName = new Map()
+          byTarget.set(target, byName)
+        }
+        let refs = byName.get(name)
+        if (!refs) {
+          refs = new Map()
+          byName.set(name, refs)
+        }
+        refs.set(`${site.path}\u0000${site.line ?? 0}`, site)
+      }
+      for (const barrel of [...barrels].sort()) {
+        for (const edge of byBarrel.get(barrel) ?? []) {
+          const names = (Array.isArray(edge.symbols) ? edge.symbols : [])
+            .filter(name => typeof name === 'string' && name.length > 0)
+          if (names.length === 0) continue
+          const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
+          /** @type {ReferenceSite} */
+          const site = { path: edge.from, ...(line ? { line } : {}) }
+          if (names.includes('*')) {
+            // 通配导入/再导出：barrel 下游文件的任意符号都可能被使用
+            for (const target of reexportTargets(barrel, maps)) addSite(target, '*', site)
+            continue
+          }
+          for (const name of new Set(names)) {
+            // barrel 自身导出同名符号时引用属于 barrel，不再下传
+            if (definitions.get(barrel)?.has(name)) continue
+            const origins = resolveReexportOrigins(barrel, name, maps, definitions)
+            if (origins.length !== 1) continue
+            addSite(origins[0], name, site)
+          }
+        }
+      }
     }
   }
   // Map → 排序数组，保证输出稳定（index.json 的 edges 顺序可能随遍历变化）

@@ -527,7 +527,7 @@ export function repowikiCardsTool(ctx) {
       // 反向引用（import 级）：查询命中的符号被哪些文件导入
       let referenceResult = null
       if (args.references === true) {
-        referenceResult = referencesFor(buildReferenceIndex(index.edges), matches)
+        referenceResult = referencesFor(buildReferenceIndex(index.edges, index.files), matches)
       }
 
       // 出边（正向依赖）与依赖方（反向影响面）共用 depth：1–MAX_IMPORT_DEPTH，
@@ -551,7 +551,7 @@ export function repowikiCardsTool(ctx) {
       // 词法使用点：在直接具名导入方里按标识符边界定位出现行（有界读取）
       let usageResult = null
       if (args.usages === true) {
-        usageResult = await collectSymbolUsages(fs, root, index.edges ?? [], matches)
+        usageResult = await collectSymbolUsages(fs, root, index.edges ?? [], matches, index.files ?? [])
       }
 
       // Wiki 引用反查：命中文件被哪些 Wiki 页面/章节引用

@@ -281,6 +281,7 @@ export function repowikiContextTool(ctx) {
         usageResult = await collectSymbolUsages(
           fs, root, index.edges ?? [],
           [...byPath.entries()].map(([path, symbols]) => ({ path, symbols })),
+          index.files ?? [],
         )
       }
       const anchorPaths = symbolResolution.resolved.map(item => item.path)

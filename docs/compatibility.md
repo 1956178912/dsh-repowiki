@@ -15,7 +15,7 @@
 
 | 文件 | 版本 | 读取兼容 |
 |---|---|---|
-| `index.json` | schemaVersion 6 | 可读 v2–v5（内存补模块树/语言分布/Git，下次 index 写 v6）；v6 增加 `files[].lines`（行数快照）与 `edges[].line`（import/use/require 行号），`stats.skipped` / `stats.skippedTooLarge` 记录不可读/超大文件；旧索引无行数时行号越界检查降级为 `citation/range-unchecked`；未知版本拒绝 |
+| `index.json` | schemaVersion 6 | 可读 v2–v5（内存补模块树/语言分布/Git，下次 index 写 v6）；v6 增加 `files[].lines`（行数快照）与 `edges[].line`（import/use/require 行号）；`edges[].kind` 保留引用形态（`import`/`export-from`/`require`/`mod`，旧索引统一为 `import`，重建后升级，读取方不受影响），`stats.skipped` / `stats.skippedTooLarge` 记录不可读/超大文件；旧索引无行数时行号越界检查降级为 `citation/range-unchecked`；未知版本拒绝 |
 | 卡片 frontmatter | 1 | 版本不符按坏卡跳过；`manuallyEdited` 卡片不被自动刷新 |
 | Wiki 页面 frontmatter | 1 | `schemaVersion`/`title`/`slug`/`locale`/`generatedAt`，可选 `inputDigest`；缺字段按旧页处理 |
 | `knowledge/<locale>/_index.json` | 2（v1 可读） | 模块→卡片 + `lastRun` 最近运行快照；缺失不影响读取 |
