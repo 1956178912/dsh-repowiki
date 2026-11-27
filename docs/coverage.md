@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.262.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.263.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.262.0）；测试 813/813（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.12%、分支 87.77%、函数 95.46%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.263.0）；测试 816/816（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.14%、分支 87.93%、函数 95.47%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| Dart 导入可见性 | `extractDartImports` 解析 `show`/`hide` 组合子：无组合子的 import/export 记 `symbols: ['*']`（前者潜在引用、后者星号再导出）；`show` 精确、`hide` 写边 `hidden`，`show … hide …` 时 hide 生效；`buildReferenceIndex` 对有 `hidden` 的星号边按目标导出名展开（扣除隐藏名后记具名潜在引用），`usageImporters` 跳过隐藏名；`part` 不声称符号引用；解析器 v19 | v0.263.0 |
 | Go 导入语义 | `extractGoImports` 区分 `import alias "pkg"`/`import . "pkg"`/`import _ "pkg"`：别名写 `aliases: [{from: 包名末段, to: 本地名}]`（词法使用点按本地名扫描）；点导入 `symbols: ['*']`（references 合并到目标全部符号、usageImporters 作潜在导入方）；空白导入 `symbols: []` 保留依赖边但不声称符号引用；解析器 v18 | v0.262.0 |
 | PHP/Scala 导入别名 | `extractPhpImports` 的 `use … as`（单个与分组）与 `extractScalaImports` 的 `=>`/`as` 重命名保留原名作为 `imported`，本地名写 `aliases: [{from: 原名, to: 本地名}]`；修复 Scala 曾把别名当导入符号导致引用/影响面匹配不到定义的问题，`=> _`/`as _` 隐藏不登记；词法使用点经 `usageImporters` 按本地名扫描；解析器 v17 | v0.261.0 |
 | C#/Kotlin 导入别名 | `extractCSharpImports` 对 `using Alias = App.Models.User;` 保持 `imported: ['User']` 并写 `aliases: [{from:'User', to:'Alias'}]`；`extractKotlinImports` 对 `import a.b.C as D` 同理。引用/影响面按原名归因，`usageImporters` 取 `aliases` 的本地名作为词法扫描名；`using static`、`.*` 通配符不产生别名，C# 泛型/元组别名形态不登记（不猜测）；解析器 v16 | v0.260.0 |

@@ -172,7 +172,7 @@ export function findSymbolUsages(source, symbolName, options = {}) {
  * 文件条目时，还会沿 `export * from`/同名具名再导出链把"从 barrel
  * 导入该符号"的文件纳入扫描；barrel 自身的再导出边不算使用点。
  * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[],
- *   aliases?:Array<{from:string, to:string}>}>} edges
+ *   aliases?:Array<{from:string, to:string}>, hidden?:string[]}>} edges
  *   index.json 的依赖边。
  * @param {{path:string, name:string}} symbol - 已解析的符号定义。
  * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
@@ -216,6 +216,8 @@ export function usageImporters(edges = [], symbol, files = []) {
     // Python 星号导入按 __all__/下划线收窄：排除名不算潜在导入方
     if (names.includes('*') && pythonFiles.has(edge.from) && pythonStarVisibility.has(edge.to)
       && !pythonStarVisibility.get(edge.to).has(symbol.name)) continue
+    // Dart `hide`：星号导入的排除名不算潜在导入方
+    if (names.includes('*') && Array.isArray(edge.hidden) && edge.hidden.includes(symbol.name)) continue
     // 再导出边上的 aliases 是导出名映射，不是导入方本地绑定名
     const reexportEdge = edge.kind === 'export-from' || edge.kind === 'reexport'
     const aliases = reexportEdge
@@ -270,7 +272,7 @@ export const MAX_USAGE_TARGETS = 5
  * @param {any} fs - ctx.fs 服务。
  * @param {string} root - 项目根。
  * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[],
- *   aliases?:Array<{from:string, to:string}>}>} edges - 索引依赖边。
+ *   aliases?:Array<{from:string, to:string}>, hidden?:string[]}>} edges - 索引依赖边。
  * @param {Array<{path:string, symbols?:Array<{name:string, line?:number, endLine?:number}>}>} matches
  *   - 定义文件命中（searchIndex 结果或符号锚点）。
  * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]

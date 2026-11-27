@@ -24,7 +24,7 @@ export const MAX_REFERENCE_ENTRIES = 100
 /**
  * 索引边（结构见 src/indexer.js 的 edges 输出；v5 起带 line）。
  * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[],
- *   aliases?:Array<{from:string, to:string}>}} IndexEdge
+ *   aliases?:Array<{from:string, to:string}>, hidden?:string[]}} IndexEdge
  */
 
 /**
@@ -61,6 +61,8 @@ export function buildReferenceIndex(edges = [], files = []) {
     files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
   )
   const pythonStarVisibility = starExportedNamesByFile(files)
+  /** @type {Map<string, Set<string>>|null} 惰性导出名表（Dart `hide` 展开用）。 */
+  let starDefinitions = null
   /** @type {Map<string, Map<string, Map<string, ReferenceSite>>>} */
   const byTarget = new Map()
   for (const edge of edges) {
@@ -72,6 +74,13 @@ export function buildReferenceIndex(edges = [], files = []) {
     // Python 星号导入按 __all__/下划线收窄，不把排除名当成潜在引用
     if (names.includes('*') && pythonFiles.has(edge.from) && pythonStarVisibility.has(edge.to)) {
       names = [...pythonStarVisibility.get(edge.to)]
+      if (names.length === 0) continue
+    }
+    // Dart `hide`：星号导入排除指定名，按目标导出名展开为具名潜在引用
+    if (names.includes('*') && Array.isArray(edge.hidden) && edge.hidden.length > 0) {
+      starDefinitions ??= exportedNamesByFile(files)
+      const hiddenSet = new Set(edge.hidden)
+      names = [...(starDefinitions.get(edge.to) ?? [])].filter(name => !hiddenSet.has(name))
       if (names.length === 0) continue
     }
     const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined

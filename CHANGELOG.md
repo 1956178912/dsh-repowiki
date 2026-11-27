@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.263.0] - 2026-11-28
+
+### Added
+
+- **Dart import visibility**: imports/exports without combinators now record
+  `*` (potential references for imports, star re-exports for exports);
+  `show A, B` stays precise; `hide X` records the exclusion list in edge
+  `hidden`, and references/usage scans subtract it from the target's
+  symbols. `show … hide …` lets hide win, `part` claims no symbol
+  references, `as` prefixes do not change visibility, and parser v19
+  re-parses cached imports.
+
+### Tests
+
+- 816 cases pass (LANG=en); new Dart combinator extraction, hide-aware
+  reference merging and usage-importer filtering tests.
+
 ## [0.262.0] - 2026-11-28
 
 ### Added

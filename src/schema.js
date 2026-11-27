@@ -63,8 +63,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v15：Python `__all__`/下划线决定星号导入可见性（starExported）。
  *  v16：C#/Kotlin 导入别名写入 aliases（使用点按本地名扫描）。
  *  v17：PHP `use … as` 与 Scala 重命名导入保留原名归因并写 aliases。
- *  v18：Go 导入别名写 aliases；`.`/`_` 导入分别为 `*` 与无符号引用。 */
-export const INDEX_PARSER_VERSION = 18
+ *  v18：Go 导入别名写 aliases；`.`/`_` 导入分别为 `*` 与无符号引用。
+ *  v19：Dart 无组合子导入/导出记 `*`，`hide` 排除名写 hidden。 */
+export const INDEX_PARSER_VERSION = 19
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

@@ -243,6 +243,17 @@ test('usages：usageImporters 识别别名再导出', () => {
   ], '别名导入方带实际扫描名')
 })
 
+test('usages：Dart hide 排除被隐藏符号的导入方', () => {
+  const edges = [
+    { from: 'lib/app.dart', to: 'lib/src/a.dart', line: 1, symbols: ['*'], hidden: ['hidden'] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'lib/src/a.dart', name: 'visible' }, []), [
+    { path: 'lib/app.dart', importLines: [1] },
+  ], '未隐藏符号仍按星号导入方参与扫描')
+  assert.deepEqual(usageImporters(edges, { path: 'lib/src/a.dart', name: 'hidden' }, []), [],
+    'hide 排除名不算潜在导入方')
+})
+
 test('usages：Python __all__ 收窄星号导入方', () => {
   const edges = [
     { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },

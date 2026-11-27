@@ -143,6 +143,36 @@ test('Go：单条 import、分组 import、别名与点导入', () => {
   assert.equal(bySpec.get('fmt').aliases, undefined, '无别名不产生 aliases')
 })
 
+test('Dart：import/export/part 的通配、show/hide 与 as 前缀', () => {
+  const code = [
+    "import 'package:flutter/material.dart';",
+    "import 'src/a.dart' show A, B;",
+    "import 'src/b.dart' hide Hidden;",
+    "import 'src/c.dart' show C hide D;",
+    "import 'src/d.dart' as d;",
+    "export 'src/e.dart' show E;",
+    "export 'src/f.dart';",
+    "part 'app.g.dart';",
+    '// import commented/out.dart',
+  ].join('\n')
+  const refs = extractImports(code, 'dart')
+  const bySpec = new Map(refs.map(r => [r.specifier, r]))
+
+  assert.deepEqual(bySpec.get('package:flutter/material.dart').imported, ['*'], '无组合子导入按潜在通配')
+  assert.deepEqual(bySpec.get('src/a.dart').imported, ['A', 'B'], 'show 精确导入')
+  assert.equal(bySpec.get('src/a.dart').hidden, undefined)
+  assert.deepEqual(bySpec.get('src/b.dart').imported, ['*'])
+  assert.deepEqual(bySpec.get('src/b.dart').hidden, ['Hidden'], 'hide 记排除名')
+  assert.deepEqual(bySpec.get('src/c.dart').imported, ['C'], 'show 与 hide 组合时 hide 生效')
+  assert.deepEqual(bySpec.get('src/d.dart').imported, ['*'], 'as 前缀不改变符号可见性')
+  assert.equal(bySpec.get('src/e.dart').kind, 'export-from')
+  assert.deepEqual(bySpec.get('src/e.dart').imported, ['E'], 'export show 记再导出名')
+  assert.equal(bySpec.get('src/f.dart').kind, 'export-from')
+  assert.deepEqual(bySpec.get('src/f.dart').imported, ['*'], '无组合子 export 记星号再导出')
+  assert.deepEqual(bySpec.get('app.g.dart').imported, [], 'part 是同一编译单元')
+  assert.ok(!bySpec.has('commented/out.dart'))
+})
+
 test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   const code = [
     'mod parser;',

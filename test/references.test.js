@@ -188,6 +188,47 @@ test('buildReferenceIndex：Python __all__ 收窄星号再导出的潜在引用'
   assert.equal(refs.get('pkg/core.py').get('hidden'), undefined, '__all__ 排除名不被星号引用')
 })
 
+test('buildReferenceIndex：Dart hide 的星号导入排除指定符号', () => {
+  const edges = [
+    { from: 'lib/app.dart', to: 'lib/src/a.dart', kind: 'import', line: 1, symbols: ['*'], hidden: ['Hidden'] },
+    { from: 'lib/plain.dart', to: 'lib/src/a.dart', kind: 'import', line: 2, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'lib/app.dart', lang: 'dart', symbols: [] },
+    { path: 'lib/plain.dart', lang: 'dart', symbols: [] },
+    {
+      path: 'lib/src/a.dart',
+      lang: 'dart',
+      symbols: [{ name: 'Shown' }, { name: 'Hidden' }],
+    },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('lib/src/a.dart').get('Shown'), [
+    { path: 'lib/app.dart', line: 1 },
+  ], 'hide 边展开为未排除名的具名潜在引用')
+  assert.deepEqual(refs.get('lib/src/a.dart').get('*'), [
+    { path: 'lib/plain.dart', line: 2 },
+  ], '未声明 hide 的星号边保留通配键')
+  assert.equal(refs.get('lib/src/a.dart').get('Hidden'), undefined, 'hide 排除名无具名引用')
+
+  const merged = referencesFor(refs, [{
+    path: 'lib/src/a.dart',
+    symbols: [{ name: 'Shown' }, { name: 'Hidden' }],
+  }])
+  assert.deepEqual(merged.references, [
+    {
+      path: 'lib/src/a.dart',
+      symbol: 'Shown',
+      referencedBy: [{ path: 'lib/app.dart', line: 1 }, { path: 'lib/plain.dart', line: 2 }],
+    },
+    {
+      path: 'lib/src/a.dart',
+      symbol: 'Hidden',
+      referencedBy: [{ path: 'lib/plain.dart', line: 2 }],
+    },
+  ], '合并通配后：hide 只排除自身导入方')
+})
+
 test('buildReferenceIndex：Python `from x import *` 作为星号再导出', () => {
   const edges = [
     { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },

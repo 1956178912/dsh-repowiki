@@ -499,6 +499,15 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('lib/app.dart', 'lib/src/screen.dart')?.line, 2, '相对 import 行号')
+  assert.deepEqual(
+    doc.edges.find(e => e.from === 'lib/app.dart' && e.to === 'lib/src/screen.dart' && e.line === 2)?.symbols,
+    ['Screen'], 'show 精确导入写入边',
+  )
+  assert.deepEqual(
+    doc.edges.find(e => e.from === 'lib/app.dart' && e.to === 'lib/src/screen.dart' && e.line === 3)?.symbols,
+    ['*'], '无组合子导入按潜在通配写入边',
+  )
+  assert.deepEqual(edge('lib/app.dart', 'lib/app.g.dart')?.symbols, [], 'part 不声称符号引用')
   assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.line, 5, 'part 指令建本地边')
   assert.equal(edge('test/app_test.dart', 'lib/app.dart')?.line, 2, '../lib 相对路径解析')
   const selfPackage = doc.edges.find(e => e.from === 'lib/app.dart' && e.to === 'lib/src/screen.dart' && e.line === 3)

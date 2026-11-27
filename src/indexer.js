@@ -3374,6 +3374,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
           line: imp.line,
           symbols: imp.imported,
           ...(Array.isArray(imp.aliases) && imp.aliases.length > 0 ? { aliases: imp.aliases } : {}),
+          ...(Array.isArray(imp.hidden) && imp.hidden.length > 0 ? { hidden: imp.hidden } : {}),
         })
         // Go internal 规则：跨边界导入在真实构建中会编译失败，索引阶段告警
         if (file.lang === 'go') {

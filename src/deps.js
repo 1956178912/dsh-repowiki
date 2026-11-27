@@ -27,6 +27,8 @@ import {
  * @property {Array<{from:string, to:string}>} [aliases] - 导入/再导出别名：
  *   `from` 为目标符号原名，`to` 为本地绑定名或 barrel 导出名（JS/Rust/
  *   Python 再导出与导入、C#/Kotlin 导入别名）。
+ * @property {string[]} [hidden] - 星号导入的排除名（仅 Dart `hide`）：
+ *   这些符号不参与潜在引用归因。
  */
 
 /**
@@ -1636,13 +1638,36 @@ function extractDartImports(lines) {
     const specifier = m[2]
     // dart:/package: 是外部或 SDK 引用；相对/裸 .dart 才尝试本地解析
     const relative = !/^[a-z][a-z0-9+.-]*:/i.test(specifier) && specifier.endsWith('.dart')
-    const imported = []
-    const show = /\bshow\s+([^;]+)/.exec(m.groups?.tail ?? '')
-    if (show) {
-      for (const part of show[1].split(',')) {
-        const name = part.trim().replace(/\s+.*$/, '')
-        if (name) imported.push(name)
+    const tail = m.groups?.tail ?? ''
+    /**
+     * 解析逗号分隔的 show/hide 名单。
+     * @param {string} keyword - `show` 或 `hide`。
+     * @returns {string[]} 名单。
+     */
+    const combinator = (keyword) => {
+      const found = new RegExp(`\\b${keyword}\\s+([^;]+)`).exec(tail)
+      if (!found) return []
+      return found[1].split(',').map(part => part.trim().replace(/\s+.*$/, '')).filter(Boolean)
+    }
+    const showNames = combinator('show')
+    const hideNames = combinator('hide')
+    let imported = []
+    let hidden
+    if (m[1] === 'part') {
+      imported = [] // part 是同一编译单元，不是导入
+    } else if (showNames.length > 0) {
+      const hiddenSet = new Set(hideNames)
+      imported = showNames.filter(name => !hiddenSet.has(name))
+    } else if (hideNames.length > 0) {
+      if (m[1] === 'import') {
+        // `hide` 不改变"可能引用任意符号"的性质，排除名交给引用/使用点侧过滤
+        imported = ['*']
+        hidden = hideNames
       }
+      // export + hide：再导出链不支持排除名，保守不声称（imported 为空）
+    } else {
+      // 无组合子：整个库进入当前作用域（export 时即星号再导出）
+      imported = ['*']
     }
     result.push({
       specifier,
@@ -1650,6 +1675,7 @@ function extractDartImports(lines) {
       kind: m[1] === 'export' ? 'export-from' : 'import',
       relative,
       imported,
+      ...(hidden && hidden.length > 0 ? { hidden } : {}),
     })
   }
   return result
