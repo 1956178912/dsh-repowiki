@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.247.0] - 2026-11-28
+
+- **JSON podspec 元数据**：`*.podspec.json`（CocoaPods JSON 规格）与 Ruby
+  `*.podspec` 一同收集与解析：`name`/`version`、顶层 `dependencies` 与
+  `subspecs[].dependencies` 计入 `dependencyCounts.cocoapods` 与已核对的
+  iOS 技术映射。坏 JSON 计零而不抛错，两种格式共用 20 个嵌套清单上限。
+- **测试**：772 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 JSON podspec
+  名称/版本/依赖/subspec、坏 JSON 以及索引器与 Ruby podspec 的聚合。
+
 ## [0.246.0] - 2026-11-28
 
 - **保守默认导入解析**：JS/TS 默认导入在提取阶段记录临时 `default:Local`

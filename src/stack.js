@@ -545,6 +545,44 @@ function iosTechName(name) {
  * @returns {{name?:string, version?:string, dependencies:Array<{name:string, version?:string}>}}
  *   元数据与依赖。
  */
+/**
+ * 从 `*.podspec.json`（CocoaPods JSON 规格）提取名称、版本与依赖。
+ * 依赖覆盖顶层 `dependencies` 与 `subspecs[].dependencies`；坏 JSON 返回空。
+ * @param {string} text - podspec JSON 内容。
+ * @returns {{name?:string, version?:string, dependencies:Array<{name:string, version?:string}>}}
+ *   元数据与依赖。
+ */
+function podspecJsonInfo(text) {
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { dependencies: [] }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { dependencies: [] }
+  const name = typeof parsed.name === 'string' ? parsed.name : undefined
+  const version = typeof parsed.version === 'string' ? parsed.version : undefined
+  /** @type {Array<{name:string, version?:string}>} */
+  const dependencies = []
+  const collect = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    for (const [dep, constraint] of Object.entries(value)) {
+      if (typeof dep !== 'string' || dep === '') continue
+      if (dependencies.some(item => item.name === dep)) continue
+      dependencies.push({ name: dep, ...(typeof constraint === 'string' ? { version: constraint } : {}) })
+    }
+  }
+  collect(parsed.dependencies)
+  for (const sub of Array.isArray(parsed.subspecs) ? parsed.subspecs : []) {
+    if (sub && typeof sub === 'object') collect(sub.dependencies)
+  }
+  return {
+    ...(name ? { name } : {}),
+    ...(version ? { version } : {}),
+    dependencies,
+  }
+}
+
 function podspecInfo(text) {
   const cleaned = text.split('\n').map(line => line.replace(/#.*$/, '')).join('\n')
   const name = /^\s*\w+\.name\s*=\s*['"]([^'"]+)['"]/m.exec(cleaned)?.[1]
@@ -1303,8 +1341,8 @@ export function detectStack(manifests) {
         const name = SWIFT_TECH[dep.name]
         if (name) info.technologies.push({ name, ecosystem: 'swiftpm', source: path })
       }
-    } else if (path.endsWith('.podspec')) {
-      const pod = podspecInfo(text)
+    } else if (path.endsWith('.podspec') || path.endsWith('.podspec.json')) {
+      const pod = path.endsWith('.podspec.json') ? podspecJsonInfo(text) : podspecInfo(text)
       info.dependencyCounts.cocoapods = (info.dependencyCounts.cocoapods ?? 0) + pod.dependencies.length
       if (!info.projectName && pod.name) info.projectName = pod.name
       if (!info.projectVersion && pod.version) info.projectVersion = pod.version

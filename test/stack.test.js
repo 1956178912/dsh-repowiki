@@ -572,3 +572,24 @@ test('podspec：名称/版本/依赖与 subspec 依赖识别', () => {
   assert.equal(names.includes('NotCounted'), false)
   assert.equal(info.technologies.find(t => t.name === 'SnapKit').version, '~> 5.0')
 })
+
+test('podspec.json：JSON 规格名称/版本/依赖与 subspec 依赖', () => {
+  const spec = JSON.stringify({
+    name: 'JsonPod',
+    version: '2.0.0',
+    dependencies: { SnapKit: '~> 5.0', 'Firebase/Core': '~> 10.0' },
+    subspecs: [{ name: 'Extras', dependencies: { ReactiveCocoa: '~> 2.5' } }],
+  })
+  const info = detectStack({ 'JsonPod.podspec.json': spec })
+  assert.equal(info.projectName, 'JsonPod')
+  assert.equal(info.projectVersion, '2.0.0')
+  assert.equal(info.dependencyCounts.cocoapods, 3)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('SnapKit'))
+  assert.ok(names.includes('Firebase'))
+  assert.ok(names.includes('ReactiveCocoa'))
+  assert.equal(info.technologies.find(t => t.name === 'SnapKit').version, '~> 5.0')
+
+  const broken = detectStack({ 'Broken.podspec.json': '{not json' })
+  assert.equal(broken.dependencyCounts.cocoapods, 0, '坏 JSON 不抛错也不计数')
+})

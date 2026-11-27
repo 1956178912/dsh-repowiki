@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.247.0] - 2026-11-28
+
+### Added
+
+- **JSON podspec metadata**: `*.podspec.json` files (CocoaPods JSON specs) are
+  now collected and parsed alongside Ruby `*.podspec`: `name`/`version`,
+  top-level `dependencies` and `subspecs[].dependencies` feed
+  `dependencyCounts.cocoapods` and the verified iOS tech map. Malformed JSON
+  contributes zero instead of throwing, and the shared 20-file nested cap
+  applies to both formats.
+
+### Tests
+
+- 772 cases pass (LANG=en and LANG=zh); new coverage for JSON podspec
+  name/version/dependencies/subspecs, malformed JSON and indexer aggregation
+  next to Ruby podspecs.
+
 ## [0.246.0] - 2026-11-28
 
 ### Added

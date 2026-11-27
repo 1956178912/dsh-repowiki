@@ -2101,15 +2101,17 @@ test('podspec：根与嵌套清单聚合到 cocoapods 技术栈', async () => {
       "  s.dependency 'Firebase/Core'",
       'end',
     ].join('\n'),
+    'Sub/JsonPod.podspec.json': JSON.stringify({ dependencies: { Alamofire: '~> 5.8' } }),
     'Demo.swift': 'struct Demo {}\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
   assert.equal(doc.stack.projectName, 'DemoPod')
   assert.equal(doc.stack.projectVersion, '1.2.3')
-  assert.equal(doc.stack.dependencyCounts.cocoapods, 2, '根 1 + 嵌套 1')
+  assert.equal(doc.stack.dependencyCounts.cocoapods, 3, '根 1 + Ruby 嵌套 1 + JSON 嵌套 1')
   const techs = doc.stack.technologies.map(t => `${t.ecosystem}:${t.name}`)
   assert.ok(techs.includes('cocoapods:SnapKit'))
   assert.ok(techs.includes('cocoapods:Firebase'))
+  assert.ok(techs.includes('cocoapods:Alamofire'), 'JSON podspec 依赖也进入技术栈')
 })
 
 test('JS 默认导入：同名导出解析为符号证据，别名/匿名默认不猜', async () => {

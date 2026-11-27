@@ -180,7 +180,7 @@ function isConfigManifest(rel, name) {
     || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
     || name.endsWith('.nimble') || name.endsWith('.opam') || name.endsWith('.cabal')
     || name === 'Cargo.toml' || name === 'Podfile' || name === 'Cartfile' || name === 'Cartfile.private'
-    || name.endsWith('.podspec')
+    || name.endsWith('.podspec') || name.endsWith('.podspec.json')
 }
 
 /**
@@ -3079,7 +3079,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       if (cartfileManifestsRead >= MAX_CARTFILE_MANIFESTS) continue
       cartfileManifestsRead++
     }
-    const nestedPodspec = !MANIFEST_FILES[rel] && baseName.endsWith('.podspec')
+    const nestedPodspec = !MANIFEST_FILES[rel] && (baseName.endsWith('.podspec') || baseName.endsWith('.podspec.json'))
     if (nestedPodspec) {
       if (podspecManifestsRead >= MAX_PODSPEC_MANIFESTS) continue
       podspecManifestsRead++
