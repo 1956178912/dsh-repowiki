@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.174.0] - 2026-11-28
+
+### Added
+
+- **GFM tables and nested lists in the panel renderer**: generated cards and
+  wiki pages often contain Markdown tables or indented sub-lists, which the
+  zero-dependency renderer previously flattened into paragraphs. Tables now
+  render as `<table>` with header/body cells, column alignment from the
+  delimiter row (`:--`, `:--:`, `--:`), inline formatting inside cells and
+  `\|` escaping; lists build an indentation tree and render nested `ul`/`ol`
+  inside their parent `<li>`, preserving ordered/unordered mixes at each
+  level. No new dependency; links inside cells still go through the existing
+  protocol allowlist.
+
+### Tests
+
+- 550 cases pass (LANG=en and LANG=zh); the client fixture card now carries a
+  two-column table and a three-level list, and a new DOM test asserts the
+  table node, centered header alignment, `li > ul` nesting and the
+  ordered/unordered mix.
+
 ## [0.173.0] - 2026-11-28
 
 ### Performance

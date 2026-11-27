@@ -3607,10 +3607,116 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 判断一行是否为 GFM 表格分隔行（`| --- | :--: |`）。
+     * @param {string} line - 行文本。
+     * @returns {boolean} 是则为 true。
+     */
+    function isTableDelimiter(line) {
+      return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line)
+    }
+
+    /**
+     * 拆分表格行：支持 `\|` 转义与首尾竖线。
+     * @param {string} row - 行文本。
+     * @returns {string[]} 单元格文本。
+     */
+    function splitTableRow(row) {
+      const trimmed = row.trim()
+      const cells = []
+      let current = ''
+      for (let index = 0; index < trimmed.length; index++) {
+        const char = trimmed[index]
+        if (char === '\\' && trimmed[index + 1] === '|') { current += '|'; index++; continue }
+        if (char === '|') { cells.push(current.trim()); current = ''; continue }
+        current += char
+      }
+      cells.push(current.trim())
+      if (trimmed.startsWith('|') && cells[0] === '') cells.shift()
+      if (trimmed.endsWith('|') && cells[cells.length - 1] === '') cells.pop()
+      return cells
+    }
+
+    /**
+     * 表格单元格对齐方式。
+     * @param {string} cell - 分隔行单元格。
+     * @returns {'left'|'center'|'right'} 对齐方式。
+     */
+    function tableAlignment(cell) {
+      const left = cell.startsWith(':')
+      const right = cell.endsWith(':')
+      if (left && right) return 'center'
+      return right ? 'right' : 'left'
+    }
+
+    /**
+     * 解析连续的（可缩进）列表行并构建嵌套树。
+     * 支持 `-`/`*` 与 `N.`；缩进按两个空格为一层（制表符按两空格计）。
+     * @param {string[]} lines - 全文行。
+     * @param {number} start - 起始行索引。
+     * @returns {{items:Array<{ordered:boolean, text:string, children:Array}>, next:number}}
+     *   顶层条目树与下一行索引。
+     */
+    function parseListTree(lines, start) {
+      const entries = []
+      let next = start
+      while (next < lines.length) {
+        const match = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(lines[next])
+        if (!match) break
+        entries.push({
+          indent: match[1].replace(/\t/g, '  ').length,
+          ordered: /^\d/.test(match[2]),
+          text: match[3],
+        })
+        next++
+      }
+      const items = []
+      const baseIndent = entries.length > 0 ? entries[0].indent : 0
+      const stack = [{ indent: baseIndent - 1, children: items }]
+      for (const entry of entries) {
+        while (stack.length > 1 && entry.indent <= stack[stack.length - 1].indent) stack.pop()
+        const node = { ordered: entry.ordered, text: entry.text, children: [] }
+        stack[stack.length - 1].children.push(node)
+        stack.push(node)
+      }
+      return { items, next }
+    }
+
+    /**
+     * 渲染嵌套列表树；相邻同类型条目合并为一个 ul/ol。
+     * @param {Array<{ordered:boolean, text:string, children:Array}>} items - 条目。
+     * @param {number} depth - 嵌套深度（0 为顶层）。
+     * @param {() => number} nextKey - React key 生成器。
+     * @returns {Array} React 元素数组。
+     */
+    function renderListTree(items, depth, nextKey) {
+      const groups = []
+      for (const item of items) {
+        const kind = item.ordered ? 'ol' : 'ul'
+        const last = groups[groups.length - 1]
+        if (last && last.kind === kind) last.items.push(item)
+        else groups.push({ kind, items: [item] })
+      }
+      return groups.map(group => h(group.kind, {
+        key: nextKey(),
+        style: {
+          margin: depth === 0 ? '0 0 10px' : '4px 0 0',
+          paddingLeft: 20,
+          fontSize: 13,
+          lineHeight: 1.6,
+        },
+      }, ...group.items.map((item) => {
+        const children = [...inlineText(item.text)]
+        if (item.children.length > 0) children.push(...renderListTree(item.children, depth + 1, nextKey))
+        return h('li', { key: nextKey() }, ...children)
+      })))
+    }
+
+    /**
      * 极简 Markdown 渲染器（零依赖：practices 禁止引入第三方前端包，
      * 手写解析器复用宿主 React）。支持：frontmatter 跳过、#~/##~/### 标题、
-     * 代码围栏、无序/有序列表、引用、分隔线、加粗、行内代码、链接。
-     * 不支持表格/图片/嵌套列表（资产文本不含这些形态）。
+     * 代码围栏、无序/有序列表（含两级以上缩进嵌套）、引用、分隔线、GFM
+     * 表格（含对齐与 `\|` 转义）、加粗、行内代码、链接。
+     * 不支持图片与 HTML 内嵌（资产文本不含这些形态）。
      * @param {string} md - Markdown 文本。
      * @returns {Array} React 元素数组。
      */
@@ -3698,34 +3804,56 @@ window.__ModuleLoader__.load({
           }, ...quoteLines.map((t, k) => h('div', { key: k }, ...inlineText(t)))))
           continue
         }
-        // 无序列表
-        if (/^[-*]\s+/.test(line)) {
-          const items = []
-          while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
-            items.push(lines[i].replace(/^[-*]\s+/, '')); i++
-          }
-          blocks.push(h('ul', {
-            key: key++, style: { margin: '0 0 10px', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 },
-          }, ...items.map((t, k) => h('li', { key: k }, ...inlineText(t)))))
+        // 无序/有序列表（可缩进嵌套）：按缩进构建树后递归渲染
+        if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+          const parsed = parseListTree(lines, i)
+          blocks.push(...renderListTree(parsed.items, 0, () => key++))
+          i = parsed.next
           continue
         }
-        // 有序列表
-        if (/^\d+\.\s+/.test(line)) {
-          const items = []
-          while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
-            items.push(lines[i].replace(/^\d+\.\s+/, '')); i++
+        // GFM 表格：表头行 + 分隔行（| --- | :--: |），单元格参与行内格式
+        if (line.includes('|') && i + 1 < lines.length && isTableDelimiter(lines[i + 1])) {
+          const headers = splitTableRow(line)
+          const aligns = splitTableRow(lines[i + 1]).map(tableAlignment)
+          if (headers.length > 0 && headers.length === aligns.length) {
+            i += 2
+            const rows = []
+            while (i < lines.length && lines[i].trim() !== '' && lines[i].includes('|')
+              && !/^(#{1,3}\s|```|>\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
+              rows.push(splitTableRow(lines[i]))
+              i++
+            }
+            const cellStyle = align => ({
+              border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+              padding: '4px 8px',
+              textAlign: align,
+            })
+            blocks.push(h('div', {
+              key: key++, style: { overflowX: 'auto', margin: '0 0 10px' },
+            }, h('table', {
+              style: { borderCollapse: 'collapse', fontSize: 12, lineHeight: 1.5 },
+            },
+            h('thead', null, h('tr', null, ...headers.map((text, column) => h('th', {
+              key: column,
+              style: {
+                ...cellStyle(aligns[column]),
+                background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
+                fontWeight: 600,
+              },
+            }, ...inlineText(text))))),
+            rows.length > 0 ? h('tbody', null, ...rows.map((cells, row) => h('tr', { key: row },
+              ...headers.map((_, column) => h('td', {
+                key: column, style: cellStyle(aligns[column]),
+              }, ...inlineText(cells[column] ?? '')))))) : null)))
+            continue
           }
-          blocks.push(h('ol', {
-            key: key++, style: { margin: '0 0 10px', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 },
-          }, ...items.map((t, k) => h('li', { key: k }, ...inlineText(t)))))
-          continue
         }
         // 空行
         if (line.trim() === '') { i++; continue }
         // 段落：连继行直到空行或块级起始
         const paraLines = []
         while (i < lines.length && lines[i].trim() !== ''
-          && !/^(#{1,3}\s|```|-{3,}$|>\s|[-*]\s|\d+\.\s)/.test(lines[i])) {
+          && !/^(#{1,3}\s|```|-{3,}$|>\s|[-*]\s|\d+\.\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
           paraLines.push(lines[i]); i++
         }
         blocks.push(h('p', { key: key++, style: paragraphStyle },

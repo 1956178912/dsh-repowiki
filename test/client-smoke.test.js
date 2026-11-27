@@ -76,6 +76,15 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     '',
     '职责正文',
     '',
+    '| 项 | 说明 |',
+    '| --- | :--: |',
+    '| 表格单元A | 表格单元B |',
+    '',
+    '1. 外层条目',
+    '   - 内层条目',
+    '   - 内层第二项',
+    '2. 第二个外层',
+    '',
     'BodyMarkerOnly 仅出现在卡片正文，用于验证全文检索',
     '',
     '## 关键符号 / Key symbols',
@@ -1277,6 +1286,33 @@ test('记忆页签：条目列表（状态徽章）与单条原文浏览', async
   assert.ok(pageTexts.some(s => s.includes('摘要驱动增量重建。')), '应呈现条目正文')
   const detailBack = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
   assert.ok(detailBack, '详情有返回控件')
+})
+
+test('Markdown 渲染：GFM 表格与嵌套列表', async () => {
+  const hooks = await mountReadyPage()
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  tile.props.onClick()
+  await flush()
+
+  const table = findNode(hooks.root, n => n.type === 'table')
+  assert.ok(table, '渲染 table 节点')
+  const tableTexts = collectTexts(table)
+  for (const text of ['项', '说明', '表格单元A', '表格单元B']) {
+    assert.ok(tableTexts.includes(text), `表格应渲染 ${text}`)
+  }
+  const centerHeader = findNode(table, n => n.type === 'th' && n.props.style?.textAlign === 'center')
+  assert.ok(centerHeader, '分隔行 :--: 驱动居中对齐')
+
+  const nested = findNode(hooks.root, n => n.type === 'li'
+    && (n.children ?? []).some(child => child && child.type === 'ul'))
+  assert.ok(nested, '缩进列表渲染为 li > ul')
+  const nestedTexts = collectTexts(nested)
+  assert.ok(nestedTexts.includes('内层条目'), '嵌套条目内容按层级渲染')
+  assert.ok(nestedTexts.includes('内层第二项'))
+
+  const ordered = findNode(hooks.root, n => n.type === 'ol')
+  assert.ok(ordered, '数字列表渲染为 ol')
+  assert.ok(collectTexts(ordered).includes('外层条目'), 'ol 与嵌套 ul 混排')
 })
 
 test('卡片详情与 Wiki 详情以排版文字渲染（非 Markdown 源码）', async () => {
