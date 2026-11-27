@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.157.0] - 2026-11-27
+
+### Added
+
+- **Status duplicate counts**: `repowiki-status` now reports
+  `wiki.duplicate`, `wiki.duplicateSlugs` and `wiki.duplicatePaths` for page
+  files sharing a slug and for manifests that repeat a slug or path. The text
+  report adds `duplicate N` to the `Wiki:` line, matching the gate.
+- **Panel duplicate notice**: the Wiki tab derives the same duplicate counts
+  from the loaded page list and manifest (no extra reads) and shows a
+  `role=status` notice with the offending slugs/paths.
+
+### Tests
+
+- 521 cases pass (LANG=en and LANG=zh); status and panel cases cover a
+  duplicated manifest page and a second file claiming an existing slug.
+
 ## [0.156.0] - 2026-11-27
 
 ### Added

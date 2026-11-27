@@ -252,11 +252,15 @@ export function repowikiStatusTool(ctx) {
               missingPages: { type: 'array', items: { type: 'string' } },
               invalid: { type: 'integer', description: 'Manifest pages whose path is invalid or does not match the file location.' },
               invalidPages: { type: 'array', items: { type: 'string' } },
+              duplicate: { type: 'integer', description: 'Duplicate page slugs (on disk or in the manifest) plus duplicate manifest paths.' },
+              duplicateSlugs: { type: 'array', items: { type: 'string' } },
+              duplicatePaths: { type: 'array', items: { type: 'string' } },
               orphaned: { type: 'integer' },
             },
             required: [
               'count', 'manifest', 'stale', 'failed', 'failedPages',
-              'missing', 'missingPages', 'invalid', 'invalidPages', 'orphaned',
+              'missing', 'missingPages', 'invalid', 'invalidPages',
+              'duplicate', 'duplicateSlugs', 'duplicatePaths', 'orphaned',
             ],
           },
           brokenCitations: {
@@ -632,7 +636,7 @@ export function repowikiStatusTool(ctx) {
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
           `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
-          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, orphaned ${value.wiki.orphaned}`,
+          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, duplicate ${value.wiki.duplicate}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
             ? [`Broken citations: ${value.brokenCitations.total === 0
               ? '(none)'
@@ -756,6 +760,29 @@ export function repowikiStatusTool(ctx) {
         16,
       )
       const manifestSlugs = new Set((manifest?.pages ?? []).map(p => p.slug))
+      // 重复页：磁盘上两个文件声明同一 slug，或清单重复登记 slug/路径。
+      // 前者会让按 slug 解析的页面被静默覆盖，后者让页面归属依赖顺序。
+      const rawManifestSlugList = (manifest?.pages ?? [])
+        .map(page => (typeof page?.slug === 'string' ? page.slug : ''))
+        .filter(Boolean)
+      const duplicateManifestSlugs = [...new Set(
+        rawManifestSlugList.filter((slug, index) => rawManifestSlugList.indexOf(slug) !== index),
+      )]
+      const rawManifestPathList = (manifest?.pages ?? [])
+        .map(page => (typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''))
+        .filter(Boolean)
+      const duplicateManifestPaths = [...new Set(
+        rawManifestPathList.filter((rel, index) => rawManifestPathList.indexOf(rel) !== index),
+      )]
+      const diskSlugCounts = new Map()
+      for (const page of wikiPages) {
+        diskSlugCounts.set(page.slug, (diskSlugCounts.get(page.slug) ?? 0) + 1)
+      }
+      const duplicateDiskSlugs = [...diskSlugCounts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([slug]) => slug)
+      const duplicateWikiSlugs = [...new Set([...duplicateDiskSlugs, ...duplicateManifestSlugs])].sort()
+      const duplicateWikiTotal = duplicateWikiSlugs.length + duplicateManifestPaths.length
       const wikiOrphaned = manifest ? wikiPages.filter(p => !manifestSlugs.has(p.slug)).length : 0
       const wikiStale = wikiPages.filter(p => p.inputDigest && p.inputDigest !== currentDigest).length
       // 清单登记但磁盘缺失的页面：与 verify:wiki 的 missingPages 同口径。
@@ -984,6 +1011,9 @@ export function repowikiStatusTool(ctx) {
           missingPages: missingWikiPages.slice(0, 10),
           invalid: invalidWikiPages.length,
           invalidPages: invalidWikiPages.slice(0, 10),
+          duplicate: duplicateWikiTotal,
+          duplicateSlugs: duplicateWikiSlugs.slice(0, 10),
+          duplicatePaths: duplicateManifestPaths.slice(0, 10),
           orphaned: wikiOrphaned,
         },
         ...(brokenCitations ? { brokenCitations } : {}),

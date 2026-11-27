@@ -162,6 +162,8 @@ const DICTS = {
     wikiStaleMemory: 'Wiki 落后于已采信记忆：生成后记忆已变化，请重新生成',
     wikiInvalidSummary: '清单中 {n} 页路径非法或与文件位置不符',
     wikiInvalidHint: '非法页：{pages}',
+    wikiDuplicateSummary: '{n} 处重复页面 slug 或清单路径',
+    wikiDuplicateHint: '重复项：{pages}',
     wikiOnlyUntracked: '仅看未覆盖（{n}）',
     wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
@@ -284,6 +286,8 @@ const DICTS = {
     wikiStaleMemory: 'Wiki is behind the accepted memory: memory changed after generation, run repowiki-generate',
     wikiInvalidSummary: '{n} manifest page path(s) are invalid or do not match their file',
     wikiInvalidHint: 'Invalid pages: {pages}',
+    wikiDuplicateSummary: '{n} duplicate page slug(s) or manifest path(s)',
+    wikiDuplicateHint: 'Duplicates: {pages}',
     wikiOnlyUntracked: 'Only untracked ({n})',
     wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
@@ -1492,6 +1496,28 @@ window.__ModuleLoader__.load({
       const missingPages = (Array.isArray(manifest?.pages) ? manifest.pages : [])
         .map(page => (typeof page?.path === 'string' ? page.path : ''))
         .filter(path => path && !present.has(path) && !invalidRels.has(path))
+      // 重复页：磁盘两个文件同 slug，或清单重复 slug/路径。与门禁同口径，
+      // 但只使用已加载的文件列表，不读源码。
+      const rawManifestSlugs = (Array.isArray(manifest?.pages) ? manifest.pages : [])
+        .map(page => (typeof page?.slug === 'string' ? page.slug : ''))
+        .filter(Boolean)
+      const duplicateManifestSlugs = [...new Set(
+        rawManifestSlugs.filter((slug, index) => rawManifestSlugs.indexOf(slug) !== index),
+      )]
+      const rawManifestPaths = (Array.isArray(manifest?.pages) ? manifest.pages : [])
+        .map(page => (typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''))
+        .filter(Boolean)
+      const duplicateManifestPaths = [...new Set(
+        rawManifestPaths.filter(rel => rawManifestPaths.indexOf(rel) !== rawManifestPaths.lastIndexOf(rel)),
+      )]
+      const diskSlugCounts = new Map()
+      for (const entry of entries) {
+        diskSlugCounts.set(entry.slug, (diskSlugCounts.get(entry.slug) ?? 0) + 1)
+      }
+      const duplicateDiskSlugs = [...diskSlugCounts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([slug]) => slug)
+      const duplicateSlugs = [...new Set([...duplicateDiskSlugs, ...duplicateManifestSlugs])].sort()
       return {
         failedTotal,
         failedPages: failedPages.slice(0, 5),
@@ -1499,6 +1525,9 @@ window.__ModuleLoader__.load({
         missingPages: missingPages.slice(0, 5),
         invalidTotal: invalidPages.length,
         invalidPages: invalidPages.slice(0, 5),
+        duplicateTotal: duplicateSlugs.length + duplicateManifestPaths.length,
+        duplicateSlugs: duplicateSlugs.slice(0, 5),
+        duplicatePaths: duplicateManifestPaths.slice(0, 5),
       }
     }
 
@@ -3059,6 +3088,13 @@ window.__ModuleLoader__.load({
             : undefined,
           style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
         }, tt('wikiInvalidSummary', { n: meta.invalidTotal })),
+        meta && meta.duplicateTotal > 0 && h('p', {
+          role: 'status',
+          title: [...meta.duplicateSlugs, ...meta.duplicatePaths].length > 0
+            ? tt('wikiDuplicateHint', { pages: [...meta.duplicateSlugs, ...meta.duplicatePaths].join(', ') })
+            : undefined,
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, tt('wikiDuplicateSummary', { n: meta.duplicateTotal })),
       )
       if (entries.length === 0) {
         return h('div', null,

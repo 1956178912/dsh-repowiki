@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.157.0] - 2026-11-27
+
+- **状态重复计数**：`repowiki-status` 新增 `wiki.duplicate`、
+  `wiki.duplicateSlugs` 与 `wiki.duplicatePaths`，覆盖磁盘同 slug 文件与
+  清单重复 slug/路径；文本 `Wiki:` 行追加 `duplicate N`，与门禁同口径。
+- **面板重复提示**：Wiki 页签从已加载页面列表与清单派生同样计数（不额外
+  读取），以 `role=status` 提示重复项 slug/路径。
+- **测试**：521 例在 LANG=en 与 LANG=zh 下全通过；status 与面板各覆盖
+  重复清单页与同 slug 文件。
+
 ## [0.156.0] - 2026-11-27
 
 - **重复页检测**：两个页面文件声明同一 slug 时，`verify:wiki` 以

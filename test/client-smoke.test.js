@@ -1156,6 +1156,26 @@ test('Wiki 页签：清单路径非法提示', async () => {
   assert.ok(!texts.includes('wikiMissingSummary'), '非法路径不重复算作缺失页')
 })
 
+test('Wiki 页签：重复清单页提示', async () => {
+  const page = {
+    slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
+    sources: [], sections: [],
+  }
+  const manifest = JSON.stringify({
+    schemaVersion: 3,
+    pages: [page, { ...page }],
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/_index.json': manifest })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('wikiDuplicateSummary'), '展示重复页/清单条目提示')
+})
+
 test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
   const legacy = JSON.stringify({
     schemaVersion: 2,

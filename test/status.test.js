@@ -288,6 +288,38 @@ test('repowiki-status：清单页面路径非法计数与文本', async () => {
   assert.match(rendered[0].text, /invalid 1/)
 })
 
+test('repowiki-status：重复页面 slug 与清单条目计数', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-duplicate-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function main() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const index = JSON.parse(nodefs.readFileSync(path.join(dir, '.dsh-repowiki/index.json'), 'utf8'))
+  const digest = index.files.find(f => f.path === 'a.ts').digest
+  await writeCard(ctx.fs, dir, 'a.ts', 'zh', `${encodeFrontmatter({
+    schemaVersion: 1, path: 'a.ts', lang: 'typescript', locale: 'zh',
+    sourceDigest: digest, title: '入口', tags: [], manuallyEdited: false, generatedAt: 'now',
+  })}\n# 入口\n`)
+  await repowikiGenerateTool(ctx).execute({ locale: 'zh', granularity: 'module' }, fakeExec)
+
+  const manifestPath = path.join(dir, '.dsh-repowiki/wiki/zh/_index.json')
+  const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
+  const slug = manifest.pages[0].slug
+  // 清单重复 slug（不同路径）与磁盘同 slug 文件各一。
+  manifest.pages.push({ ...manifest.pages[0], path: 'wiki/zh/other.md' })
+  nodefs.writeFileSync(manifestPath, JSON.stringify(manifest))
+  nodefs.writeFileSync(
+    path.join(dir, '.dsh-repowiki/wiki/zh/copy.md'),
+    `${encodeFrontmatter({ slug, title: 'Copy' })}\n# Copy\n`,
+  )
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.wiki.duplicate, 1, '同一 slug 的清单与磁盘重复只计一次')
+  assert.deepEqual(out.wiki.duplicateSlugs, [slug])
+  assert.deepEqual(out.wiki.duplicatePaths, [])
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /duplicate 1/)
+})
+
 test('repowiki-status：模块依赖热点（跨模块 import 边，按边数）', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-deps-'))
   nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
