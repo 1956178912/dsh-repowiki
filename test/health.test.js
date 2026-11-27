@@ -98,6 +98,42 @@ test('health：环、告警与跳过文件拉低分数并有待办', () => {
   assert.match(result.issues[0], /8 eligible/)
 })
 
+test('health：分层违规、重复块与高复杂度拉低架构分量', () => {
+  const base = {
+    coverage: { eligible: 4, documented: 4, fresh: 4, stale: 0, percent: 100 },
+    wiki: { count: 4, stale: 0, orphaned: 0 },
+    cycles: [],
+    hubs: [],
+    warnings: [],
+    skipped: 0,
+  }
+  const clean = assessHealth(base)
+  assert.equal(clean.components[2].score, 100)
+
+  const dirty = assessHealth({
+    ...base,
+    layers: { total: 4 },
+    duplicates: { total: 3 },
+    complexity: { high: 5 },
+  })
+  assert.equal(dirty.components[2].score, 61, '100 - 20 - 9 - 10')
+  assert.match(dirty.components[2].detail, /4 layer violation/)
+  assert.match(dirty.components[2].detail, /3 duplicate block/)
+  assert.match(dirty.components[2].detail, /5 high-complexity/)
+  assert.ok(dirty.issues.some(item => /cross-layer/.test(item)))
+  assert.ok(dirty.issues.some(item => /duplicate code/.test(item)))
+  assert.ok(dirty.issues.some(item => /high-complexity/.test(item)))
+  assert.ok(dirty.score < clean.score)
+
+  const capped = assessHealth({
+    ...base,
+    layers: { total: 100 },
+    duplicates: { total: 100 },
+    complexity: { high: 100 },
+  })
+  assert.equal(capped.components[2].score, 30, '扣分上限 30 + 20 + 20')
+})
+
 test('health：引用缺失/越界/漂移扣 Wiki 分量并进入待办', () => {
   const base = {
     coverage: { eligible: 4, documented: 4, fresh: 4, stale: 0, percent: 100 },

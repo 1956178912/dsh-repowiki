@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.228.0] - 2026-11-28
+
+### Changed
+
+- **Health score signals**: the architecture component now also counts
+  plan layer violations (5 points each, cap 30), cross-file duplicate
+  blocks (3 each, cap 20) and high-complexity functions (2 each, cap 20),
+  alongside cycles and the top fan-in hub. Each signal also appears as a
+  ranked issue, and the component detail names the counts.
+- **Backward-compatible inputs**: the three new inputs are optional; when
+  absent the score is identical to previous releases, so callers that do
+  not compute them (or older call sites) are unaffected.
+
+### Tests
+
+- 679 cases pass (LANG=en and LANG=zh); new coverage for the penalty
+  arithmetic, caps (architecture floor 30 for the new signals), component
+  detail strings and issue entries.
+
 ## [0.227.0] - 2026-11-28
 
 ### Added

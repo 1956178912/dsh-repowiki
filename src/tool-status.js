@@ -1211,6 +1211,9 @@ export function repowikiStatusTool(ctx) {
           },
           cycles,
           hubs,
+          layers: layerReport ? { total: layerReport.total } : undefined,
+          duplicates: duplicates ? { total: duplicates.total } : undefined,
+          complexity: complexity ? { high: complexity.high.length } : undefined,
           warnings: warnings.filter(message => !citationWarnings.includes(message)),
           skipped: index.stats?.skipped ?? 0,
         })

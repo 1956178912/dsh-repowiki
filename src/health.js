@@ -12,7 +12,8 @@
  * - Wiki（25%）：是否生成过页面、陈旧与孤儿比例，以及引用完整性
  *   （缺失路径、行号越界、内容漂移；未覆盖引用作为提示项，不扣分）；
  *   引用缺陷只扣 Wiki 分量，不改变权重。
- * - 架构（20%）：文件级 import 环数量、最高 fan-in 入口的集中度。
+ * - 架构（20%）：文件级 import 环数量、最高 fan-in 入口的集中度、分层
+ *   规则违规数、跨文件重复块数与高复杂度函数数。
  * - 卫生（15%）：索引告警与被跳过文件。
  *
  * 分数越低越应先处理 `issues` 中列出的前几条；分量分与权重同时输出，
@@ -131,6 +132,9 @@ function citationCounts(citations) {
  *   引用完整性问题计数（缺失路径/行号越界/内容漂移/未覆盖/未验证）；前 3 类扣 Wiki 分量。
  * @param {Array<{files:string[], size:number}>} [input.cycles] - 文件级循环组。
  * @param {Array<{path:string, dependents:number}>} [input.hubs] - fan-in 排名。
+ * @param {{total?:number}} [input.layers] - 分层违规计数（plan 声明层时）。
+ * @param {{total?:number}} [input.duplicates] - 跨文件重复块计数。
+ * @param {{high?:number}} [input.complexity] - 高复杂度函数计数。
  * @param {string[]} [input.warnings] - 索引/环境告警。
  * @param {number} [input.skipped] - 索引跳过文件数。
  * @returns {{score:number, grade:'A'|'B'|'C'|'D',
@@ -149,6 +153,11 @@ export function assessHealth(input) {
   const hubs = Array.isArray(input.hubs) ? input.hubs : []
   const warnings = Array.isArray(input.warnings) ? input.warnings : []
   const skipped = Number.isInteger(input.skipped) && input.skipped > 0 ? input.skipped : 0
+  /** 取非负计数（缺省/非法值按 0）。 */
+  const countOf = (value) => (Number.isInteger(value) && value > 0 ? value : 0)
+  const layerViolations = countOf(input.layers?.total)
+  const duplicateBlocks = countOf(input.duplicates?.total)
+  const highComplexity = countOf(input.complexity?.high)
 
   const docsScore = coverage.eligible === 0 ? 100 : clamp(coverage.percent)
   // 引用缺陷按严重度扣 Wiki 分量：缺失路径 10 分/条（上限 40），
@@ -170,7 +179,13 @@ export function assessHealth(input) {
       - citationPenalty)
   const topHub = hubs[0]?.dependents ?? 0
   const hubPenalty = topHub >= 10 ? 15 : topHub >= 5 ? 8 : 0
-  const archScore = clamp(100 - Math.min(60, cycles.length * 10) - hubPenalty)
+  // 分层违规 5 分/条（上限 30）、重复块 3 分/块（上限 20）、高复杂度
+  // 函数 2 分/个（上限 20）；与环、hub 共用架构分量的 100 分预算。
+  const layerPenalty = Math.min(30, layerViolations * 5)
+  const duplicatePenalty = Math.min(20, duplicateBlocks * 3)
+  const complexityPenalty = Math.min(20, highComplexity * 2)
+  const archScore = clamp(100 - Math.min(60, cycles.length * 10) - hubPenalty
+    - layerPenalty - duplicatePenalty - complexityPenalty)
   const hygieneScore = clamp(100 - Math.min(50, warnings.length * 5) - Math.min(30, skipped * 2))
 
   const score = Math.round(
@@ -195,6 +210,9 @@ export function assessHealth(input) {
   if (citations.drift > 0) issues.push(`${citations.drift} wiki citation(s) changed since generation`)
   if (citations.untracked > 0) issues.push(`${citations.untracked} citation(s) have no content digest`)
   if (cycles.length > 0) issues.push(`${cycles.length} import cycle group(s)`)
+  if (layerViolations > 0) issues.push(`${layerViolations} cross-layer import violation(s)`)
+  if (duplicateBlocks > 0) issues.push(`${duplicateBlocks} duplicate code block(s)`)
+  if (highComplexity > 0) issues.push(`${highComplexity} high-complexity function(s)`)
   if (warnings.length > 0) issues.push(`${warnings.length} index/environment warning(s)`)
   if (skipped > 0) issues.push(`${skipped} file(s) were skipped during indexing`)
 
@@ -204,7 +222,7 @@ export function assessHealth(input) {
     components: [
       { key: 'documentation', score: Math.round(docsScore), weight: HEALTH_WEIGHTS.documentation, detail: `${coverage.documented}/${coverage.eligible} eligible files documented` },
       { key: 'wiki', score: Math.round(wikiScore), weight: HEALTH_WEIGHTS.wiki, detail: wikiTotal === 0 ? 'no wiki pages' : `${wiki.count} page(s), ${wiki.stale} stale, ${wikiMissing} missing, ${wikiFailed} failed, ${wikiInvalid} invalid, ${wiki.orphaned} orphaned${citationProblems > 0 ? `, ${citationProblems} citation issue(s)` : ''}` },
-      { key: 'architecture', score: Math.round(archScore), weight: HEALTH_WEIGHTS.architecture, detail: `${cycles.length} cycle group(s), top fan-in ${topHub}` },
+      { key: 'architecture', score: Math.round(archScore), weight: HEALTH_WEIGHTS.architecture, detail: `${cycles.length} cycle group(s), top fan-in ${topHub}${layerViolations > 0 ? `, ${layerViolations} layer violation(s)` : ''}${duplicateBlocks > 0 ? `, ${duplicateBlocks} duplicate block(s)` : ''}${highComplexity > 0 ? `, ${highComplexity} high-complexity function(s)` : ''}` },
       { key: 'hygiene', score: Math.round(hygieneScore), weight: HEALTH_WEIGHTS.hygiene, detail: `${warnings.length} warning(s), ${skipped} skipped file(s)` },
     ],
     issues: issues.slice(0, 4),
