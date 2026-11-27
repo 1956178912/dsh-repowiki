@@ -22,6 +22,36 @@ import {
   findSymbolUsages, usageImporters, selectUsageFiles,
   MAX_USAGE_ENTRIES, MAX_USAGES_PER_SYMBOL, MAX_USAGE_FILES,
 } from './usages.js'
+import { readPlan } from './config.js'
+import { architectureImpact } from './impact-architecture.js'
+
+/** 改动文件源码读取的并发上限（热点函数只需改动文件）。 */
+const IMPACT_READ_CONCURRENCY = 8
+
+/**
+ * 有界并发读取改动文件源码（热点函数输入）。
+ * @param {FsService} fs - ctx.fs。
+ * @param {string} root - 项目根。
+ * @param {string[]} paths - 已匹配的索引路径。
+ * @returns {Promise<Array<{path:string, text:string}>>} 可读源码。
+ */
+async function readChangedSources(fs, root, paths) {
+  const sources = []
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < paths.length) {
+      const path = paths[cursor++]
+      try {
+        sources.push({ path, text: await fs.readText(await fs.resolve(path, { cwd: root })) })
+      } catch {
+        // 不可读文件跳过：热点统计只覆盖可验证源码
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: IMPACT_READ_CONCURRENCY }, worker))
+  sources.sort((a, b) => a.path.localeCompare(b.path))
+  return sources
+}
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -32,7 +62,9 @@ const DESCRIPTION = [
   'ordered verification steps. Pass symbols (name or path#name) to require named-import evidence',
   'for direct impact while retaining the unfiltered file total as an upper bound; by default the',
   'importers are also scanned for lexical usage sites (identifier-boundary occurrences, not resolved',
-  'call sites; set includeUsages=false to skip source reads). Impacted files that look like tests',
+  'call sites; set includeUsages=false to skip source reads). The declared layer of the change,',
+  'impacted-layer distribution, cross-layer edges and high-complexity hotspots in the changed',
+  'files are reported with the same rules as repowiki-status. Impacted files that look like tests',
   'are listed separately (path heuristics) so the right test files can run first. Read-only and',
   'deterministic; based on import/use/require edges, not a runtime call graph. Run repowiki-index first.',
 ].join(' ')
@@ -249,6 +281,72 @@ export function repowikiImpactTool(ctx) {
               required: ['path', 'dependents'],
             },
           },
+          architecture: {
+            type: 'object',
+            description: 'Architecture context for the change, using the same layer rules as repowiki-status and verify:arch: declared layers, the layers of the changed and impacted files, cross-layer import edges between changed and impacted files, and high-complexity functions inside the changed files.',
+            additionalProperties: false,
+            properties: {
+              declaredLayers: {
+                type: 'array',
+                description: 'Declared layers with indexed file counts.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: 'string' },
+                    files: { type: 'integer' },
+                  },
+                  required: ['name', 'files'],
+                },
+              },
+              changedLayers: { type: 'array', items: { type: 'string' }, description: 'Sorted distinct layers of the changed files.' },
+              impactedLayers: {
+                type: 'array',
+                description: 'Impacted dependents grouped by layer (bounded).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    layer: { type: 'string' },
+                    files: { type: 'integer' },
+                  },
+                  required: ['layer', 'files'],
+                },
+              },
+              crossLayerPairs: {
+                type: 'array',
+                description: 'Import edges between a changed file and an impacted file whose layers differ (exact counts, bounded by layer pairs).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    from: { type: 'string' },
+                    to: { type: 'string' },
+                    count: { type: 'integer' },
+                  },
+                  required: ['from', 'to', 'count'],
+                },
+              },
+              hotspots: {
+                type: 'array',
+                description: 'Functions in the changed files at or above the plan complexity threshold (up to 10, highest first).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    path: { type: 'string' },
+                    name: { type: 'string' },
+                    line: { type: 'integer' },
+                    endLine: { type: 'integer' },
+                    complexity: { type: 'integer' },
+                  },
+                  required: ['path', 'name', 'line', 'endLine', 'complexity'],
+                },
+              },
+              hotspotTotal: { type: 'integer', description: 'Exact count of high-complexity functions in the changed files (readable sources only).' },
+            },
+            required: ['declaredLayers', 'changedLayers', 'impactedLayers', 'crossLayerPairs', 'hotspots', 'hotspotTotal'],
+          },
           cards: {
             type: 'array',
             description: 'Knowledge cards that document the changed files.',
@@ -349,6 +447,25 @@ export function repowikiImpactTool(ctx) {
         }
         if (value.hubs.length > 0) {
           lines.push(`Fan-in: ${value.hubs.map(hub => `${hub.path} (${hub.dependents})`).join('; ')}`)
+        }
+        if (value.architecture) {
+          const arch = value.architecture
+          const parts = []
+          if (arch.declaredLayers.length > 0) {
+            parts.push(`layers ${arch.declaredLayers.map(layer => `${layer.name} (${layer.files})`).join(', ')}`)
+          }
+          if (arch.changedLayers.length > 0) parts.push(`changed ${arch.changedLayers.join(', ')}`)
+          if (arch.impactedLayers.length > 0) {
+            parts.push(`impacted ${arch.impactedLayers.map(layer => `${layer.layer} (${layer.files})`).join(', ')}`)
+          }
+          if (arch.crossLayerPairs.length > 0) {
+            parts.push(`cross-layer ${arch.crossLayerPairs.map(pair => `${pair.from} → ${pair.to} (${pair.count})`).join(', ')}`)
+          }
+          if (arch.hotspotTotal > 0) {
+            const example = arch.hotspots[0]
+            parts.push(`hotspots ${arch.hotspotTotal}${example ? ` — e.g. ${example.path}#${example.name} (${example.complexity})` : ''}`)
+          }
+          if (parts.length > 0) lines.push(`Architecture: ${parts.join('; ')}`)
         }
         const cardPart = value.cards.length > 0
           ? `${value.cards.length} card(s)${value.cards.some(card => card.stale) ? `, ${value.cards.filter(card => card.stale).length} stale` : ''}`
@@ -520,6 +637,18 @@ export function repowikiImpactTool(ctx) {
       const risk = assessRisk({
         direct: impact.direct, total: impact.total, cycles: cycleResult.cycles.length, hubs,
       })
+      // 架构上下文：改动落在哪个声明层、受影响的层分布、跨层边与热点函数
+      const { plan } = await readPlan(fs, root)
+      const changedSources = await readChangedSources(fs, root, match.matched)
+      const architecture = architectureImpact({
+        files: index.files ?? [],
+        edges: index.edges ?? [],
+        layers: plan.layers,
+        changed: match.matched,
+        impacted: impact.impacted.map(item => item.path),
+        sources: changedSources,
+        threshold: plan.complexityThreshold,
+      })
 
       // 文档影响面：卡片/Wiki 的 locale 沿用与 cards 相同的"有资产优先"策略
       const explicitLocale = typeof args.locale === 'string' && SUPPORTED_LOCALES.includes(args.locale)
@@ -548,6 +677,12 @@ export function repowikiImpactTool(ctx) {
       if (cycleResult.truncated) notes.push('More cycle groups touch the change than are listed; inspect repowiki-status cycles.')
       if (docs.wikiTruncated) notes.push(`Only ${docs.wiki.length} wiki citation(s) are listed.`)
       if (localeInfo.source === 'fallback') notes.push(`No ${requestedLocale} cards/wiki were found; docs are read from ${localeInfo.locale}.`)
+      if (architecture.crossLayerPairs.length > 0) {
+        notes.push(`The change crosses declared layers (${architecture.crossLayerPairs.map(pair => `${pair.from} → ${pair.to}`).join(', ')}); verify tests on both sides.`)
+      }
+      if (architecture.hotspotTotal > 0) {
+        notes.push(`${architecture.hotspotTotal} high-complexity function(s) live in the changed files; review them before editing.`)
+      }
 
       return {
         indexed: true,
@@ -579,6 +714,7 @@ export function repowikiImpactTool(ctx) {
         cycles: cycleResult.cycles,
         cyclesTruncated: cycleResult.truncated,
         hubs,
+        architecture,
         cards: docs.cards,
         wiki: docs.wiki,
         wikiTruncated: docs.wikiTruncated,

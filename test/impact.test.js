@@ -417,3 +417,39 @@ test('repowiki-impact：无索引与无匹配的降级', async () => {
   assert.equal(miss.changed.length, 0)
   assert.match(repowikiImpactTool(ctx).output.render({}, miss)[0].text, /None of the paths match/)
 })
+
+test('repowiki-impact：架构上下文（层归属/跨层影响/热点）', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-impact-arch-'))
+  nodefs.mkdirSync(path.join(dir, 'src/ui'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, 'src/core'), { recursive: true })
+  const coreLines = ['export function b() {']
+  for (let i = 0; i < 6; i++) coreLines.push('  if (x) { return 1 }')
+  coreLines.push('}')
+  nodefs.writeFileSync(path.join(dir, 'src/core/b.ts'), coreLines.join('\n') + '\n')
+  nodefs.writeFileSync(path.join(dir, 'src/ui/a.ts'),
+    "import { b } from '../core/b'\nexport const a = b()\n")
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki/repowiki-plan.json'), JSON.stringify({
+    complexityThreshold: 5,
+    layers: [
+      { name: 'ui', paths: ['src/ui'], mayDependOn: ['core'] },
+      { name: 'core', paths: ['src/core'], mayDependOn: [] },
+    ],
+  }))
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const tool = repowikiImpactTool(ctx)
+  const out = await tool.execute({ paths: ['src/core/b.ts'], depth: 2 }, fakeExec)
+
+  assert.deepEqual(out.architecture.changedLayers, ['core'])
+  assert.deepEqual(out.architecture.impactedLayers, [{ layer: 'ui', files: 1 }])
+  assert.deepEqual(out.architecture.crossLayerPairs, [{ from: 'ui', to: 'core', count: 1 }])
+  assert.equal(out.architecture.hotspotTotal, 1)
+  assert.equal(out.architecture.hotspots[0].name, 'b')
+  assert.match(out.hint ?? '', /crosses declared layers/)
+  assert.match(out.hint ?? '', /high-complexity function/)
+  const rendered = tool.output.render({}, out)[0].text
+  assert.match(rendered, /Architecture: layers ui \(1\), core \(1\)/)
+  assert.match(rendered, /cross-layer ui → core \(1\)/)
+  assert.match(rendered, /hotspots 1/)
+})

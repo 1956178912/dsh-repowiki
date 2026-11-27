@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.236.0] - 2026-11-28
+
+### Added
+
+- **Architecture context in `repowiki-impact`**: the blast-radius report now
+  also answers "what does this change mean architecturally" using the same
+  layer rules as `repowiki-status` and `verify:arch`: declared layers with
+  indexed file counts, the layers of the changed files, impacted dependents
+  grouped by layer, cross-layer import edges between changed and impacted
+  files (exact counts per layer pair) and high-complexity functions inside
+  the changed files (exact total plus a bounded list). Rendered as an
+  `Architecture:` line, explained in hints and exposed as `architecture` in
+  the JSON output.
+- **Shared layer assignment**: `assignLayer` is now exported from
+  `src/layers.js` (longest prefix wins), so status, the ratchet gate and
+  impact cannot disagree about which layer a file belongs to.
+
+### Tests
+
+- 748 cases pass (LANG=en and LANG=zh); new coverage for layer assignment,
+  cross-layer impact filtering (only changed↔impacted edges), hotspot
+  totals and the impact tool wiring.
+
 ## [0.235.0] - 2026-11-28
 
 ### Added

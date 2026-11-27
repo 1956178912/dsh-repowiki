@@ -71,6 +71,18 @@ function layerOf(layers, rel) {
 }
 
 /**
+ * 公开的层归属查询（最长前缀优先），供影响面等只读分析复用。
+ * @param {Array<{name:string, paths:string[]}>} layers - 层配置。
+ * @param {string} rel - 文件相对路径。
+ * @returns {{layer:string, prefix:string}|null} 归属；未命中返回 null。
+ */
+export function assignLayer(layers, rel) {
+  if (!Array.isArray(layers) || layers.length === 0) return null
+  if (typeof rel !== 'string' || rel === '') return null
+  return layerOf(layers, rel)
+}
+
+/**
  * 按分层规则检查依赖边。
  * @param {Array<{name:string, paths:string[], mayDependOn:string[]}>} layers - 归一化层配置。
  * @param {Array<{from:string, to:string, line?:number}>} edges - 索引依赖边。
