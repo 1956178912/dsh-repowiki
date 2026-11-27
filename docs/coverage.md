@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.133.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.134.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.133.0）；测试 487/487（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.19%、分支 86.59%、函数 95.20%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.134.0）；测试 487/487（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.22%、分支 86.56%、函数 95.21%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -199,7 +199,8 @@
 | 模块耦合指标 | `src/coupling.js` 在跨模块 import 图上计算 Ca/Ce 与不稳定性 Ce/(Ca+Ce)，同模块/自引用/未知模块忽略，模块对去重；status 输出前 10 并渲染 `Module instability` 行 | v0.125.0 |
 | 引用行号越界 | 索引 schema v6 记录 `files[].lines`（空文件 0 行、结尾换行不加行）；`parseWikiSource` 解析 `#Lx-Ly`/`#Lx`/`#Lx-y`；`findCitationRangeIssues` 标记零起始/倒置/超出 EOF，行数未知计入 unchecked，status 有界输出并渲染 | v0.126.0 |
 | 面板引用问题 | 客户端 `parseCitation`/`citationIssuesFor` 从清单与索引行数派生越界/未检查；Wiki 页签展示汇总与逐页 `⚠ N` 徽章（可访问 title）；不做文件系统存在性检查 | v0.127.0 / v0.132.0 |
-| 面板指纹覆盖率 | 客户端从清单派生页级/汇总覆盖率，不读源码；未覆盖页显示弱化的 `◌ N` 徽章与 `tracked/total` 汇总，旧清单只显示一次无指纹记录；页级/章节 `sources` 去重后再统计引用问题与覆盖率 | v0.132.0 |
+| 面板指纹覆盖率 | 客户端从清单派生页级/汇总覆盖率，不读源码；未覆盖页显示弱化的 `◌ N` 徽章与 `tracked/total` 汇总，旧清单只显示一次无指纹记录；页级/章节 `sources` 去重后再统计引用问题与覆盖率 | v0.132.0 / v0.134.0 |
+| 面板未覆盖原因 | 客户端读取清单 `citationMisses`，在 `◌ N` 徽章 tooltip/可访问标签与覆盖率汇总中展示 `unreadable`/`range`/`cap`/`unknown` 的本地化分类；旧清单不逐页展示，仍不读源码 | v0.134.0 |
 | 引用内容漂移 | 清单 v3 的 `citationDigests` 记录每条引用（行范围/整文件）的 sha256-12；生成在锁外按白名单读取（200 上限），status 重算（100 读取上限）并报告变化，不可读/非法/超限计入 unchecked；旧清单不判定 | v0.128.0 |
 | 漂移感知增量生成 | `checkCitationDrift` 由 status 与 generate 共用；generate 在 fresh 短路前重算指纹，`total > 0` 或 `unchecked > 0`（含超出 500 条比较上限）时不跳过，`hint` 说明原因；验证通过返回 `citationDrift: 0`，无指纹旧清单保持原行为 | v0.129.0 |
 | 引用感知健康分 | `assessHealth` 接收 `broken/outOfRange/drift/unchecked`；缺失路径 10 分/条（上限 40），越界与漂移各 5 分/条（各上限 20），总扣分上限 80；`unchecked` 只报告不扣分；status 把三类计数接入组件明细与前四条待办，并把引用告警从卫生分量排除以避免双扣 | v0.130.0 |

@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.134.0] - 2026-11-27
+
+### Added
+
+- **Panel untracked reasons**: the Wiki tab now reads `citationMisses` from the
+  manifest and includes a localized reason breakdown (`unreadable`, invalid
+  `range`, read `cap`, `unknown`) in the per-page `◌ N` badge tooltip and the
+  aggregate coverage summary, without reading source files. Legacy manifests
+  keep the single no-digest line.
+
+### Tests
+
+- 487 cases pass (LANG=en and LANG=zh); the panel fixture now carries
+  `citationMisses` for the out-of-range citation and asserts the badge title
+  and reason-aware accessible label.
+
 ## [0.133.0] - 2026-11-27
 
 ### Added

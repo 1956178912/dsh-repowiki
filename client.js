@@ -151,9 +151,13 @@ const DICTS = {
     wikiRangeHint: '{n} 处引用超出索引记录的文件行数',
     wikiIssueSummary: '引用问题：{outOfRange} 处行号越界 · {unchecked} 处未检查',
     wikiCoverageBadge: '未覆盖 {n}',
-    wikiCoverageHint: '{n} 处引用没有内容指纹，无法做漂移检查',
-    wikiCoverageSummary: '引用指纹：{tracked}/{total} 已记录 · {untracked} 未覆盖',
+    wikiCoverageHint: '{n} 处引用没有内容指纹（{reasons}），无法做漂移检查',
+    wikiCoverageSummary: '引用指纹：{tracked}/{total} 已记录 · {untracked} 未覆盖（{reasons}）',
     wikiCoverageLegacy: '引用指纹：清单无指纹记录（{total} 处引用）',
+    wikiReasonUnreadable: '不可读 {n}',
+    wikiReasonRange: '行号非法 {n}',
+    wikiReasonCap: '读取上限 {n}',
+    wikiReasonUnknown: '原因未知 {n}',
     copyPath: '复制路径',
     copied: '已复制',
     copyFailed: '复制失败（剪贴板不可用）',
@@ -259,9 +263,13 @@ const DICTS = {
     wikiRangeHint: '{n} citation(s) exceed the indexed line count',
     wikiIssueSummary: 'Citation issues: {outOfRange} out-of-range · {unchecked} unchecked',
     wikiCoverageBadge: 'Untracked {n}',
-    wikiCoverageHint: '{n} citation(s) have no content digest; drift checks cannot cover them',
-    wikiCoverageSummary: 'Citation digests: {tracked}/{total} tracked · {untracked} untracked',
+    wikiCoverageHint: '{n} citation(s) have no content digest ({reasons}); drift checks cannot cover them',
+    wikiCoverageSummary: 'Citation digests: {tracked}/{total} tracked · {untracked} untracked ({reasons})',
     wikiCoverageLegacy: 'Citation digests: manifest has no digests ({total} citations)',
+    wikiReasonUnreadable: 'unreadable {n}',
+    wikiReasonRange: 'invalid range {n}',
+    wikiReasonCap: 'read cap {n}',
+    wikiReasonUnknown: 'unknown {n}',
     copyPath: 'Copy path',
     copied: 'Copied',
     copyFailed: 'Copy failed (clipboard unavailable)',
@@ -1270,7 +1278,8 @@ window.__ModuleLoader__.load({
     /**
      * 汇总页面清单里的引用指纹覆盖率（按页去重）。
      * @param {object|null} meta - 清单页面条目。
-     * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean}}
+     * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean,
+     *   reasons:{unreadable:number, range:number, cap:number, unknown:number}}}
      *   覆盖率；旧清单无指纹时 tracked 为 0。
      */
     function citationCoverageFor(meta) {
@@ -1286,9 +1295,19 @@ window.__ModuleLoader__.load({
       const digests = meta?.citationDigests && typeof meta.citationDigests === 'object'
         ? meta.citationDigests
         : null
+      const misses = meta?.citationMisses && typeof meta.citationMisses === 'object'
+        ? meta.citationMisses
+        : null
+      const reasons = { unreadable: 0, range: 0, cap: 0, unknown: 0 }
       let tracked = 0
       for (const source of sources) {
-        if (digests && typeof digests[source] === 'string' && digests[source]) tracked++
+        if (digests && typeof digests[source] === 'string' && digests[source]) {
+          tracked++
+          continue
+        }
+        const reason = misses && typeof misses[source] === 'string' ? misses[source] : 'unknown'
+        if (reason === 'unreadable' || reason === 'range' || reason === 'cap') reasons[reason]++
+        else reasons.unknown++
       }
       return {
         total: sources.size,
@@ -1296,7 +1315,25 @@ window.__ModuleLoader__.load({
         untracked: sources.size - tracked,
         hasDigests: Boolean(digests
           && Object.values(digests).some(value => typeof value === 'string' && value)),
+        reasons,
       }
+    }
+
+    /**
+     * 渲染未覆盖引用原因（本地化）。
+     * @param {{unreadable?:number, range?:number, cap?:number, unknown?:number}|undefined} reasons
+     *   原因计数。
+     * @param {(key:string, params?:object)=>string} tt - 文案函数。
+     * @returns {string} 例如 `不可读 1, 行号非法 2`；无计数时为空。
+     */
+    function formatCoverageReasons(reasons, tt) {
+      if (!reasons) return ''
+      const parts = []
+      if (reasons.unreadable > 0) parts.push(tt('wikiReasonUnreadable', { n: reasons.unreadable }))
+      if (reasons.range > 0) parts.push(tt('wikiReasonRange', { n: reasons.range }))
+      if (reasons.cap > 0) parts.push(tt('wikiReasonCap', { n: reasons.cap }))
+      if (reasons.unknown > 0) parts.push(tt('wikiReasonUnknown', { n: reasons.unknown }))
+      return parts.join(', ')
     }
 
     /**
@@ -2870,8 +2907,18 @@ window.__ModuleLoader__.load({
         acc.tracked += item.tracked
         acc.untracked += item.untracked
         acc.hasDigests = acc.hasDigests || item.hasDigests
+        for (const key of ['unreadable', 'range', 'cap', 'unknown']) {
+          acc.reasons[key] += item.reasons?.[key] ?? 0
+        }
         return acc
-      }, { total: 0, tracked: 0, untracked: 0, hasDigests: false })
+      }, {
+        total: 0,
+        tracked: 0,
+        untracked: 0,
+        hasDigests: false,
+        reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
+      })
+      const coverageReasons = formatCoverageReasons(coverage.reasons, tt)
       return h('div', null,
         h('input', {
           type: 'search',
@@ -2896,7 +2943,7 @@ window.__ModuleLoader__.load({
           role: 'status',
           style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px' },
         }, coverage.hasDigests
-          ? tt('wikiCoverageSummary', coverage)
+          ? tt('wikiCoverageSummary', { ...coverage, reasons: coverageReasons })
           : tt('wikiCoverageLegacy', { total: coverage.total })),
         filtered.length === 0
           ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiEmpty'))
@@ -2926,7 +2973,10 @@ window.__ModuleLoader__.load({
               coverage.hasDigests && entry.citationCoverage?.untracked > 0 && h('span', {
                 style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
                 title: tt('wikiCoverageBadge', { n: entry.citationCoverage.untracked }),
-                'aria-label': tt('wikiCoverageHint', { n: entry.citationCoverage.untracked }),
+                'aria-label': tt('wikiCoverageHint', {
+                  n: entry.citationCoverage.untracked,
+                  reasons: formatCoverageReasons(entry.citationCoverage.reasons, tt),
+                }),
               }, `◌ ${entry.citationCoverage.untracked}`),
               entry.outOfRange > 0 && h('span', {
                 style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },

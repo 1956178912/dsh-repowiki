@@ -158,6 +158,7 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
             'a.js#L7': 'cccccccccccc',
             'a.js#L9': 'dddddddddddd',
           },
+          citationMisses: { 'a.js#L11': 'range' },
           generatedAt: '2026-11-26T08:00:00.000Z',
         },
         {
@@ -1002,6 +1003,10 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(listTexts.includes('⚠ 1'), '概览页带行号越界徽章')
   assert.ok(listTexts.includes('wikiCoverageSummary'), '展示引用指纹覆盖率摘要')
   assert.ok(listTexts.includes('◌ 1'), '概览页带未覆盖徽章（#L11 无指纹）')
+  const coverageBadge = findNode(hooks.root, n => n.type === 'span' && n.children?.[0] === '◌ 1')
+  assert.ok(coverageBadge, '未覆盖徽章存在')
+  assert.equal(coverageBadge.props.title, 'wikiCoverageBadge')
+  assert.equal(coverageBadge.props['aria-label'], 'wikiCoverageHint', '徽章附带原因提示')
 
   // 打开第一个页面，查看原文
   const entry = findNode(hooks.root, (n) => n.type === 'button'
