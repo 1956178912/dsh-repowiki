@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.197.0] - 2026-11-28
+
+### Added
+
+- **R S4 declarations**: `setGeneric("name", …)` now registers a function
+  symbol (exported through `NAMESPACE`), `setMethod("name", "Class", …)` /
+  `setMethod("name", signature("Class"), …)` register methods with the
+  signature class as `parent`, and `setRefClass("Name", …)` joins
+  `setClass`/`R6Class` as a class symbol. Methods stay `exported: false`
+  even when the generic is exported, matching R's export granularity.
+  `INDEX_PARSER_VERSION` moves to 4 so existing indexes re-parse R files.
+
+### Tests
+
+- 592 cases pass (LANG=en and LANG=zh); new coverage pins generic/method
+  kinds and parents (string and `signature()` signatures), `setRefClass`
+  classes, NAMESPACE-driven export and method non-export.
+
 ## [0.196.0] - 2026-11-28
 
 ### Added

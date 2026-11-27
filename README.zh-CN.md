@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、22 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度，以及 Elixir 模块/别名索引与根/umbrella `mix.exs` 技术栈与 `.exs` 测试/脚本索引、深层 Markdown 标题与清单并发读取与 Lua 模块/require 索引与 Zig 容器/成员索引及 `build.zig.zon` 元数据与结构化不可信索引计数与 Gleam 类型/导入索引与结构化 Wiki 陈旧原因与 Gleam monorepo 清单及跨行导入与 Zig monorepo 清单与 Zig 公开再导出与解析缓存版本升级与 Shell 函数/source 索引与 R 函数/类及 `DESCRIPTION` 元数据与 status 解析器版本可见性与 R `NAMESPACE` 导出证据与 R6/S4 方法符号与 Julia 模块/类型/函数及 `Project.toml` 元数据（v0.196.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、22 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度，以及 Elixir 模块/别名索引与根/umbrella `mix.exs` 技术栈与 `.exs` 测试/脚本索引、深层 Markdown 标题与清单并发读取与 Lua 模块/require 索引与 Zig 容器/成员索引及 `build.zig.zon` 元数据与结构化不可信索引计数与 Gleam 类型/导入索引与结构化 Wiki 陈旧原因与 Gleam monorepo 清单及跨行导入与 Zig monorepo 清单与 Zig 公开再导出与解析缓存版本升级与 Shell 函数/source 索引与 R 函数/类及 `DESCRIPTION` 元数据与 status 解析器版本可见性与 R `NAMESPACE` 导出证据与 R6/S4 方法符号与 Julia 模块/类型/函数及 `Project.toml` 元数据与 R S4 声明（v0.197.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -316,11 +316,12 @@
 - Gleam 支持（v0.185.0）：`type`/`opaque type`/`external type` 容器、`type` 别名、跨行 `fn`/`external fn`、顶层 `const`；注释/字符串（含跨行）屏蔽后配平；`import` 别名与未限定导入（含跨行列表拼接）经每个 `src/`/`test/` 源根解析；`gleam.toml` 提供项目名/版本/依赖计数，嵌套 monorepo 清单（上限 20）合并依赖、根元数据优先
 - 不可信索引结构化状态（v0.184.0）：`repowiki-status` 返回 `index.untrusted`（`files`/`edges`）并在 `Index:` 行展示丢弃数量，JSON/CI 消费方无需解析告警文案；原告警保持不变
 - Zig 支持（v0.183.0）：容器类型（`struct`/`enum`/`union`/`opaque`，含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn`/`extern fn`/`export fn`、具名测试与常量，成员带容器归属；注释与多行字符串屏蔽，`@import`/`@cImport`/`@This` 模块别名不登记；`@import("x.zig")` 相对引用文件解析，`build.zig.zon` 提供项目名/版本/依赖计数，嵌套 monorepo 清单（上限 20）累加依赖、根元数据优先
+- R S4 声明（v0.197.0）：`setGeneric` 泛型、`setMethod` 方法（签名类为 `parent`）与 `setRefClass` 类；方法即使泛型导出也保持不导出；解析器 v4 会重新解析 R 文件
 - Julia 支持（v0.196.0）：`module`/`baremodule`、`struct`/`mutable struct`、`abstract`/`primitive` 类型、`function`（含 `Type.method`）、短函数、`macro` 与 `const`；函数体跳过、注释/块注释/三引号屏蔽、`export` 决定可见性；`include` 相对引用文件；`Project.toml` 提供包名/版本/依赖
 - R6/S4 方法（v0.195.0）：`R6Class`/`setClass` 内的方法登记为 `method` 并以类为 `parent`（含单行体），不再随类内部整体跳过；解析器版本提升到 3，旧索引会重新解析 R 文件
 - R `NAMESPACE` 导出（v0.194.0）：`export`/`exportClasses`/`exportMethods`/`S3method` 决定 R 符号的 `exported`（S3 方法按 `generic.class`），`exportPattern` 回退到 `.` 前缀约定
 - status 解析器版本（v0.193.0）：返回并展示 `index.parserVersion`，缓存索引由不同提取器版本生成时告警，让即将发生的全量重解析在重建前可见
-- R 支持（v0.192.0）：`name <- function(...)`/`name = function(...)`（含 `<<-`），跨行签名、分行 `{` 与单行体；`setClass`/`R6Class` 类符号（R6 内部方法归属类、`.` 前缀私有）；`source`/`sys.source` 经文件目录与项目根解析；`DESCRIPTION` 提供包名/版本/去重依赖；`NAMESPACE` 提供导出证据
+- R 支持（v0.192.0）：`name <- function(...)`/`name = function(...)`（含 `<<-`），跨行签名、分行 `{` 与单行体；`setClass`/`setRefClass`/`R6Class` 类符号（方法归属类、`.` 前缀私有）、`setGeneric` 泛型与 `setMethod` 方法；`source`/`sys.source` 经文件目录与项目根解析；`DESCRIPTION` 提供包名/版本/去重依赖；`NAMESPACE` 提供导出证据
 - Shell 支持（v0.191.0）：`.sh`/`.bash`/`.zsh` 函数符号（`function foo`、`function foo()`、`foo() {`、分行 `{`）、显式公开变量；注释/字符串/heredoc 屏蔽且 `${…}` 不参与配平；`source`/`.` 先脚本目录再项目根解析
 - 解析缓存版本升级（v0.190.0）：`INDEX_PARSER_VERSION` 提升到 2，Elixir/Lua/Zig/Gleam 等提取器与后续修复之前建立的索引会先全量重解析一次，不再复用陈旧符号/导入缓存；升级后重建表现为 `changed` = 文件数、`reused` = 0，随后恢复正常增量
 - Zig 公开再导出（v0.189.0）：`pub const x = @import("x.zig")` 登记为导出变量符号，模块门面可被检索；私有 `@import`/`@This`/`@cImport` 别名仍不进入符号表

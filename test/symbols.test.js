@@ -1231,6 +1231,20 @@ test('Julia：模块/结构体/函数/短函数/宏与 export', () => {
   assert.ok(!byName.has('inner'), '函数体内嵌套短函数不登记')
 })
 
+test('R：S4 泛型与方法符号', () => {
+  const code = [
+    'setGeneric("area", function(shape) standardGeneric("area"))',
+    'setMethod("area", "Circle", function(shape) 3.14)',
+    'setMethod("area", signature("Square"), function(shape) 4)',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'r')
+  assert.deepEqual(symbols.map(s => [s.name, s.kind, s.parent]), [
+    ['area', 'function', undefined],
+    ['area', 'method', 'Circle'],
+    ['area', 'method', 'Square'],
+  ])
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

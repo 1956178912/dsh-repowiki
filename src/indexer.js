@@ -835,6 +835,8 @@ function applyRNamespaceExports(files, text) {
     if (file.lang !== 'r' || !Array.isArray(file.symbols)) continue
     file.symbols = file.symbols.map(symbol => {
       if (typeof symbol?.name !== 'string') return symbol
+      // 方法经类/泛型访问，不是包导出；NAMESPACE 也不导出方法本体
+      if (symbol.kind === 'method') return { ...symbol, exported: false }
       return { ...symbol, exported: names.has(symbol.name) && !symbol.name.startsWith('.') }
     })
   }

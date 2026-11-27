@@ -48,8 +48,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *      符号与依赖提取、Zig 公开再导出、Gleam 跨行未限定导入、Dart/PHP/
  *      Ruby/Swift/Scala 等既有规则的修复）。升级后首轮索引会重解析全部
  *      文件，统计表现为 changed=文件数、reused=0。
- *  v3：R6/S4 类内方法登记为 method + parent（R 符号提取规则变化）。 */
-export const INDEX_PARSER_VERSION = 3
+ *  v3：R6/S4 类内方法登记为 method + parent（R 符号提取规则变化）。
+ *  v4：R S4 `setGeneric`/`setMethod`/`setRefClass` 符号（R 提取规则变化）。 */
+export const INDEX_PARSER_VERSION = 4
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

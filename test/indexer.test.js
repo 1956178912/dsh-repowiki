@@ -1446,6 +1446,31 @@ test('Julia：include 相对文件解析与 Project.toml 技术栈', async () =>
   assert.ok(demo.symbols.some(s => s.name === 'Demo' && s.kind === 'class'))
 })
 
+test('R：S4 setGeneric/setMethod/setRefClass 符号', async () => {
+  const dir = makeProject({
+    'NAMESPACE': 'export(area)\nexportClasses(Counter)\n',
+    'R/shapes.R': [
+      'setGeneric("area", function(shape) standardGeneric("area"))',
+      'setMethod("area", "Circle", function(shape) 3.14)',
+      'setMethod("area", signature("Square"), function(shape) 4)',
+      'setRefClass("Counter", fields = list(value = "numeric"))',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const file = doc.files.find(f => f.path === 'R/shapes.R')
+
+  const generic = file.symbols.find(s => s.name === 'area' && s.kind === 'function')
+  assert.ok(generic, 'setGeneric 登记为函数符号')
+  assert.equal(generic.exported, true, 'NAMESPACE 导出泛型')
+  const methods = file.symbols.filter(s => s.name === 'area' && s.kind === 'method')
+  assert.deepEqual(methods.map(m => m.parent), ['Circle', 'Square'], 'S4 方法归属签名类')
+  assert.ok(methods.every(m => m.exported === false), '方法不经包导出')
+
+  const cls = file.symbols.find(s => s.name === 'Counter')
+  assert.equal(cls.kind, 'class')
+  assert.equal(cls.exported, true, 'exportClasses 导出 setRefClass')
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

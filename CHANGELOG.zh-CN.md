@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.197.0] - 2026-11-28
+
+- **R S4 声明**：`setGeneric("name", …)` 登记为函数符号（经 `NAMESPACE`
+  导出），`setMethod("name", "Class", …)` / `setMethod("name",
+  signature("Class"), …)` 登记为方法并以签名类为 `parent`，
+  `setRefClass("Name", …)` 与 `setClass`/`R6Class` 一样登记为类。方法即使
+  泛型被导出也保持 `exported: false`，与 R 的导出粒度一致。
+  `INDEX_PARSER_VERSION` 提升到 4，旧索引会重新解析 R 文件。
+- **测试**：592 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖泛型/方法种类与
+  parent（字符串与 `signature()` 两种签名）、`setRefClass` 类、
+  NAMESPACE 驱动的导出与方法不导出。
+
 ## [0.196.0] - 2026-11-28
 
 - **Julia 支持（第 22 种语言）**：`.jl` 提取 `module`/`baremodule`、

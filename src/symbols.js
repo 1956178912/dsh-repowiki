@@ -2357,7 +2357,9 @@ function extractR(lines) {
   const codeLines = rCodeLines(lines)
   const symbols = []
   const fnRe = /^([A-Za-z_.][\w.]*)\s*(?:<<-|<-|=)\s*function\s*\(/
-  const classRe = /(?:setClass|R6Class)\s*\(\s*["']([A-Za-z_.][\w.]*)["']/
+  const classRe = /(?:setClass|setRefClass|R6Class)\s*\(\s*["']([A-Za-z_.][\w.]*)["']/
+  const genericRe = /setGeneric\s*\(\s*["']([A-Za-z_.][\w.]*)["']/
+  const s4MethodRe = /setMethod\s*\(\s*["']([A-Za-z_.][\w.]*)["']\s*,\s*(?:signature\s*\(\s*|c\s*\(\s*)?["']([A-Za-z_.][\w.]*)["']/
   const methodRe = /^([A-Za-z_.][\w.]*)\s*=\s*function\s*\(/
   /** @type {Array<{name:string, end:number}>} 类调用范围 */
   const classRanges = []
@@ -2418,6 +2420,31 @@ function extractR(lines) {
           exported: !cls[1].startsWith('.'),
         })
         classRanges.push({ name: cls[1], end })
+        depth += rBraceDelta(codeLines[i])
+        continue
+      }
+      const generic = genericRe.exec(lines[i])
+      if (generic) {
+        symbols.push({
+          name: generic[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: rParenEnd(codeLines, i),
+          exported: !generic[1].startsWith('.'),
+        })
+        depth += rBraceDelta(codeLines[i])
+        continue
+      }
+      const s4Method = s4MethodRe.exec(lines[i])
+      if (s4Method) {
+        symbols.push({
+          name: s4Method[1],
+          kind: 'method',
+          line: i + 1,
+          endLine: rParenEnd(codeLines, i),
+          exported: false,
+          parent: s4Method[2],
+        })
         depth += rBraceDelta(codeLines[i])
         continue
       }
