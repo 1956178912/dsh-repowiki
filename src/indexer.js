@@ -114,7 +114,31 @@ function normalizeRel(baseDir, rel) {
 }
 
 /**
+ * 按文件名字节序比较（不依赖 ICU/区域设置，跨后端与机器可复现）。
+ * @param {{name:string}} a - 目录条目。
+ * @param {{name:string}} b - 目录条目。
+ * @returns {number} 比较结果。
+ */
+function compareEntryName(a, b) {
+  if (a.name === b.name) return 0
+  return a.name < b.name ? -1 : 1
+}
+
+/**
+ * 按路径字节序比较（索引输出与预算截断的可复现顺序）。
+ * @param {{path:string}} a - 文件条目。
+ * @param {{path:string}} b - 文件条目。
+ * @returns {number} 比较结果。
+ */
+function comparePath(a, b) {
+  if (a.path === b.path) return 0
+  return a.path < b.path ? -1 : 1
+}
+
+/**
  * 递归遍历项目目录，收集源码文件与清单文件。
+ * 目录条目按名称排序后遍历：`listDir` 的返回顺序由后端/文件系统决定，
+ * 未排序会让超过 maxFiles 的仓库截断到不同文件、index.json 顺序漂移。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} rootAbs - 项目根绝对路径（相对路径换算的唯一锚点）。
  * @param {string} dirPath - 当前遍历目录的绝对路径。
@@ -141,6 +165,8 @@ async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles,
   } catch {
     return // 不可读目录安静跳过（权限/IO 问题不阻断整体索引）
   }
+  // 后端返回顺序不保证稳定：排序后再遍历，预算截断与产物顺序才可复现
+  entries = [...entries].sort(compareEntryName)
   // 嵌套忽略：只在该目录确实包含规则文件时读取（不额外 stat），
   // 更深目录的规则后置，天然获得更高优先级。
   let rules = ignoreRules
@@ -1550,6 +1576,9 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     else if (result.kind === 'added') added++
   }
 
+  // 产物按路径排序：与遍历/后端顺序解耦，index.json 的 Git diff 稳定
+  files.sort(comparePath)
+
   // 清单文件读取与技术栈识别
   const manifestTexts = {}
   let jsConfigsRead = 0
@@ -1643,6 +1672,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       }
     }
   }
+
+  // 边按 from/行号/to 排序：同一文件内保持源码顺序，跨文件可复现
+  edges.sort((a, b) => (a.from === b.from ? 0 : a.from < b.from ? -1 : 1)
+    || (a.line ?? 0) - (b.line ?? 0)
+    || (a.to === b.to ? 0 : a.to < b.to ? -1 : 1))
 
   // 语言分布（面板与状态工具用；键排序保证 Git diff 稳定）
   const languageCounts = {}

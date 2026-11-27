@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.170.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.171.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.170.0）；测试 544/544（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.03%、分支 86.51%、函数 95.38%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.171.0）；测试 545/545（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.08%、分支 86.76%、函数 95.40%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（544/544，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（545/545，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -114,6 +114,7 @@
 | 并发写串行化 | 六个写工具按资产根进程内 FIFO 排队；原语与工具接线各有回归（ADR-0005） | v0.43.0 |
 | 安全与正确性基线 | 面板链接协议白名单、端到端 `AbortSignal` 取消、写后回读校验、索引 schema v3（兼容 v2）、记忆哈希后缀防覆盖；锁范围收窄（ADR-0005 修订） | v0.44.0 |
 | 不可信资产路径 | 索引随 Git 传播 → `readIndex` 把 `files[].path` 当不可信输入：归一正斜杠/`.` 段，丢弃绝对、空与向上越界条目，并连带丢弃指向被弃文件的边；`untrusted` 输出有界计数与前 5 条原始路径，`repowiki-status` 转成告警；`projectRelativePath` 与快照导入共用，`readCardFor`/上下文/抽取/影响面只见到安全路径 | v0.170.0 |
+| 可复现索引产物 | 遍历前对每层目录条目按名称字节序排序（不依赖 ICU），超预算截断在任意机器命中同一批文件；产物 `files` 按路径、`edges` 按来源/行号/目标排序，后端 `listDir` 顺序不同也生成同一 `index.json` | v0.171.0 |
 | 产品与体验 | `.gitignore` 子集、零依赖 BM25 检索、模块级 Wiki + 清单、陈旧/孤儿检测、`repowiki-status`、面板分页/排序/标签/Wiki 搜索/可访问性 | v0.45.0 |
 | 工程门禁与发布 | TypeScript `checkJs`（渐进）、ESLint、3 OS CI 矩阵、覆盖率/密钥/依赖/CodeQL 门禁、SBOM、发布脚本、runbook/兼容矩阵/基准文档（ADR-0007） | v0.46.0 |
 | 语言与生态扩展 | Go/Rust/Java 符号与本地依赖边（go.mod / Rust 模块约定 / Java 包后缀）、Maven/Gradle 技术栈、Git 溯源（只读 `.git/HEAD`）、语言分布、多 locale 抽取/生成、索引 schema v4（兼容 v2/v3）、记忆重写标题重复修复 | v0.47.0 |

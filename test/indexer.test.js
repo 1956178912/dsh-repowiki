@@ -1084,3 +1084,30 @@ test('C/C++：#include 相对目录与 include/src 根解析，系统头不建�
   const header = doc.files.find(f => f.path === 'src/util/helpers.h')
   assert.ok(header.symbols.some(s => s.name === 'helper' && s.kind === 'function'), '头文件原型计入符号')
 })
+
+test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
+  const dir = makeProject({
+    'c/x.js': 'export function x() {}\n',
+    'b/index.ts': "import { a } from '../a/z'\nimport { y } from '../a/y'\n",
+    'a/z.ts': 'export const a = 1\n',
+    'a/y.ts': 'export const y = 2\n',
+  })
+  const base = makeFakeFs(dir)
+  const reversed = {
+    ...base,
+    async listDir(target) {
+      const entries = await base.listDir(target)
+      return entries.reverse()
+    },
+  }
+  const normal = await buildIndex(base, dir)
+  const shuffled = await buildIndex(reversed, dir)
+  assert.deepEqual(normal.files.map(f => f.path), ['a/y.ts', 'a/z.ts', 'b/index.ts', 'c/x.js'], '文件按路径排序')
+  assert.deepEqual(shuffled.files.map(f => f.path), normal.files.map(f => f.path), '枚举顺序不影响文件列表')
+  assert.deepEqual(shuffled.edges, normal.edges, '边按 from/行号/to 排序')
+  assert.deepEqual(normal.edges.map(e => [e.from, e.line, e.to]), [
+    ['b/index.ts', 1, 'a/z.ts'],
+    ['b/index.ts', 2, 'a/y.ts'],
+  ])
+  assert.deepEqual(shuffled.modules, normal.modules, '模块树不受枚举顺序影响')
+})

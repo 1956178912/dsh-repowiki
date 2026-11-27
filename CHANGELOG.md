@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.171.0] - 2026-11-28
+
+### Fixed
+
+- **Reproducible index output**: `readIndex`-style consumers receive the same
+  JSON regardless of the backend's directory listing order. `walk` now sorts
+  every directory's entries by name (code-unit order, no ICU dependence), so
+  the 5,000-file budget truncates at the same files on every machine, and the
+  finished index sorts `files` by path and `edges` by source/line/target.
+  Previously a backend that returned entries in a different order produced a
+  different `index.json` (churn for a Git-shared asset) and could index a
+  different subset of an over-budget repository.
+
+### Tests
+
+- 545 cases pass (LANG=en and LANG=zh); a new fixture builds the same project
+  through a reversed `listDir` wrapper and asserts identical `files`, `edges`
+  and `modules`, plus the path/line ordering itself.
+
 ## [0.170.0] - 2026-11-28
 
 ### Security
