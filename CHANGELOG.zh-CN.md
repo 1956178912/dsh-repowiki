@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.35.0] - 2026-11-27
+
+- **修复面板页面无法滑动**（用户反馈"知识库页面无法滑动，导致信息无法
+  看见"）：页面根原为普通带 padding 的 div，而宿主 mainPanel 是
+  `overflow:hidden` 的 flex 列——页面须自管滚动（从官方 AppFrame CSS 与
+  PluginManagerPage 参照页实证：两者用 `height:100%` + `overflow-y:auto`，
+  "头部与内容共用一个滚动器"）。页面根现带 `height:100%; box-sizing:
+  border-box; overflow-y:auto; overflow-x:hidden`，整个面板可滚动。
+  回归断言锁住根元素的滚动声明。
+
 ## [0.34.1] - 2026-11-27
 
 - 修复 react-parity 导入 verify 脚本的进程退出副作用：CI 无 asar 时

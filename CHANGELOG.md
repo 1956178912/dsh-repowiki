@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.35.0] - 2026-11-27
+
+### Fixed
+
+- **The panel page could not scroll** (user report: "知识库页面无法滑动，
+  导致信息无法看见"): the page root was a plain padded `div` while the
+  host's `mainPanel` is a flex column with `overflow: hidden` — pages are
+  expected to manage their own scrolling (verified from the shipped
+  `dsh-client-ui-layout` AppFrame CSS, and from the reference
+  `PluginManagerPage.module.css`, which uses `height: 100%` +
+  `overflow-y: auto` with "the main header and content share one scroller").
+  The page root now carries `height: 100%; box-sizing: border-box;
+  overflow-y: auto; overflow-x: hidden`, so the whole panel scrolls.
+  Regression asserts the scroll declarations on the rendered root.
+
 ## [0.34.1] - 2026-11-27
 
 ### Fixed

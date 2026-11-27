@@ -27,6 +27,14 @@ test('DOM 集成：真实 React 渲染 + 真实 change 事件装载语料', asyn
   assert.ok(text.includes('statFiles'), 'DOM 中应渲染文件统计')
   assert.ok(text.includes('statCards'), 'DOM 中应渲染卡片统计')
   assert.ok(cardTilesOf(container).length > 0, 'DOM 中应渲染卡片瓦片按钮')
+  // 页面根须自管滚动（宿主 mainPanel 为 overflow:hidden 的 flex 列；
+  // 缺此声明内容超出即被裁掉、无法滑动——用户反馈的“无法滑动”根因）
+  const root = container.querySelector('[aria-label="title"]')
+  assert.ok(root, '应渲染带 aria-label 的页面根')
+  const st = root.style
+  assert.equal(st.height, '100%', '页面根应 height:100%')
+  assert.equal(st.overflowY, 'auto', '页面根应 overflow-y:auto')
+  assert.equal(st.overflowX, 'hidden', '页面根应 overflow-x:hidden')
 })
 
 test('DOM 集成：真实 click 事件打开卡片详情（用户动作的端到端复现）', async () => {
