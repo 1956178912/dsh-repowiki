@@ -159,6 +159,7 @@ const DICTS = {
     wikiMissingSummary: '清单中 {n} 页在磁盘缺失',
     wikiMissingHint: '缺失页：{pages}',
     wikiStaleCards: 'Wiki 落后于当前卡片：生成后卡片已变化，请重新生成',
+    wikiStaleMemory: 'Wiki 落后于已采信记忆：生成后记忆已变化，请重新生成',
     wikiOnlyUntracked: '仅看未覆盖（{n}）',
     wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
@@ -278,6 +279,7 @@ const DICTS = {
     wikiMissingSummary: '{n} manifest page(s) missing from disk',
     wikiMissingHint: 'Missing pages: {pages}',
     wikiStaleCards: 'Wiki is behind the current cards: cards changed after generation, run repowiki-generate',
+    wikiStaleMemory: 'Wiki is behind the accepted memory: memory changed after generation, run repowiki-generate',
     wikiOnlyUntracked: 'Only untracked ({n})',
     wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
@@ -1435,6 +1437,19 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 计算已采信记忆集合的指纹（与 repowiki-generate 的 memoryDigest 同口径）。
+     * @param {object[]} memories - 面板已加载记忆（slug/status/body）。
+     * @returns {Promise<string>} sha256-16；Web Crypto 不可用时为空串。
+     */
+    async function memoriesInputDigest(memories) {
+      const entries = memories
+        .filter(memory => memory?.status === 'accepted')
+        .map(memory => `${memory.slug ?? ''}:${memory.body ?? ''}`)
+        .sort()
+      return digestHex(entries.join('\n'))
+    }
+
+    /**
      * 汇总清单级诊断：上次生成失败页与磁盘缺失页（面板不读源码）。
      * @param {object[]} entries - 已加载的页面（file 为相对资产根路径）。
      * @param {object|null} manifest - wiki/<locale>/_index.json。
@@ -1498,6 +1513,8 @@ window.__ModuleLoader__.load({
             status: typeof parsed.meta.status === 'string' ? parsed.meta.status : 'pending',
             tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags : [],
             createdAt: typeof parsed.meta.createdAt === 'string' ? parsed.meta.createdAt : '',
+            // generate 的记忆指纹口径：去掉一级标题后 trim
+            body: parsed.body.replace(/^\s*#[^\n]*\n+/, '').trim(),
             text,
           }
         } catch {
@@ -1671,17 +1688,25 @@ window.__ModuleLoader__.load({
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
-          const cardDigest = await cardsInputDigest(loaded)
+          setLastExtract(knowledgeManifest?.lastRun && typeof knowledgeManifest.lastRun === 'object'
+            ? knowledgeManifest.lastRun
+            : null)
+          const memoryEntries = await loadMemoryEntries(wf, sessionId, localeName(t), signal)
+          if (signal.aborted || requestId !== latestRequest.current) return
+          const [cardDigest, memoryDigest] = await Promise.all([
+            cardsInputDigest(loaded),
+            memoriesInputDigest(memoryEntries),
+          ])
           setWikiMeta({
             ...wikiDiagnostics(wikiResult.entries, manifest),
             cardsStale: manifest && typeof manifest.inputDigest === 'string' && cardDigest
               ? cardDigest !== manifest.inputDigest
               : null,
+            memoryStale: manifest && typeof manifest.memoryDigest === 'string' && memoryDigest
+              ? memoryDigest !== manifest.memoryDigest
+              : null,
           })
-          setLastExtract(knowledgeManifest?.lastRun && typeof knowledgeManifest.lastRun === 'object'
-            ? knowledgeManifest.lastRun
-            : null)
-          setMemories(await loadMemoryEntries(wf, sessionId, localeName(t), signal))
+          setMemories(memoryEntries)
           setStatus('ready')
         } catch (err) {
           if (signal.aborted || requestId !== latestRequest.current) return
@@ -2982,6 +3007,10 @@ window.__ModuleLoader__.load({
           role: 'status',
           style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
         }, t('wikiStaleCards')),
+        meta && meta.memoryStale === true && h('p', {
+          role: 'status',
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, t('wikiStaleMemory')),
         meta && meta.failedTotal > 0 && h('p', {
           role: 'status',
           title: meta.failedPages.length > 0

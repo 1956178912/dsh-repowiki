@@ -215,9 +215,14 @@ test('DOM 集成：总览行真实点击下钻到单库视图（多工作区）'
   assert.ok(row, '应渲染总览行按钮')
   await act(async () => {
     row.click()
-    await new Promise((r) => setTimeout(r, 150))
   })
-  const singleText = container.textContent
+  // 条件等待单库统计渲染（最多 1s），避免固定 sleep 的时序脆弱
+  let singleText = ''
+  for (let i = 0; i < 50; i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
+    singleText = container.textContent
+    if (singleText.includes('statFiles')) break
+  }
   assert.ok(singleText.includes('statFiles'), '下钻后应渲染单库统计')
   const stillOverview = [...container.querySelectorAll('button[aria-label]')]
     .some((b) => b.getAttribute('aria-label').includes('有库工作区'))

@@ -1109,6 +1109,33 @@ test('Wiki 页签：卡片变化导致 Wiki 落后提示', async () => {
   assert.ok(texts.includes('wikiStaleCards'), '卡片集合指纹与清单不一致时提示 Wiki 落后')
 })
 
+test('Wiki 页签：已采信记忆变化导致 Wiki 落后提示', async () => {
+  const manifest = JSON.stringify({
+    schemaVersion: 3,
+    inputDigest: '',
+    memoryDigest: 'deadbeefdeadbeef',
+    pages: [
+      {
+        slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
+        sources: [], sections: [],
+      },
+      {
+        slug: 'core', path: 'wiki/zh/core.md', title: '核心模块', order: 1,
+        sources: [], sections: [],
+      },
+    ],
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/_index.json': manifest })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('wikiStaleMemory'), '记忆指纹与清单不一致时提示 Wiki 落后')
+})
+
 test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
   const legacy = JSON.stringify({
     schemaVersion: 2,

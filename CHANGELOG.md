@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.149.0] - 2026-11-27
+
+### Added
+
+- **Panel stale-memory notice**: the Wiki tab now also recomputes the accepted
+  memory `memoryDigest` (same `slug:body` ordering as generate, body stripped
+  of its heading) and warns when it differs from the manifest. Together with
+  the card digest this makes the panel's staleness view match `verify:wiki`.
+  Missing Web Crypto still degrades to silence.
+
+### Tests
+
+- 513 cases pass (LANG=en and LANG=zh); a panel case mounts a manifest with a
+  wrong `memoryDigest` and asserts the memory-stale notice.
+
 ## [0.148.0] - 2026-11-27
 
 ### Added
