@@ -2681,6 +2681,22 @@ function resolveRustMod(dir, name, indexed) {
 }
 
 /**
+ * 解析 Rust `#[path = "…"] mod foo;` 的显式模块文件路径。
+ * 属性路径相对引用方文件所在目录；越出项目根的路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 属性中声明的路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；越界或未索引返回 null。
+ */
+function resolveRustModPath(fromRel, specifier, indexed) {
+  const normalizedSpec = String(specifier).replace(/\\/g, '/')
+  if (path.posix.isAbsolute(normalizedSpec)) return null
+  const candidate = path.posix.normalize(path.posix.join(path.posix.dirname(fromRel), normalizedSpec))
+  if (candidate === '..' || candidate.startsWith('../')) return null
+  return indexed.has(candidate) ? candidate : null
+}
+
+/**
  * 从某个基准目录按 use 路径逐段回退，尝试 `a/b.rs` 与 `a/b/mod.rs`。
  * @param {string} baseDir - 基准目录。
  * @param {string[]} segments - use 路径段（不含 crate/self/super）。
@@ -2921,6 +2937,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'go') return resolveGoSpecifier(imp.specifier, ctx.goModules, ctx.goDirs)
   if (lang === 'rust') {
     if (imp.kind === 'mod') return resolveRustMod(rustModuleDir(fromRel), imp.specifier, ctx.indexed)
+    if (imp.kind === 'mod-path') return resolveRustModPath(fromRel, imp.specifier, ctx.indexed)
     return imp.relative ? resolveRustUse(fromRel, imp.specifier, ctx.indexed, ctx.rustRoots, ctx.rustCrates, ctx.rustRootExports) : null
   }
   if (lang === 'csharp') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.csharp)

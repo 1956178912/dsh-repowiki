@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.274.0] - 2026-11-28
+
+### Fixed
+
+- **Rust `#[path = "…"] mod foo;`**: explicit module file paths (inline with
+  `mod` or on a preceding attribute line, mixed with `#[cfg]`/other
+  attributes) are now resolved relative to the declaring file. They produce a
+  distinct `mod-path` edge instead of guessing `foo.rs`/`foo/mod.rs`, and
+  paths escaping the project root build no edge. A pending `#[path]` expires
+  as soon as another code line appears.
+- **Lua long-bracket `require`**: `require([[pkg.mod]])` and
+  `require([=[pkg.mod]=])` (with or without parentheses) now resolve like
+  quoted requires; long-bracket contents are trimmed and empty specs are
+  skipped.
+- Parser v27 re-parses cached imports.
+
+### Tests
+
+- 833 cases pass (LANG=en); new Rust attribute-path extraction/index
+  assertions and Lua long-bracket extraction cases.
+
 ## [0.273.0] - 2026-11-28
 
 ### Fixed

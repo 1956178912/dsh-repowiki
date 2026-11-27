@@ -267,6 +267,28 @@ test('Rust：self/super 相对模块、无 crate 根降级', async () => {
   assert.equal(doc.edges.filter(e => e.from === 'standalone.rs').length, 0, 'crate 根之外与未知本地路径不建边')
 })
 
+test('Rust：#[path] 显式模块路径解析到目标文件', async () => {
+  const dir = makeProject({
+    'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\n',
+    'src/main.rs': [
+      '#[path = "generated/api.rs"]',
+      'mod api;',
+      'fn main() {}',
+    ].join('\n'),
+    'src/generated/api.rs': 'pub fn call() {}\n',
+    'src/escape.rs': '#[path = "../../outside.rs"] mod outside;\n',
+    'src/absolute.rs': '#[path = "/tmp/outside.rs"] mod outside;\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edge = doc.edges.find(e => e.from === 'src/main.rs' && e.to === 'src/generated/api.rs')
+  assert.equal(edge?.kind, 'mod-path', '显式路径记为 mod-path')
+  assert.equal(edge?.line, 2, '行号取 mod 语句行')
+  assert.ok(!doc.edges.some(e => e.from === 'src/main.rs' && e.to.includes('api/mod.rs')),
+    '有显式路径时不按模块名猜测')
+  assert.ok(!doc.edges.some(e => e.from === 'src/escape.rs'), '越出项目根的路径不建边')
+  assert.ok(!doc.edges.some(e => e.from === 'src/absolute.rs'), '绝对路径不建边')
+})
+
 test('Rust：crate 入口再导出回退只对已导出名生效', async () => {
   const dir = makeProject({
     'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\n',

@@ -189,6 +189,13 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
     'use crate::parser::{self, Token};',
     'use crate::lexer::{self as lex};',
     'use serde::Serialize;',
+    '#[path = "generated/api.rs"] mod api;',
+    '#[cfg(test)]',
+    '#[path = "tests/custom.rs"]',
+    'mod custom_tests;',
+    '#[path = "expired.rs"]',
+    'fn helper() {}',
+    'mod later;',
     '// use not::real;',
   ].join('\n')
   const refs = extractImports(code, 'rust')
@@ -213,6 +220,13 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   assert.deepEqual(bySpec.get('crate::lexer').imported, ['lexer'], '{self as lex} 导入别名')
   assert.deepEqual(bySpec.get('crate::lexer').aliases, [{ from: 'lexer', to: 'lex' }],
     '{self as lex} 记录原名→本地名')
+  // `#[path]` 显式模块路径（同行或属性行）
+  assert.equal(bySpec.get('generated/api.rs').kind, 'mod-path')
+  assert.equal(bySpec.get('generated/api.rs').line, 10)
+  assert.equal(bySpec.get('tests/custom.rs').kind, 'mod-path')
+  assert.ok(!bySpec.has('custom_tests'), '有显式路径时不按模块名建边')
+  assert.equal(bySpec.get('later').kind, 'mod', '路径属性被其他代码行打断后过期')
+  assert.ok(!bySpec.has('expired.rs'), '过期的路径属性不建边')
 })
 
 test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
@@ -528,6 +542,9 @@ test('Lua：require 字符串与括号形式，注释不提取', () => {
     'local a = require("my.mod")',
     "local b = require 'single'",
     'local c = require("init")',
+    'local d = require([[pkg.long]])',
+    'local e = require([=[pkg.eq]=])',
+    'local f = require [[pkg.space]]',
     '-- require("commented")',
     '--[[ require("block.commented") ]]',
     'return { a, b, c }',
@@ -537,6 +554,9 @@ test('Lua：require 字符串与括号形式，注释不提取', () => {
     ['my.mod', 1],
     ['single', 2],
     ['init', 3],
+    ['pkg.long', 4],
+    ['pkg.eq', 5],
+    ['pkg.space', 6],
   ])
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
 })

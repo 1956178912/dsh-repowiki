@@ -71,8 +71,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v23：PHP 分组 use 内的 function/const 修饰词剥离后登记。
  *  v24：Groovy 静态/普通通配与 `as` 别名（不再把 `*` 截断成包名）。
  *  v25：C# `using static` 记 `*` 潜在引用，剥离 `global::` 限定符。
- *  v26：Dart `part 'x.dart'` 记为独立边形态 `kind: 'part'`（库合并）。 */
-export const INDEX_PARSER_VERSION = 26
+ *  v26：Dart `part 'x.dart'` 记为独立边形态 `kind: 'part'`（库合并）。
+ *  v27：Rust `#[path = "…"] mod foo;` 记为 `mod-path`，Lua 长括号 require。 */
+export const INDEX_PARSER_VERSION = 27
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

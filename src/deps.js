@@ -19,9 +19,10 @@ import {
  * @typedef {Object} ImportInfo
  * @property {string} specifier - 源码中的原始模块说明符（如 './foo'、'react'、'.pkg.mod'）。
  * @property {number} line - 语句所在行（1-based）。
- * @property {'import'|'export-from'|'require'|'mod'|'reexport'|'part'} kind - 引用形态
- *   （`mod` 仅 Rust：`mod foo;` 模块声明；`reexport` 仅 Rust `pub use`；
- *   `part` 仅 Dart：`part 'x.dart';` 把 part 文件并入当前库）。
+ * @property {'import'|'export-from'|'require'|'mod'|'mod-path'|'reexport'|'part'} kind - 引用形态
+ *   （`mod` 仅 Rust：`mod foo;` 模块声明；`mod-path` 仅 Rust：`#[path = "…"] mod foo;`
+ *   显式文件路径；`reexport` 仅 Rust `pub use`；`part` 仅 Dart：`part 'x.dart';`
+ *   把 part 文件并入当前库）。
  * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
  *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
@@ -380,23 +381,44 @@ function expandRustUse(prefix, body) {
  */
 function extractRustImports(lines) {
   const result = []
+  // `#[path = "…"]` 只作用于紧随其后的 `mod`；其他代码行出现即过期
+  let pendingModPath = ''
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim()
     if (trimmed === '' || trimmed.startsWith('//')) continue
-    // mod foo; / pub mod foo;
-    const mm = /^(?:pub(?:\([^)]*\))?\s+)?mod\s+(?<name>[A-Za-z_]\w*)\s*;/.exec(trimmed)
-    if (mm) {
-      result.push({
-        specifier: mm.groups.name,
-        line: i + 1,
-        kind: 'mod',
-        relative: true,
-        imported: [],
-      })
+    // 属性前缀：`#[path = "x.rs"]` 可单独成行，也可与 `mod` 同行
+    const pathAttr = /#\[\s*path\s*=\s*"(?<path>[^"]+)"\s*\]/.exec(trimmed)
+    if (pathAttr && /^(?:#\[[^\]]*\]\s*)+$/.test(trimmed)) {
+      pendingModPath = pathAttr.groups.path
       continue
     }
+    const code = trimmed.replace(/#\[[^\]]*\]\s*/g, '')
+    if (code === '') continue // 其他纯属性行（cfg/allow/…）
+    // mod foo; / pub mod foo;（含 `#[path]` 显式路径形态）
+    const mm = /^(?:pub(?:\([^)]*\))?\s+)?mod\s+(?<name>[A-Za-z_]\w*)\s*;/.exec(code)
+    if (mm) {
+      const declaredPath = pathAttr?.groups.path ?? pendingModPath
+      pendingModPath = ''
+      result.push(declaredPath
+        ? {
+            specifier: declaredPath,
+            line: i + 1,
+            kind: 'mod-path',
+            relative: true,
+            imported: [],
+          }
+        : {
+            specifier: mm.groups.name,
+            line: i + 1,
+            kind: 'mod',
+            relative: true,
+            imported: [],
+          })
+      continue
+    }
+    pendingModPath = ''
     // use path::to::Item; / pub use path::{A, B};
-    const um = /^(?<pub>pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(trimmed)
+    const um = /^(?<pub>pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(code)
     if (!um) continue
     // `pub use` 是显式再导出（引用/使用点/影响面可沿链归到定义文件）
     const kind = um.groups.pub ? 'reexport' : 'import'
@@ -833,11 +855,14 @@ function extractLuaImports(lines) {
   const result = []
   const codeLines = stripLuaComments(lines)
   for (let i = 0; i < codeLines.length; i++) {
-    const re = /require\s*\(?\s*(['"])([^'"]+)\1/g
+    // 引号字符串与长括号字符串（`[[x]]`/`[=[x]=]`，单行形态）
+    const re = /require\s*\(?\s*(?:(['"])([^'"]+)\1|\[(=*)\[([^\]\n]+)\]\3\])/g
     let match
     while ((match = re.exec(codeLines[i])) !== null) {
+      const specifier = (match[2] ?? match[4] ?? '').trim()
+      if (!specifier) continue
       result.push({
-        specifier: match[2],
+        specifier,
         line: i + 1,
         kind: 'import',
         relative: false,
