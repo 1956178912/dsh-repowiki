@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.244.0] - 2026-11-28
+
+### Added
+
+- **Podspec metadata**: root and nested `*.podspec` files (bounded at 20) now
+  contribute `s.name`/`s.version` project metadata, `dependencyCounts.cocoapods`
+  and the verified iOS technology map. Dependencies declared with
+  `s.dependency` and inside `subspec` blocks (`sp.dependency`) are both
+  counted, optional version constraints are kept on the technology entry, and
+  commented declarations are ignored.
+
+### Tests
+
+- 770 cases pass (LANG=en and LANG=zh); new coverage for podspec name/version/
+  dependencies (including subspecs and commented lines) and root + nested
+  podspec aggregation through the indexer.
+
 ## [0.243.0] - 2026-11-28
 
 ### Added

@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.244.0] - 2026-11-28
+
+- **podspec 元数据**：根与嵌套 `*.podspec`（上限 20）现在提供
+  `s.name`/`s.version` 项目元数据、`dependencyCounts.cocoapods` 与已核对的
+  iOS 技术映射。`s.dependency` 与 subspec 内的 `sp.dependency` 都计入，
+  可选版本约束保留在技术条目上，注释掉的声明忽略。
+- **测试**：770 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 podspec 名称/
+  版本/依赖（含 subspec 与注释行）以及索引器对根/嵌套 podspec 的聚合。
+
 ## [0.243.0] - 2026-11-28
 
 - **通配引用证据**：`import * as ns from './a'` 与 `export * from './a'`

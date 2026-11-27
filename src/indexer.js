@@ -152,6 +152,12 @@ const MAX_PODFILE_MANIFESTS = 20
 const MAX_CARTFILE_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的 `*.podspec` 数（CocoaPods 库仓库与多 subspec 工程）。
+ * 根清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_PODSPEC_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -174,6 +180,7 @@ function isConfigManifest(rel, name) {
     || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
     || name.endsWith('.nimble') || name.endsWith('.opam') || name.endsWith('.cabal')
     || name === 'Cargo.toml' || name === 'Podfile' || name === 'Cartfile' || name === 'Cartfile.private'
+    || name.endsWith('.podspec')
 }
 
 /**
@@ -2958,6 +2965,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let duneProjectsRead = 0
   let podfileManifestsRead = 0
   let cartfileManifestsRead = 0
+  let podspecManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -3036,6 +3044,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedCartfile) {
       if (cartfileManifestsRead >= MAX_CARTFILE_MANIFESTS) continue
       cartfileManifestsRead++
+    }
+    const nestedPodspec = !MANIFEST_FILES[rel] && baseName.endsWith('.podspec')
+    if (nestedPodspec) {
+      if (podspecManifestsRead >= MAX_PODSPEC_MANIFESTS) continue
+      podspecManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }

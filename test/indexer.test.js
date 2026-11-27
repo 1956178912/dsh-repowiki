@@ -2086,3 +2086,28 @@ test('Podfile/Cartfile：根与嵌套清单计入 cocoapods/carthage 技术栈',
   assert.ok(techs.includes('cocoapods:SnapKit'))
   assert.ok(techs.includes('carthage:Alamofire'))
 })
+
+test('podspec：根与嵌套清单聚合到 cocoapods 技术栈', async () => {
+  const dir = makeProject({
+    'DemoPod.podspec': [
+      'Pod::Spec.new do |s|',
+      "  s.name = 'DemoPod'",
+      "  s.version = '1.2.3'",
+      "  s.dependency 'SnapKit', '~> 5.0'",
+      'end',
+    ].join('\n'),
+    'Sub/SubPod.podspec': [
+      'Pod::Spec.new do |s|',
+      "  s.dependency 'Firebase/Core'",
+      'end',
+    ].join('\n'),
+    'Demo.swift': 'struct Demo {}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.equal(doc.stack.projectName, 'DemoPod')
+  assert.equal(doc.stack.projectVersion, '1.2.3')
+  assert.equal(doc.stack.dependencyCounts.cocoapods, 2, '根 1 + 嵌套 1')
+  const techs = doc.stack.technologies.map(t => `${t.ecosystem}:${t.name}`)
+  assert.ok(techs.includes('cocoapods:SnapKit'))
+  assert.ok(techs.includes('cocoapods:Firebase'))
+})

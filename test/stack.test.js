@@ -547,3 +547,28 @@ test('Cartfile：github/git/binary 依赖计数与仓库名识别', () => {
   assert.ok(names.includes('SnapKit'))
   assert.equal(info.technologies.find(t => t.name === 'Alamofire').version, '5.8')
 })
+
+test('podspec：名称/版本/依赖与 subspec 依赖识别', () => {
+  const podspec = [
+    'Pod::Spec.new do |s|',
+    "  s.name = 'DemoPod'",
+    "  s.version = '1.2.3'",
+    "  s.dependency 'SnapKit', '~> 5.0'",
+    "  s.dependency 'Firebase/Core', '~> 10.0'",
+    "  # s.dependency 'NotCounted'",
+    "  s.subspec 'Extras' do |sp|",
+    "    sp.dependency 'ReactiveCocoa'",
+    '  end',
+    'end',
+  ].join('\n')
+  const info = detectStack({ 'DemoPod.podspec': podspec })
+  assert.equal(info.projectName, 'DemoPod')
+  assert.equal(info.projectVersion, '1.2.3')
+  assert.equal(info.dependencyCounts.cocoapods, 3)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('SnapKit'))
+  assert.ok(names.includes('Firebase'), '子规格按首段归一')
+  assert.ok(names.includes('ReactiveCocoa'), 'subspec 的 sp.dependency 也计入')
+  assert.equal(names.includes('NotCounted'), false)
+  assert.equal(info.technologies.find(t => t.name === 'SnapKit').version, '~> 5.0')
+})

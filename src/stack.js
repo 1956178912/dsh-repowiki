@@ -538,6 +538,31 @@ function iosTechName(name) {
 }
 
 /**
+ * 从 `*.podspec`（Ruby DSL）提取名称、版本与依赖。
+ * 依赖覆盖 `s.dependency` 与 subspec 的 `sp.dependency`；注释行跳过，
+ * 可选版本约束取声明后的第一个字符串。
+ * @param {string} text - podspec 内容。
+ * @returns {{name?:string, version?:string, dependencies:Array<{name:string, version?:string}>}}
+ *   元数据与依赖。
+ */
+function podspecInfo(text) {
+  const cleaned = text.split('\n').map(line => line.replace(/#.*$/, '')).join('\n')
+  const name = /^\s*\w+\.name\s*=\s*['"]([^'"]+)['"]/m.exec(cleaned)?.[1]
+  const version = /^\s*\w+\.version\s*=\s*['"]([^'"]+)['"]/m.exec(cleaned)?.[1]
+  /** @type {Array<{name:string, version?:string}>} */
+  const dependencies = []
+  for (const m of cleaned.matchAll(/\.dependency\s+['"]([^'"]+)['"](?:\s*,\s*['"]([^'"]+)['"])?/g)) {
+    const dep = { name: m[1], ...(m[2] ? { version: m[2] } : {}) }
+    if (!dependencies.some(item => item.name === dep.name)) dependencies.push(dep)
+  }
+  return {
+    ...(name ? { name } : {}),
+    ...(version ? { version } : {}),
+    dependencies,
+  }
+}
+
+/**
  * 从 pubspec.yaml 提取依赖名（dependencies + dev_dependencies 的顶层键）。
  * @param {string} text - pubspec.yaml 内容。
  * @returns {string[]} 依赖名（去重、保持出现顺序）。
@@ -1277,6 +1302,22 @@ export function detectStack(manifests) {
       for (const dep of deps) {
         const name = SWIFT_TECH[dep.name]
         if (name) info.technologies.push({ name, ecosystem: 'swiftpm', source: path })
+      }
+    } else if (path.endsWith('.podspec')) {
+      const pod = podspecInfo(text)
+      info.dependencyCounts.cocoapods = (info.dependencyCounts.cocoapods ?? 0) + pod.dependencies.length
+      if (!info.projectName && pod.name) info.projectName = pod.name
+      if (!info.projectVersion && pod.version) info.projectVersion = pod.version
+      for (const dep of pod.dependencies) {
+        const name = iosTechName(dep.name)
+        if (name) {
+          info.technologies.push({
+            name,
+            ecosystem: 'cocoapods',
+            source: path,
+            ...(dep.version ? { version: dep.version } : {}),
+          })
+        }
       }
     } else if (path === 'Podfile' || path.endsWith('/Podfile')) {
       const deps = podfileDeps(text)
