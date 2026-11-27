@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.267.0] - 2026-11-28
+
+### Fixed
+
+- **PHP grouped function/const imports**: mixed group-use entries
+  (`use App\{function format, const VERSION, Clock as Time};`) used to skip
+  the `function`/`const` entries because the modifier was parsed as part of
+  the name. The modifier is now stripped before recording, so functions and
+  constants get symbol evidence and grouped `as` aliases keep working.
+  Parser v23 re-parses cached imports.
+
+### Tests
+
+- 817 cases pass (LANG=en); new grouped function/const extraction and alias
+  assertions.
+
 ## [0.266.0] - 2026-11-28
 
 ### Changed

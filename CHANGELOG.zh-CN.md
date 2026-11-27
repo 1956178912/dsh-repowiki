@@ -3,6 +3,14 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.267.0] - 2026-11-28
+
+- **PHP 分组 function/const 导入修复**：`use App\{function format, const
+  VERSION, Clock as Time};` 此前会把 `function`/`const` 当成名字的一部分
+  而跳过；现在先剥离修饰词再登记，函数与常量获得符号证据，组内 `as`
+  别名同样生效。解析器 v23 重新解析缓存导入。
+- **测试**：817 例通过（LANG=en）；新增分组 function/const 提取与别名断言。
+
 ## [0.266.0] - 2026-11-28
 
 - **Java 静态导入**：`import static a.b.C.member;` 此前指向完整成员路径

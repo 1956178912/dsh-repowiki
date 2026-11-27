@@ -582,7 +582,9 @@ function extractPhpImports(lines) {
    * @returns {void}
    */
   const push = (prefix, leaf, line) => {
-    const m = /^(?<name>[\\\w]+)\s*(?:as\s+(?<alias>\w+))?$/.exec(leaf.trim())
+    // 分组 use 内可混写 `function f` / `const C`，修饰词不是名字的一部分
+    const trimmed = leaf.trim().replace(/^(?:function|const)\s+/i, '')
+    const m = /^(?<name>[\\\w]+)\s*(?:as\s+(?<alias>\w+))?$/.exec(trimmed)
     if (!m) return
     const original = m.groups.name.replace(/^\\+/, '')
     if (!original) return

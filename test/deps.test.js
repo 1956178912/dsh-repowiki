@@ -324,6 +324,7 @@ test('PHP：use 分组/function/别名与 require 字面量', () => {
     '<?php',
     'use App\\Models\\User;',
     'use App\\Models\\{Post, Comment as C};',
+    'use App\\Mixed\\{function fx, const KC, Plain, function fy as fz};',
     'use function App\\Helpers\\format;',
     'use App\\Support\\Clock as Time;',
     "require_once __DIR__ . '/bootstrap.php';",
@@ -340,6 +341,11 @@ test('PHP：use 分组/function/别名与 require 字面量', () => {
   assert.deepEqual(bySpec.get('App.Models.Comment').imported, ['Comment'], '分组别名归到原名')
   assert.deepEqual(bySpec.get('App.Models.Comment').aliases, [{ from: 'Comment', to: 'C' }],
     '分组 as 别名进入 aliases')
+  assert.deepEqual(bySpec.get('App.Mixed.fx').imported, ['fx'], '分组 function 修饰词剥离')
+  assert.deepEqual(bySpec.get('App.Mixed.KC').imported, ['KC'], '分组 const 修饰词剥离')
+  assert.deepEqual(bySpec.get('App.Mixed.Plain').imported, ['Plain'])
+  assert.deepEqual(bySpec.get('App.Mixed.fy').aliases, [{ from: 'fy', to: 'fz' }],
+    '分组 function 别名进入 aliases')
   assert.deepEqual(bySpec.get('App.Support.Clock').imported, ['Clock'], 'use as 归到原名')
   assert.deepEqual(bySpec.get('App.Support.Clock').aliases, [{ from: 'Clock', to: 'Time' }],
     'use as 别名进入 aliases')

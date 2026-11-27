@@ -37,7 +37,7 @@
 | Java | class / interface / enum / record / 构造器 / 第一层方法 | 包后缀匹配（含通配符与 static 成员导入）；`import static a.b.C.member` 依赖边指向类文件、符号归成员名（解析器 v22），`import static a.b.C.*` 按 `*` 潜在引用，普通通配导入保持文件级 |
 | C# | class / interface / struct / record / enum / 第一层方法 / 构造器 | `using`（global/static/别名）经点分路径索引；`using Alias = A.B.C;` 记录原名与本地别名（解析器 v16），`using static` 不产生别名，泛型/元组别名不登记 |
 | Kotlin | class / data class / enum class / object / interface / fun / 构造器 | `import`（含 `.*` 与 `as`）经点分路径索引；`import a.b.C as D` 的引用归到 C，D 作为词法使用点扫描名（解析器 v16） |
-| PHP | class / interface / trait / enum / 方法 / 顶层函数 | `use`（分组/function/const/别名）大小写不敏感；`as` 别名记录原名→本地名（解析器 v17），引用归原名、词法使用点按本地名；根与嵌套 `composer.json` 的 `autoload`/`autoload-dev` `psr-4` 前缀映射优先（字符串/数组目录、空前缀兜底、最长前缀优先），未命中回退命名空间后缀；字面量 `require`/`include` |
+| PHP | class / interface / trait / enum / 方法 / 顶层函数 | `use`（分组/function/const/别名）大小写不敏感，分组内混写的 `function f`/`const C` 修饰词剥离后登记（解析器 v23）；`as` 别名记录原名→本地名（解析器 v17），引用归原名、词法使用点按本地名；根与嵌套 `composer.json` 的 `autoload`/`autoload-dev` `psr-4` 前缀映射优先（字符串/数组目录、空前缀兜底、最长前缀优先），未命中回退命名空间后缀；字面量 `require`/`include` |
 | Ruby | class / module / def（含 `self.` 与 `?!=` 后缀/表达式体）/ attr_* / 常量 | `require_relative` 与显式 `./` require 相对文件；裸 `require` 按任意层级 `lib/` 加载路径及项目根解析；gem require 不建边 |
 | Swift | class / struct / actor / enum / protocol / extension / func / init / typealias | `import` 按 `Package.swift` 的 target `path:`（支持多行声明与注释）解析到目标目录代表文件；未声明 path 时回退 `Sources/<Target>`（兼容旧版 `Source/<Target>`）；外部模块不建边 |
 | Scala | class / case class / trait / object / enum / def / given / extension 成员归属 | `import`（分组、`=>`/`as` 重命名、`._`/`.*` 通配）经点分路径后缀匹配；重命名保留原名归因并记录本地名（解析器 v17），`=> _`/`as _` 隐藏不登记；多行参数与跨行声明头（`{`/`=`/`:`）范围正确 |
