@@ -32,7 +32,7 @@
 | Svelte | 只解析 `<script context="module">` 与实例 `<script>` 块，符号规则同 JS/TS | 同上；标记与样式不产符号、不建边 |
 | Python | class / def / async def（含方法归属） | 相对 from-import；绝对 `import a.b` / `from a.b import c` 在项目根、pyproject 自定义根与 `src`/`lib` 布局根下解析，`from 包 import 名` 优先子模块 |
 | Go | func / 接收者方法 / struct / interface / 别名 / 导出常量变量 | 根与嵌套 `go.mod`（多模块仓库，单次上限 20）的 module 前缀 → 包目录代表文件；跨 `internal` 边界的导入以 `warnings` 报告（根 `internal/` 不受限） |
-| Rust | fn / impl 与 trait 方法 / struct / enum / trait / type / const | `mod`、`crate::`、`self::`、`super::`（crate 根 + 模块约定） |
+| Rust | fn / impl 与 trait 方法 / struct / enum / trait / type / const | `mod`、`crate::`、`self::`、`super::`（crate 根 + 模块约定）；`use other_crate::…` 经嵌套 `Cargo.toml` 的包名（`-`→`_`）与 `path` 依赖映射到 workspace crate 的 `src/` 子模块，回退 `lib.rs`/`main.rs` 入口；外部 crate 不建边 |
 | Java | class / interface / enum / record / 构造器 / 第一层方法 | 包后缀匹配（含通配符与 static 成员导入） |
 | C# | class / interface / struct / record / enum / 第一层方法 / 构造器 | `using`（global/static/别名）经点分路径索引 |
 | Kotlin | class / data class / enum class / object / interface / fun / 构造器 | `import`（含 `.*` 与 `as`）经点分路径索引 |

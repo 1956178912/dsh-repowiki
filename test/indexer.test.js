@@ -1549,6 +1549,24 @@ test('Haskell：模块路径解析、src/app 源根与 cabal 技术栈', async (
   assert.ok(core.symbols.some(s => s.name === 'run' && s.kind === 'function'))
 })
 
+test('Rust：workspace 跨 crate use 解析（包名 - → _ 与路径依赖）', async () => {
+  const dir = makeProject({
+    'Cargo.toml': '[workspace]\nmembers = ["crates/core", "crates/app"]\n',
+    'crates/core/Cargo.toml': '[package]\nname = "core-lib"\nversion = "0.1.0"\n',
+    'crates/core/src/lib.rs': 'pub mod helper;\n',
+    'crates/core/src/helper.rs': 'pub fn help() -> i32 { 1 }\n',
+    'crates/app/Cargo.toml': '[package]\nname = "app"\nversion = "0.1.0"\n\n[dependencies]\ncore-lib = { path = "../core" }\n',
+    'crates/app/src/main.rs': 'use core_lib::helper;\n\nfn main() {}\n',
+    'crates/app/src/ui.rs': 'use core_lib;\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { rust: 4 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('crates/app/src/main.rs', 'crates/core/src/helper.rs')?.line, 1, '跨 crate 子模块')
+  assert.equal(edge('crates/app/src/ui.rs', 'crates/core/src/lib.rs')?.line, 1, '无子模块回退 crate 入口')
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

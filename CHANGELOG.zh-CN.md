@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.205.0] - 2026-11-28
+
+- **Rust workspace crate 解析**：嵌套 `Cargo.toml`（上限 20）把
+  `[package] name` 映射到 crate 根目录，并按 Cargo 规则把 `-` 归一为
+  Rust 代码中的 `_`；`path` 依赖补全未声明 name 的成员。
+  `use other_crate::module` 解析到该 crate 的 `src/` 子模块，并回退
+  `lib.rs`/`main.rs` 入口（根 crate 的顶层 `lib.rs` 也在回退范围内），
+  跨 crate workspace 引用形成真实依赖边。外部 crate 仍不建边，根
+  `Cargo.toml` 继续驱动 cargo 技术栈识别。
+- **测试**：610 例在 LANG=en 与 LANG=zh 下全通过；夹具覆盖
+  `core-lib` → `core_lib` 归一、路径依赖登记、跨 crate 子模块解析与
+  入口文件回退。
+
 ## [0.204.0] - 2026-11-28
 
 - **Haskell 类方法与多行签名**：`class … where` 体现在按方法层缩进登记

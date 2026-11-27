@@ -122,6 +122,12 @@ const MAX_OPAM_MANIFESTS = 20
 const MAX_CABAL_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的嵌套 `Cargo.toml` 数（Rust workspace 成员）。
+ * 根清单不受此上限影响；嵌套清单用于 crate 名 → 根目录映射。
+ */
+const MAX_CARGO_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -143,6 +149,7 @@ function isConfigManifest(rel, name) {
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
     || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
     || name.endsWith('.nimble') || name.endsWith('.opam') || name.endsWith('.cabal')
+    || name === 'Cargo.toml'
 }
 
 /**
@@ -1856,15 +1863,97 @@ function tryRustPath(baseDir, segments, indexed) {
 }
 
 /**
+ * 从 Cargo.toml 的 `[package]` 段读取包名（`name = "…"`）。
+ * @param {string} text - 清单内容。
+ * @returns {string|undefined} 包名。
+ */
+function cargoPackageName(text) {
+  let section = ''
+  for (const line of text.split(/\r?\n/)) {
+    const header = /^\s*\[([^\]]+)\]\s*$/.exec(line)
+    if (header) { section = header[1].trim(); continue }
+    if (section !== 'package') continue
+    const m = /^\s*name\s*=\s*"([^"]+)"/.exec(line)
+    if (m) return m[1]
+  }
+  return undefined
+}
+
+/**
+ * 提取 Cargo.toml 中的路径依赖（`dep = { path = "../dep" }`）。
+ * @param {string} text - 清单内容。
+ * @returns {Array<{name:string, path:string}>} 路径依赖。
+ */
+function cargoPathDependencies(text) {
+  const deps = []
+  for (const m of text.matchAll(/^\s*([A-Za-z0-9_-]+)\s*=\s*\{([^}]*)\}\s*$/gm)) {
+    const pathValue = /path\s*=\s*"([^"]+)"/.exec(m[2])
+    if (pathValue) deps.push({ name: m[1], path: pathValue[1] })
+  }
+  return deps
+}
+
+/**
+ * 建立 Rust crate 名 → crate 根目录索引：Cargo 包名的 `-` 在代码中写作
+ * `_`；路径依赖补全未在清单声明 name 的成员（workspace 成员各自有
+ * Cargo.toml，嵌套读取后自动入表）。
+ * @param {Record<string,string>} manifestTexts - 清单路径 → 内容。
+ * @returns {Map<string,string>} crate 名 → 根目录（根 crate 为 ''）。
+ */
+function buildRustCrates(manifestTexts) {
+  const crates = new Map()
+  /**
+   * 归一 crate 名（Cargo 允许 `-`，Rust 代码使用 `_`）。
+   * @param {string} name - Cargo 包名。
+   * @returns {string} 归一后的 crate 名。
+   */
+  const normalize = name => name.replace(/-/g, '_')
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (path.posix.basename(rel) !== 'Cargo.toml') continue
+    const dir = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel)
+    const name = cargoPackageName(text)
+    if (name) crates.set(normalize(name), dir)
+  }
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (path.posix.basename(rel) !== 'Cargo.toml') continue
+    const baseDir = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel)
+    for (const dep of cargoPathDependencies(text)) {
+      const target = path.posix.normalize(path.posix.join(baseDir || '.', dep.path))
+      const key = normalize(dep.name)
+      if (!crates.has(key)) crates.set(key, target === '.' ? '' : target)
+    }
+  }
+  return crates
+}
+
+/**
+ * Rust crate 的入口文件（`src/lib.rs` 优先，其次 `src/main.rs`）。
+ * @param {string} dir - crate 根目录（根 crate 为 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 入口文件；不存在返回 null。
+ */
+function rustCrateEntry(dir, indexed) {
+  const prefix = dir === '' ? '' : `${dir}/`
+  for (const candidate of [`${prefix}src/lib.rs`, `${prefix}src/main.rs`, `${prefix}lib.rs`, `${prefix}main.rs`]) {
+    const normalized = path.posix.normalize(candidate)
+    if (indexed.has(normalized)) return normalized
+  }
+  return null
+}
+
+/**
  * 解析 Rust use：crate 从源码根目录、self/super 从当前模块目录；
- * 其它前缀按 2015 风格从 crate 根尝试（失败即忽略，外部 crate 不计边）。
+ * 其它前缀若命中 workspace crate 名，从该 crate 的 `src/` 解析子模块并
+ * 回退到 crate 入口；否则按 2015 风格从 crate 根尝试（失败即忽略，
+ * 外部 crate 不计边）。
  * @param {string} fromRel - 引用方文件。
  * @param {string} specifier - use 路径（如 crate::a::B）。
  * @param {Set<string>} indexed - 已索引文件集合。
  * @param {string[]} crateRoots - crate 源码根目录（长优先）。
+ * @param {Map<string,string>} crates - crate 名 → crate 根目录。
  * @returns {string|null} 命中文件。
  */
-function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
+function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
   let segments = specifier.split('::').filter(Boolean)
   if (segments.length === 0) return null
   if (segments[0] === 'crate') {
@@ -1880,6 +1969,13 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
     }
     return segments.length > 0 ? tryRustPath(dir, segments, indexed) : null
   }
+  const crateDir = crates.get(segments[0])
+  if (crateDir !== undefined) {
+    const sub = segments.slice(1)
+    if (sub.length === 0) return rustCrateEntry(crateDir, indexed)
+    const srcDir = crateDir === '' ? 'src' : `${crateDir}/src`
+    return tryRustPath(srcDir, sub, indexed) ?? rustCrateEntry(crateDir, indexed)
+  }
   const root = crateRoots.find(r => r === '.' || fromRel.startsWith(r + '/')) ?? '.'
   return tryRustPath(root, segments, indexed)
 }
@@ -1891,6 +1987,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  * @param {import('./deps.js').ImportInfo} imp - 引用记录。
  * @param {{indexed:Set<string>, javaPaths:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *   goDirs:Map<string,string>, goModule:string|null, rustRoots:string[],
+ *   rustCrates:Map<string,string>,
  *   swiftTargets:Map<string,string>,
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
@@ -1916,7 +2013,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'go') return resolveGoSpecifier(imp.specifier, ctx.goModules, ctx.goDirs)
   if (lang === 'rust') {
     if (imp.kind === 'mod') return resolveRustMod(rustModuleDir(fromRel), imp.specifier, ctx.indexed)
-    return imp.relative ? resolveRustUse(fromRel, imp.specifier, ctx.indexed, ctx.rustRoots) : null
+    return imp.relative ? resolveRustUse(fromRel, imp.specifier, ctx.indexed, ctx.rustRoots, ctx.rustCrates) : null
   }
   if (lang === 'csharp') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.csharp)
   if (lang === 'kotlin') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.kotlin)
@@ -2097,6 +2194,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let nimbleManifestsRead = 0
   let opamManifestsRead = 0
   let cabalManifestsRead = 0
+  let cargoManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -2151,6 +2249,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       if (cabalManifestsRead >= MAX_CABAL_MANIFESTS) continue
       cabalManifestsRead++
     }
+    const cargo = !MANIFEST_FILES[rel] && baseName === 'Cargo.toml'
+    if (cargo) {
+      if (cargoManifestsRead >= MAX_CARGO_MANIFESTS) continue
+      cargoManifestsRead++
+    }
     selectedManifests.push({ abs, rel })
   }
   // 有界并发读取（远程 fs 每文件一次 RTT）：先按遍历顺序选好清单（上限
@@ -2197,6 +2300,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     goDirs: buildGoDirs(indexed),
     goModules: goModules(manifestTexts),
     rustRoots: buildRustCrateRoots(indexed),
+    rustCrates: buildRustCrates(manifestTexts),
     swiftTargets: buildSwiftTargets(indexed, parseSwiftTargetPaths(manifestTexts['Package.swift'])),
     jsAliases,
     workspacePackages: buildWorkspacePackages(manifestTexts),

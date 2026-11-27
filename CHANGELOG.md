@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.205.0] - 2026-11-28
+
+### Added
+
+- **Rust workspace crate resolution**: nested `Cargo.toml` manifests (capped
+  at 20) now map `[package] name` to crate roots, normalizing Cargo's `-`
+  to Rust's `_`; `path` dependencies fill in members that do not declare a
+  name. `use other_crate::module` resolves into that crate's `src/`
+  submodule and falls back to its `lib.rs`/`main.rs` entry (or the crate
+  root for root-level `lib.rs`), so cross-crate workspace imports form real
+  dependency edges. External crates remain edge-free and the root
+  `Cargo.toml` keeps driving cargo stack detection.
+
+### Tests
+
+- 610 cases pass (LANG=en and LANG=zh); a fixture pins `core-lib` →
+  `core_lib` normalization, path-dependency registration, cross-crate
+  submodule resolution and the entry-file fallback.
+
 ## [0.204.0] - 2026-11-28
 
 ### Added
