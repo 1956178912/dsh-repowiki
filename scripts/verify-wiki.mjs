@@ -9,7 +9,11 @@
  * - 引用内容漂移（清单 v3 `citationDigests`）
  * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
  * - 清单登记但磁盘缺失的页面（孤儿页仅告警）
+ * - 空清单（默认告警，`--strict`/`--require` 失败）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
+ *
+ * `--json` 另外输出 `problems[{code, severity, message, locale?}]`，供 CI
+ * 按稳定问题码聚合或抑制，而不必解析英文文本。
  *
  * 用法：
  *   node scripts/verify-wiki.mjs [--root <dir>] [--locale zh] [--strict] [--json]
@@ -368,34 +372,67 @@ async function readWikiPages(root, locale) {
  * @param {string} locale - 语言目录名。
  * @param {{files:Array<{path?:string, lines?:number}>}} index - 索引摘要。
  * @param {boolean} strict - 严格模式。
+ * @param {boolean} requireAssets - 要求存在可用资产（空清单失败）。
  * @returns {Promise<object>} locale 结果。
  */
-async function verifyLocale(root, locale, index, strict) {
+async function verifyLocale(root, locale, index, strict, requireAssets) {
   const manifestRel = `${ASSET_DIR}/${WIKI_DIR}/${locale}/${MANIFEST_FILE}`
   const loaded = await readJson(path.join(root, ASSET_DIR, WIKI_DIR, locale, MANIFEST_FILE))
   if (!loaded.exists) {
+    const message = `${manifestRel} is missing`
     return {
       locale,
       manifest: manifestRel,
       ok: false,
-      issues: [`${manifestRel} is missing`],
+      issues: [message],
       warnings: [],
+      problems: [{ code: 'manifest/missing', severity: 'error', message }],
       pages: 0,
     }
   }
   if (!loaded.value || !Array.isArray(loaded.value.pages)) {
+    const message = `${manifestRel} is not a valid manifest${loaded.error ? `: ${loaded.error}` : ''}`
     return {
       locale,
       manifest: manifestRel,
       ok: false,
-      issues: [`${manifestRel} is not a valid manifest${loaded.error ? `: ${loaded.error}` : ''}`],
+      issues: [message],
       warnings: [],
+      problems: [{ code: 'manifest/invalid', severity: 'error', message }],
       pages: 0,
     }
   }
   const manifest = loaded.value
   const issues = []
   const warnings = []
+  const problems = []
+  /**
+   * 记录一个失败项（文本报告 + 结构化问题码）。
+   * @param {string} code - 稳定问题码。
+   * @param {string} message - 英文可读消息。
+   * @returns {void}
+   */
+  const addIssue = (code, message) => {
+    issues.push(message)
+    problems.push({ code, severity: 'error', message })
+  }
+  /**
+   * 记录一个警告项（文本报告 + 结构化问题码）。
+   * @param {string} code - 稳定问题码。
+   * @param {string} message - 英文可读消息。
+   * @returns {void}
+   */
+  const addWarning = (code, message) => {
+    warnings.push(message)
+    problems.push({ code, severity: 'warning', message })
+  }
+  // 空清单：generate 不会短路（manifestSlugs.length > 0 是前提），
+  // 说明生成没有产出页面；--strict/--require 下应阻止其通过。
+  if (manifest.pages.length === 0) {
+    const message = 'manifest lists no pages'
+    if (strict || requireAssets) addIssue('manifest/empty', message)
+    else addWarning('manifest/empty', message)
+  }
   // 陈旧检查：卡片与已采信记忆的指纹只要有一项与清单不一致，就说明生成后
   // 输入变了；即使引用路径都有效，内容也可能过期。generate 的增量短路同时
   // 比较两者，门禁必须同口径，避免"生成认为要重跑、verify 认为新鲜"。
@@ -410,11 +447,11 @@ async function verifyLocale(root, locale, index, strict) {
   const staleReasons = []
   if (cardStale === true) {
     staleReasons.push('cards')
-    issues.push('wiki is stale: cards changed since generation (run repowiki-generate)')
+    addIssue('wiki/stale-cards', 'wiki is stale: cards changed since generation (run repowiki-generate)')
   }
   if (memoryStale === true) {
     staleReasons.push('memory')
-    issues.push('wiki is stale: accepted memory changed since generation (run repowiki-generate)')
+    addIssue('wiki/stale-memory', 'wiki is stale: accepted memory changed since generation (run repowiki-generate)')
   }
   const stale = staleReasons.length > 0
     ? true
@@ -424,8 +461,8 @@ async function verifyLocale(root, locale, index, strict) {
   if (memoryStale === null) missingDigests.push('memoryDigest')
   if (missingDigests.length > 0) {
     const message = `manifest has no ${missingDigests.join('/')}; stale check skipped`
-    if (strict) issues.push(message)
-    else warnings.push(message)
+    if (strict) addIssue('manifest/missing-digests', message)
+    else addWarning('manifest/missing-digests', message)
   }
   // 页面完整性：generate 的短路要求清单里的每个 slug 都仍在磁盘上；
   // 缺失页说明 Wiki 被部分删除或写入失败，不重新生成就会一直缺页。
@@ -439,10 +476,10 @@ async function verifyLocale(root, locale, index, strict) {
   const missingPages = manifestSlugs.filter(slug => !diskPages.has(slug))
   const orphanedPages = [...diskPages.keys()].filter(slug => !manifestSlugSet.has(slug)).sort()
   if (missingPages.length > 0) {
-    issues.push(`${missingPages.length} page(s) in the manifest have no file on disk: ${missingPages.slice(0, 3).join(', ')}`)
+    addIssue('wiki/missing-pages', `${missingPages.length} page(s) in the manifest have no file on disk: ${missingPages.slice(0, 3).join(', ')}`)
   }
   if (orphanedPages.length > 0) {
-    warnings.push(`${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
+    addWarning('wiki/orphaned-pages', `${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
   }
   const { known, capped } = await resolveKnown(root, manifest, index.files)
   const broken = findBrokenWikiCitations(manifest, known)
@@ -456,21 +493,23 @@ async function verifyLocale(root, locale, index, strict) {
   })
   const coverage = summarizeCitationCoverage(manifest)
   const coveragePages = citationCoveragePages(manifest)
-  if (broken.total > 0) issues.push(`${broken.total} missing citation path(s)`)
-  if (ranges.total > 0) issues.push(`${ranges.total} citation line range(s) out of bounds`)
-  if (drift && drift.total > 0) issues.push(`${drift.total} citation(s) changed since generation`)
+  if (broken.total > 0) addIssue('citation/missing', `${broken.total} missing citation path(s)`)
+  if (ranges.total > 0) addIssue('citation/range', `${ranges.total} citation line range(s) out of bounds`)
+  if (drift && drift.total > 0) addIssue('citation/drift', `${drift.total} citation(s) changed since generation`)
   if (capped) {
-    warnings.push(`citation existence check stopped after ${MAX_FS_PROBES} probes; unverified paths are not reported as broken`)
+    const message = `citation existence check stopped after ${MAX_FS_PROBES} probes; unverified paths are not reported as broken`
+    if (strict) addIssue('citation/probe-capped', message)
+    else addWarning('citation/probe-capped', message)
   }
   if (coverage && coverage.untracked > 0) {
     const message = `${coverage.untracked} citation(s) have no content digest`
-    if (strict) issues.push(message)
-    else warnings.push(message)
+    if (strict) addIssue('citation/untracked', message)
+    else addWarning('citation/untracked', message)
   }
   if (drift && drift.unchecked > 0) {
     const message = `${drift.unchecked} citation(s) could not be verified`
-    if (strict) issues.push(message)
-    else warnings.push(message)
+    if (strict) addIssue('citation/unchecked', message)
+    else addWarning('citation/unchecked', message)
   }
   return {
     locale,
@@ -478,6 +517,7 @@ async function verifyLocale(root, locale, index, strict) {
     ok: issues.length === 0,
     issues,
     warnings,
+    problems,
     stale,
     staleReasons,
     pages: manifest.pages.length,
@@ -525,9 +565,10 @@ async function discoverLocales(root) {
 /**
  * 校验 Wiki 资产。
  * @param {{root?:string, locales?:string[], strict?:boolean, requireAssets?:boolean}} [options]
- *   选项；`requireAssets` 为 true 时没有 Wiki 清单也判失败（CI 用）。
+ *   选项；`requireAssets` 为 true 时没有 Wiki 清单或清单为空也判失败（CI 用）。
  * @returns {Promise<{root:string, strict:boolean, ok:boolean, issues:string[],
- *   warnings:string[], locales:object[], index:object, totals:object}>} 结果。
+ *   warnings:string[], problems:Array<{code:string, severity:string, message:string, locale?:string}>,
+ *   locales:object[], index:object, totals:object}>} 结果。
  */
 export async function verifyWiki(options = {}) {
   const root = path.resolve(options.root ?? process.cwd())
@@ -535,17 +576,24 @@ export async function verifyWiki(options = {}) {
   const requireAssets = options.requireAssets === true
   const requested = Array.isArray(options.locales) ? [...new Set(options.locales)] : []
   const index = await loadIndex(root)
-  const globalIssues = index.error ? [`index.json: ${index.error}`] : []
+  const globalProblems = index.error
+    ? [{ code: 'index/read-error', severity: 'error', message: `index.json: ${index.error}` }]
+    : []
+  const globalIssues = globalProblems.map(problem => problem.message)
   const targetLocales = requested.length > 0 ? requested : await discoverLocales(root)
   if (targetLocales.length === 0) {
     const missing = 'no wiki manifests found'
-    const issues = requireAssets ? [...globalIssues, missing] : globalIssues
+    const problems = [
+      ...globalProblems,
+      { code: 'assets/missing', severity: requireAssets ? 'error' : 'warning', message: missing },
+    ]
     return {
       root,
       strict,
-      ok: issues.length === 0,
-      issues,
-      warnings: requireAssets ? [] : [missing],
+      ok: problems.every(problem => problem.severity !== 'error'),
+      issues: problems.filter(problem => problem.severity === 'error').map(problem => problem.message),
+      warnings: problems.filter(problem => problem.severity === 'warning').map(problem => problem.message),
+      problems,
       locales: [],
       index: summarizeIndex(index),
       totals: { pages: 0, citations: 0, tracked: 0, untracked: 0, broken: 0, outOfRange: 0, drift: 0 },
@@ -553,13 +601,15 @@ export async function verifyWiki(options = {}) {
   }
   const locales = []
   for (const locale of targetLocales) {
-    locales.push(await verifyLocale(root, locale, index, strict))
+    locales.push(await verifyLocale(root, locale, index, strict, requireAssets))
   }
   const issues = [...globalIssues]
   const warnings = []
+  const problems = [...globalProblems]
   for (const result of locales) {
     for (const issue of result.issues) issues.push(`${result.locale}: ${issue}`)
     for (const warning of result.warnings) warnings.push(`${result.locale}: ${warning}`)
+    for (const problem of result.problems ?? []) problems.push({ ...problem, locale: result.locale })
   }
   const totals = { pages: 0, citations: 0, tracked: 0, untracked: 0, broken: 0, outOfRange: 0, drift: 0 }
   for (const result of locales) {
@@ -577,6 +627,7 @@ export async function verifyWiki(options = {}) {
     ok: issues.length === 0,
     issues,
     warnings,
+    problems,
     locales,
     index: summarizeIndex(index),
     totals,

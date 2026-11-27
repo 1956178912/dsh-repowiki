@@ -75,6 +75,7 @@ test('verify-wiki：干净资产严格模式通过', async () => {
   const result = await verifyWiki({ root, strict: true })
   assert.equal(result.ok, true)
   assert.deepEqual(result.issues, [])
+  assert.deepEqual(result.problems, [])
   assert.equal(result.locales.length, 1)
   assert.deepEqual(result.totals, {
     pages: 1,
@@ -117,6 +118,15 @@ test('verify-wiki：断链、越界与漂移均失败并给出示例', async () 
   assert.match(messages, /missing citation path/)
   assert.match(messages, /out of bounds/)
   assert.match(messages, /changed since generation/)
+  const codes = result.problems.map(problem => problem.code).sort()
+  assert.deepEqual(codes, [
+    'citation/drift',
+    'citation/missing',
+    'citation/range',
+    'citation/unchecked',
+    'citation/untracked',
+    'manifest/missing-digests',
+  ])
 
   const report = formatReport(result)
   assert.match(report, /Result: FAIL/)
@@ -160,6 +170,8 @@ test('verify-wiki：卡片变化导致 Wiki 陈旧', async () => {
   assert.equal(stale.locales[0].stale, true)
   assert.deepEqual(stale.locales[0].staleReasons, ['cards'])
   assert.match(stale.issues.join(' '), /wiki is stale: cards changed/)
+  assert.ok(stale.problems.some(problem => problem.code === 'wiki/stale-cards'
+    && problem.severity === 'error'))
   assert.match(formatReport(stale), /\(stale: cards\)/)
 })
 
@@ -194,6 +206,7 @@ test('verify-wiki：已采信记忆变化导致 Wiki 陈旧', async () => {
   assert.equal(stale.locales[0].stale, true)
   assert.deepEqual(stale.locales[0].staleReasons, ['memory'])
   assert.match(stale.issues.join(' '), /wiki is stale: accepted memory changed/)
+  assert.ok(stale.problems.some(problem => problem.code === 'wiki/stale-memory'))
   assert.match(formatReport(stale), /\(stale: memory\)/)
 
   // 未采信（pending/rejected）记忆不参与 generate 的输入指纹：
@@ -223,11 +236,41 @@ test('verify-wiki：未覆盖默认警告，严格模式失败', async () => {
   assert.equal(lenient.ok, true)
   assert.match(lenient.warnings.join(' '), /1 citation\(s\) have no content digest/)
   assert.equal(lenient.totals.untracked, 1)
+  assert.ok(lenient.problems.some(problem => problem.code === 'citation/untracked'
+    && problem.severity === 'warning'))
 
   const strict = await verifyWiki({ root, strict: true })
   assert.equal(strict.ok, false)
   assert.match(strict.issues.join(' '), /1 citation\(s\) have no content digest/)
   assert.match(strict.issues.join(' '), /manifest has no inputDigest\/memoryDigest/)
+  assert.ok(strict.problems.some(problem => problem.code === 'citation/untracked'
+    && problem.severity === 'error'))
+})
+
+test('verify-wiki：空清单默认告警，严格与必需模式失败', async () => {
+  const root = makeRoot()
+  writeIndex(root, [])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [],
+  })
+
+  const lenient = await verifyWiki({ root })
+  assert.equal(lenient.ok, true)
+  assert.match(lenient.warnings.join(' '), /manifest lists no pages/)
+  assert.ok(lenient.problems.some(problem => problem.code === 'manifest/empty'
+    && problem.severity === 'warning'))
+
+  const strict = await verifyWiki({ root, strict: true })
+  assert.equal(strict.ok, false)
+  assert.ok(strict.problems.some(problem => problem.code === 'manifest/empty'
+    && problem.severity === 'error'))
+
+  const required = await verifyWiki({ root, requireAssets: true })
+  assert.equal(required.ok, false)
+  assert.match(required.issues.join(' '), /manifest lists no pages/)
 })
 
 test('verify-wiki：清单页面缺失失败，孤儿页仅警告', async () => {
@@ -256,6 +299,9 @@ test('verify-wiki：清单页面缺失失败，孤儿页仅警告', async () => 
   assert.match(broken.warnings.join(' '), /page file\(s\) are not in the manifest/)
   assert.deepEqual(broken.locales[0].missingPages, ['overview'])
   assert.deepEqual(broken.locales[0].orphanedPages, ['extra'])
+  const codes = broken.problems.map(problem => problem.code)
+  assert.ok(codes.includes('wiki/missing-pages'))
+  assert.ok(codes.includes('wiki/orphaned-pages'))
 })
 
 test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
@@ -267,6 +313,9 @@ test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
   const required = await verifyWiki({ root, requireAssets: true })
   assert.equal(required.ok, false)
   assert.match(required.issues.join(' '), /no wiki manifests found/)
+  assert.deepEqual(required.problems, [
+    { code: 'assets/missing', severity: 'error', message: 'no wiki manifests found' },
+  ])
 
   const script = fileURLToPath(new URL('../scripts/verify-wiki.mjs', import.meta.url))
   const cli = spawnSync(process.execPath, [script, '--root', root, '--require'], { encoding: 'utf8' })
@@ -318,6 +367,7 @@ test('verify-wiki：main 输出 JSON 并返回退出码', async () => {
     const parsed = JSON.parse(logs[0])
     assert.equal(parsed.ok, true)
     assert.equal(parsed.totals.citations, 1)
+    assert.ok(Array.isArray(parsed.problems))
 
     logs.length = 0
     assert.equal(await main(['--help']), 0)

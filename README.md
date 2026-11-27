@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks and `--require`, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.141.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, structured problem codes and `--require`, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.142.0)
 
 | Capability | Description |
 |---|---|
@@ -138,6 +138,7 @@ Roadmap:
 - Stale-wiki gate (v0.139.0): `verify:wiki` recomputes the card `inputDigest` and fails when cards changed after generation, even if every citation path still exists
 - Memory stale gate and `--require` (v0.140.0): the gate also recomputes the accepted-memory `memoryDigest` (matching generate's incremental short-circuit), reports `staleReasons`, fails under `--strict` when manifests lack staleness digests, and refuses to pass silently with no assets in CI
 - Page integrity gate (v0.141.0): manifest pages without a file on disk fail; orphan page files only warn, and both lists are exposed as `missingPages`/`orphanedPages` in JSON
+- Structured problems and empty-manifest strictness (v0.142.0): `--json` emits stable `problems[].code` values for CI aggregation; an empty manifest warns by default and fails under `--strict`/`--require`, and `--strict` also fails when citation probing hits the 200-path cap
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights
@@ -202,10 +203,11 @@ npm run bench -- 2000
 npm run verify:host
 
 # Wiki freshness gate: fail on missing citations, out-of-range lines,
-# content drift, stale cards/accepted memory or manifest pages missing from
-# disk; untracked/unverifiable citations warn unless --strict (which also
-# fails on missing staleness digests). --require fails when no manifest exists.
-# --root / --locale / --json supported. v0.141.0.
+# content drift, stale cards/accepted memory, manifest pages missing from
+# disk or empty manifests under --strict/--require; untracked/unverifiable
+# citations warn unless --strict (which also fails on missing staleness
+# digests and capped probes). --require fails when no manifest exists.
+# --root / --locale / --json supported. v0.142.0.
 npm run verify:wiki -- --root . --strict --require
 ```
 
@@ -215,9 +217,11 @@ npm run verify:wiki -- --root . --strict --require
 non-zero when a wiki is broken or stale (including manifest pages missing from
 disk), so the gate can run after `repowiki-generate` in any pipeline. Exit
 codes: `0` pass, `1` verification failed, `2` usage or read error. `--strict`
-also fails on untracked citations, unverifiable digests and manifests without
-staleness digests; without it they are warnings. Add `--require` so a missing
-wiki (wrong root, skipped generation) fails instead of passing with a warning.
+also fails on untracked citations, unverifiable digests, capped citation
+probes and manifests without staleness digests; without it they are warnings.
+Add `--require` so a missing or empty wiki fails instead of passing with a
+warning. The JSON report also carries stable `problems[].code` values
+(e.g. `citation/missing`, `wiki/stale-cards`) for CI aggregation.
 
 ## Upgrade operations (dsh is in rc; public seams change often)
 
@@ -230,7 +234,7 @@ wiki (wrong root, skipped generation) fails instead of passing with a warning.
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
-scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/coverage, v0.141.0)
+scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/coverage, v0.142.0)
 scripts/check-coverage.mjs      Coverage gate (lines/branches/functions)
 scripts/scan-secrets.mjs        Git-tracked secret scan
 scripts/bench.mjs               Synthetic-repo index benchmark
@@ -285,7 +289,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (503 cases)
+test/                  Unit and integration tests (504 cases)
 ```
 
 ## License

@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.142.0] - 2026-11-27
+
+### Added
+
+- **Structured problems**: `verify:wiki --json` now emits
+  `problems[{code, severity, message, locale?}]` alongside the human-readable
+  issues/warnings. Codes are stable (`citation/missing`, `citation/range`,
+  `citation/drift`, `wiki/stale-cards`, `wiki/stale-memory`,
+  `wiki/missing-pages`, `manifest/empty`, `assets/missing`, …) so CI can
+  aggregate or suppress without parsing English text.
+- **Empty-manifest semantics**: a manifest that lists no pages warns by
+  default, fails under `--strict`, and fails under `--require` (generate never
+  short-circuits an empty manifest, so passing it hides a failed generation).
+- `--strict` now also fails when citation existence probing hit the 200-path
+  cap (`citation/probe-capped`), matching its unverifiable-input semantics.
+
+### Tests
+
+- 504 cases pass (LANG=en and LANG=zh); new coverage for the empty-manifest
+  matrix and problem codes across broken/stale/page-integrity cases.
+
 ## [0.141.0] - 2026-11-27
 
 ### Added

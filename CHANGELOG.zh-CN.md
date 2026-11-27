@@ -3,6 +3,20 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.142.0] - 2026-11-27
+
+- **结构化问题码**：`verify:wiki --json` 在 issues/warnings 之外输出
+  `problems[{code, severity, message, locale?}]`，稳定码包括
+  `citation/missing`、`citation/range`、`citation/drift`、
+  `wiki/stale-cards`、`wiki/stale-memory`、`wiki/missing-pages`、
+  `manifest/empty`、`assets/missing` 等，CI 可按码聚合或抑制。
+- **空清单语义**：清单没有任何页面时默认告警，`--strict` 与 `--require`
+  下失败（generate 对空清单不会短路，放过它会掩盖生成失败）。
+- **`--strict` 收紧**：引用存在性探测触及 200 路径上限时也失败
+  （`citation/probe-capped`），与“不可验证即失败”一致。
+- **测试**：504 例在 LANG=en 与 LANG=zh 下全通过；新增空清单矩阵与
+  断链/陈旧/页面完整性用例的问题码断言。
+
 ## [0.141.0] - 2026-11-27
 
 - **页面完整性门禁**：`verify:wiki` 递归枚举 Wiki 页面文件（slug 优先取
