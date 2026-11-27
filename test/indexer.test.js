@@ -235,7 +235,7 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
     'app/Services/UserService.php': [
       '<?php',
       'namespace App\\Services;',
-      'use App\\Models\\User;',
+      'use App\\Models\\User as U;',
       "require_once __DIR__ . '/bootstrap.php';",
       'class UserService {',
       '  public function run(): void {}',
@@ -270,6 +270,8 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('app/Services/UserService.php', 'app/Models/User.php')?.line, 3, 'PHP use 行号')
+  assert.deepEqual(edge('app/Services/UserService.php', 'app/Models/User.php')?.aliases,
+    [{ from: 'User', to: 'U' }], 'PHP use as 别名写入边')
   assert.equal(edge('app/Services/UserService.php', 'app/Services/bootstrap.php')?.line, 4, 'PHP __DIR__ require')
   assert.equal(edge('src/App/Services/UserService.cs', 'src/App/Models/User.cs')?.line, 1, 'C# using 行号')
   assert.equal(edge('src/main/kotlin/com/acme/App.kt', 'src/main/kotlin/com/acme/util/Helper.kt')?.line, 2, 'Kotlin import 行号')
@@ -391,6 +393,7 @@ test('Ruby/Swift/Scala：符号、本地依赖边与三生态技术栈', async (
     'src/main/scala/com/acme/App.scala': [
       'package com.acme',
       'import com.acme.util.Helper',
+      'import com.acme.util.Helper as H',
       'object App {',
       '  def run(): Unit = Helper.run()',
       '}',
@@ -411,6 +414,10 @@ test('Ruby/Swift/Scala：符号、本地依赖边与三生态技术栈', async (
   assert.equal(edge('lib/billing/invoice.rb', 'lib/billing/base.rb')?.line, 1, 'require_relative 行号')
   assert.ok(!doc.edges.some(e => e.from === 'lib/billing/invoice.rb' && e.to === 'json'), 'gem require 不建本地边')
   assert.equal(edge('src/main/scala/com/acme/App.scala', 'src/main/scala/com/acme/util/Helper.scala')?.line, 2, 'Scala 点分包导入')
+  assert.deepEqual(
+    doc.edges.find(e => e.from === 'src/main/scala/com/acme/App.scala' && e.aliases)?.aliases,
+    [{ from: 'Helper', to: 'H' }], 'Scala as 别名写入边',
+  )
   assert.equal(doc.edges.filter(e => e.from === 'Sources/App/main.swift').length, 0, '外部 Swift 模块（Foundation）不建边')
 
   // 多清单仓库的项目名取首个提供者（依赖目录遍历顺序），两者都是合法来源

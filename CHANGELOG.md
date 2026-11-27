@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.261.0] - 2026-11-28
+
+### Fixed
+
+- **PHP/Scala import-alias attribution**: Scala renames (`import a.b.C as D`,
+  grouped `{C => D}` and Scala 3 `{C as D}`) used to emit the alias as the
+  imported symbol, so references and impact could never match the real
+  definition. Renames now keep the original name and record the local binding
+  in edge `aliases`; `=> _`/`as _` hides a name instead of importing it.
+- PHP `use A\B\C as D;` (single and grouped `{C as D}`) records the original
+  name plus local binding, so lexical usage scans search the alias.
+
+### Tests
+
+- 813 cases pass (LANG=en); PHP/Scala alias assertions plus real-index edge
+  propagation; parser v17 re-parses cached imports.
+
 ## [0.260.0] - 2026-11-28
 
 ### Added

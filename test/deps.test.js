@@ -273,6 +273,7 @@ test('PHP：use 分组/function/别名与 require 字面量', () => {
     'use App\\Models\\User;',
     'use App\\Models\\{Post, Comment as C};',
     'use function App\\Helpers\\format;',
+    'use App\\Support\\Clock as Time;',
     "require_once __DIR__ . '/bootstrap.php';",
     "require '../vendor/autoload.php';",
     '// use Commented\\Out;',
@@ -281,8 +282,15 @@ test('PHP：use 分组/function/别名与 require 字面量', () => {
   const bySpec = new Map(refs.map(r => [r.specifier, r]))
 
   assert.deepEqual(bySpec.get('App.Models.User').imported, ['User'])
+  assert.equal(bySpec.get('App.Models.User').aliases, undefined, '无 as 不产生别名')
   assert.ok(bySpec.has('App.Models.Post'))
   assert.ok(bySpec.has('App.Models.Comment'), '分组别名保留原名')
+  assert.deepEqual(bySpec.get('App.Models.Comment').imported, ['Comment'], '分组别名归到原名')
+  assert.deepEqual(bySpec.get('App.Models.Comment').aliases, [{ from: 'Comment', to: 'C' }],
+    '分组 as 别名进入 aliases')
+  assert.deepEqual(bySpec.get('App.Support.Clock').imported, ['Clock'], 'use as 归到原名')
+  assert.deepEqual(bySpec.get('App.Support.Clock').aliases, [{ from: 'Clock', to: 'Time' }],
+    'use as 别名进入 aliases')
   assert.ok(bySpec.has('App.Helpers.format'), 'use function 路径')
   assert.equal(bySpec.get('./bootstrap.php').kind, 'require')
   assert.equal(bySpec.get('../vendor/autoload.php').kind, 'require')
@@ -333,6 +341,7 @@ test('Scala：import 分组/重命名/通配与 as 别名', () => {
     'import scala.concurrent.ExecutionContext.Implicits.global',
     'import com.acme.core.*',
     'import com.acme.model.User as U',
+    'import com.acme.store.{Repo as Store, Hidden => _}',
     '// import commented.out',
   ].join('\n')
   const refs = extractImports(code, 'scala')
@@ -340,12 +349,19 @@ test('Scala：import 分组/重命名/通配与 as 别名', () => {
 
   assert.deepEqual(bySpec.get('com.acme.util.Helper').imported, ['Helper'])
   assert.deepEqual(bySpec.get('com.acme.util.Api').imported, ['Api'])
-  assert.deepEqual(bySpec.get('com.acme.util.Client').imported, ['HttpClient'], '分组重命名保留原路径')
+  assert.deepEqual(bySpec.get('com.acme.util.Client').imported, ['Client'], '分组重命名归到原名')
+  assert.deepEqual(bySpec.get('com.acme.util.Client').aliases, [{ from: 'Client', to: 'HttpClient' }],
+    'Scala 2 分组重命名进入 aliases')
   assert.ok(bySpec.has('com.acme.util'), '分组内通配展开为包前缀')
   assert.deepEqual(bySpec.get('com.acme.util').imported, [])
   assert.deepEqual(bySpec.get('scala.concurrent.ExecutionContext.Implicits.global').imported, ['global'])
   assert.ok(bySpec.has('com.acme.core'), '.* 通配归为包路径')
-  assert.deepEqual(bySpec.get('com.acme.model.User').imported, ['U'], 'as 别名')
+  assert.deepEqual(bySpec.get('com.acme.model.User').imported, ['User'], 'as 别名归到原名')
+  assert.deepEqual(bySpec.get('com.acme.model.User').aliases, [{ from: 'User', to: 'U' }],
+    'Scala 3 as 别名进入 aliases')
+  assert.deepEqual(bySpec.get('com.acme.store.Repo').aliases, [{ from: 'Repo', to: 'Store' }],
+    'Scala 3 分组 as 重命名')
+  assert.ok(!bySpec.has('com.acme.store.Hidden'), '重命名为 _ 表示隐藏')
   assert.ok(!bySpec.has('commented.out'))
 })
 

@@ -514,6 +514,26 @@ function extractKotlinImports(lines) {
 function extractPhpImports(lines) {
   const result = []
   /**
+   * 登记一条导入：引用归到原名，`as` 本地别名写入 aliases。
+   * @param {string} specifier - 点分说明符。
+   * @param {string} original - 原名（叶子标识符）。
+   * @param {string|undefined} alias - `as` 后的本地名。
+   * @param {number} line - 行号。
+   * @returns {void}
+   */
+  const pushEntry = (specifier, original, alias, line) => {
+    if (!original) return
+    const aliases = alias && alias !== original ? [{ from: original, to: alias }] : []
+    result.push({
+      specifier,
+      line,
+      kind: 'import',
+      relative: true,
+      imported: [original],
+      ...(aliases.length > 0 ? { aliases } : {}),
+    })
+  }
+  /**
    * 登记一条 use 叶子。
    * @param {string} prefix - 命名空间前缀（点分，可为空）。
    * @param {string} leaf - 叶子名（可含 `as` 别名）。
@@ -521,16 +541,12 @@ function extractPhpImports(lines) {
    * @returns {void}
    */
   const push = (prefix, leaf, line) => {
-    const name = leaf.trim().split(/\s+as\s+/)[0].replace(/^\\+/, '')
-    if (!name) return
-    const specifier = (prefix ? `${prefix}.` : '') + name.replace(/\\/g, '.')
-    result.push({
-      specifier,
-      line,
-      kind: 'import',
-      relative: true,
-      imported: [name.split('\\').pop()],
-    })
+    const m = /^(?<name>[\\\w]+)\s*(?:as\s+(?<alias>\w+))?$/.exec(leaf.trim())
+    if (!m) return
+    const original = m.groups.name.replace(/^\\+/, '')
+    if (!original) return
+    const specifier = (prefix ? `${prefix}.` : '') + original.replace(/\\/g, '.')
+    pushEntry(specifier, original.split('\\').pop(), m.groups.alias, line)
   }
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim()
@@ -551,7 +567,7 @@ function extractPhpImports(lines) {
       })
       continue
     }
-    const um = /^use\s+(?:(?:function|const)\s+)?(?<path>[\\\w.]+)(?<group>\\?\{[^}]*\})?\s*(?:as\s+\w+)?\s*;/.exec(trimmed)
+    const um = /^use\s+(?:(?:function|const)\s+)?(?<path>[\\\w.]+)(?<group>\\?\{[^}]*\})?\s*(?:as\s+(?<alias>\w+))?\s*;/.exec(trimmed)
     if (!um) continue
     const rawPath = um.groups.path.replace(/^\\+/, '')
     if (um.groups.group) {
@@ -559,13 +575,7 @@ function extractPhpImports(lines) {
       for (const leaf of um.groups.group.replace(/^\\?\{|\}$/g, '').split(',')) push(prefix, leaf, i + 1)
     } else {
       const dotted = rawPath.replace(/\\/g, '.')
-      result.push({
-        specifier: dotted,
-        line: i + 1,
-        kind: 'import',
-        relative: true,
-        imported: [dotted.split('.').pop()],
-      })
+      pushEntry(dotted, dotted.split('.').pop(), um.groups.alias, i + 1)
     }
   }
   return result
@@ -622,12 +632,22 @@ function extractSwiftImports(lines) {
 
 /**
  * 展开一条 Scala import 声明为叶子路径（支持分组、重命名与 `._`/`.*` 通配）。
+ * 重命名（Scala 2 `C => D`、Scala 3 `C as D`）保留原名 `name`，本地名在
+ * `alias`；`=> _`/`as _` 表示隐藏该名，不登记。
  * @param {string} raw - import 后的文本（已去分号与注释）。
- * @returns {{path:string, name:string}[]} 叶子路径与导入名（通配为空串）。
+ * @returns {{path:string, name:string, alias?:string}[]} 叶子路径、导入名
+ *   （通配为空串）与可选本地别名。
  */
 function expandScalaImport(raw) {
   const asMatch = /^(?<path>[\w.$]+)\s+as\s+(?<alias>\w+)$/.exec(raw)
-  if (asMatch) return [{ path: asMatch.groups.path, name: asMatch.groups.alias }]
+  if (asMatch) {
+    const name = asMatch.groups.path.split('.').pop() ?? ''
+    return [{
+      path: asMatch.groups.path,
+      name: /^[A-Za-z_$][\w$]*$/.test(name) ? name : '',
+      alias: asMatch.groups.alias,
+    }]
+  }
 
   const braceAt = raw.indexOf('{')
   if (braceAt === -1) {
@@ -645,12 +665,21 @@ function expandScalaImport(raw) {
   for (const part of body.split(',')) {
     const trimmed = part.trim()
     if (!trimmed) continue
-    const [origRaw, aliasRaw] = trimmed.split('=>').map(s => s.trim())
-    if (origRaw === '_' || origRaw === '*') {
+    const rename = /^(?<orig>[\w$]+)\s*(?:=>|\bas\b)\s*(?<alias>[\w$]+)$/.exec(trimmed)
+    if (rename) {
+      if (rename.groups.alias === '_') continue // `C => _` 隐藏该名
+      out.push({
+        path: `${prefix}.${rename.groups.orig}`,
+        name: rename.groups.orig,
+        alias: rename.groups.alias,
+      })
+      continue
+    }
+    if (trimmed === '_' || trimmed === '*') {
       out.push({ path: prefix, name: '' })
       continue
     }
-    out.push({ path: `${prefix}.${origRaw}`, name: aliasRaw || origRaw.split('.').pop() || '' })
+    out.push({ path: `${prefix}.${trimmed}`, name: trimmed.split('.').pop() || '' })
   }
   return out
 }
@@ -669,12 +698,16 @@ function extractScalaImports(lines) {
     const raw = m.groups.spec.replace(/\/\/.*$/, '').trim()
     if (!raw) continue
     for (const leaf of expandScalaImport(raw)) {
+      const aliases = leaf.alias && leaf.name && leaf.alias !== leaf.name
+        ? [{ from: leaf.name, to: leaf.alias }]
+        : []
       result.push({
         specifier: leaf.path,
         line: i + 1,
         kind: 'import',
         relative: true,
         imported: leaf.name ? [leaf.name] : [],
+        ...(aliases.length > 0 ? { aliases } : {}),
       })
     }
   }

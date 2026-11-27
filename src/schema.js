@@ -61,8 +61,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v13：JS/TS 具名默认导出符号标记 default（默认导出再导出解析）。
  *  v14：JS/TS 与 Rust 具名导入别名写入 aliases（使用点按本地名扫描）。
  *  v15：Python `__all__`/下划线决定星号导入可见性（starExported）。
- *  v16：C#/Kotlin 导入别名写入 aliases（使用点按本地名扫描）。 */
-export const INDEX_PARSER_VERSION = 16
+ *  v16：C#/Kotlin 导入别名写入 aliases（使用点按本地名扫描）。
+ *  v17：PHP `use … as` 与 Scala 重命名导入保留原名归因并写 aliases。 */
+export const INDEX_PARSER_VERSION = 17
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']
