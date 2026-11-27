@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.172.0] - 2026-11-28
+
+### Security
+
+- **Snapshot manifests are validated as data, not trusted structure**:
+  `repowiki-import` now refuses a manifest whose `schemaVersion` is not the
+  current one (fields may have changed meaning), treats an explicit `count`
+  that disagrees with `files.length` as corruption, and rejects manifests
+  larger than 8 MiB before reading them into memory. Non-object JSON
+  (arrays/scalars) is reported as corrupt instead of being silently treated as
+  an empty manifest. Legacy manifests without `count` still verify normally,
+  and `allowCorrupt` remains the explicit escape hatch.
+
+### Tests
+
+- 548 cases pass (LANG=en and LANG=zh); new coverage asserts unsupported
+  schema versions, count mismatches (files are still checked for detail), the
+  size limit, non-object manifests, and the export→tamper-schema→import
+  end-to-end refusal that writes nothing.
+
 ## [0.171.0] - 2026-11-28
 
 ### Fixed

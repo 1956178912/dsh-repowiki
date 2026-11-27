@@ -33,6 +33,12 @@ const MAX_SNAPSHOT_VERIFY = 20_000
 const SNAPSHOT_VERIFY_CONCURRENCY = 8
 
 /**
+ * 快照清单的大小上限（8 MiB）。清单按每文件约 80 字节计，2 万文件约
+ * 1.6 MiB；超大清单（异常/恶意快照）在解析前就拒绝，避免一次性读入内存。
+ */
+const MAX_SNAPSHOT_MANIFEST_BYTES = 8 * 1024 * 1024
+
+/**
  * 递归复制目录树（仅文本资产文件）。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} srcAbs - 源目录绝对路径。
@@ -151,20 +157,39 @@ export async function writeSnapshotManifest(fs, dirAbs, entries, opts = {}) {
 }
 
 /**
- * 读取快照清单；缺失/损坏分开报告（损坏不抛错）。
+ * 读取快照清单；缺失/损坏/超大分开报告（损坏不抛错）。
+ * 只接受 JSON 对象（数组/标量视为损坏），并在解析前按 stat 大小拒绝
+ * 超大清单，避免异常快照把整份文件读进内存。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} dirAbs - 快照根目录绝对路径。
+ * @param {{maxBytes?:number}} [opts] - 覆盖清单大小上限（仅测试/特殊场景）。
  * @returns {Promise<{exists:boolean, value:object|null, error:string}>} 读取结果。
  */
-export async function readSnapshotManifest(fs, dirAbs) {
+export async function readSnapshotManifest(fs, dirAbs, opts = {}) {
+  const maxBytes = Number.isInteger(opts.maxBytes) && opts.maxBytes > 0
+    ? opts.maxBytes
+    : MAX_SNAPSHOT_MANIFEST_BYTES
   try {
     const target = await fs.resolve(SNAPSHOT_MANIFEST, { cwd: dirAbs })
-    const text = await fs.readText(target)
     try {
-      return { exists: true, value: JSON.parse(text), error: '' }
+      const info = await fs.stat(target)
+      if (info && Number.isFinite(info.size) && info.size > maxBytes) {
+        return { exists: true, value: null, error: `manifest exceeds ${maxBytes} bytes` }
+      }
+    } catch {
+      // 无法 stat 时退回直接读取（后端不支持 stat 的情形）
+    }
+    const text = await fs.readText(target)
+    let parsed
+    try {
+      parsed = JSON.parse(text)
     } catch (err) {
       return { exists: true, value: null, error: err?.message ?? 'invalid JSON' }
     }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { exists: true, value: null, error: 'manifest is not a JSON object' }
+    }
+    return { exists: true, value: parsed, error: '' }
   } catch (err) {
     const missing = err?.code === 'ENOENT' || /not found/i.test(err?.message ?? '')
     return { exists: !missing, value: null, error: missing ? '' : (err?.message ?? String(err)) }
@@ -173,6 +198,8 @@ export async function readSnapshotManifest(fs, dirAbs) {
 
 /**
  * 校验快照清单与实际文件的一致性（只读；默认上限 20000 个文件、8 路并发）。
+ * 清单本身也按不可信输入校验：schemaVersion 必须为当前版本，显式 `count`
+ * 必须与 `files` 长度一致，否则计入 invalid 并使校验失败。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} dirAbs - 快照根目录绝对路径。
  * @param {object} manifest - readSnapshotManifest 的 value。
@@ -197,7 +224,17 @@ export async function verifySnapshot(fs, dirAbs, manifest, opts = {}) {
     mismatchedPaths: [],
     missingPaths: [],
   }
+  // 未知 schema 的清单不能按当前语义解释（字段含义可能已变），直接判无效
+  if (manifest?.schemaVersion !== SNAPSHOT_SCHEMA_VERSION) {
+    result.invalid++
+    return result
+  }
   const files = Array.isArray(manifest?.files) ? manifest.files : []
+  // 显式 count 与 files 长度不符：清单被截断/拼接，不能按“逐文件校验通过”
+  // 就声称完整；缺省 count 的旧清单不判无效（保持兼容）。
+  if (Number.isInteger(manifest?.count) && manifest.count !== files.length) {
+    result.invalid++
+  }
   const safe = []
   const seen = new Set()
   for (const item of files) {

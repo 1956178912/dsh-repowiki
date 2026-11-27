@@ -9,6 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import { copyTree, dirHasContent, readSnapshotManifest, verifySnapshot, writeSnapshotManifest } from '../src/transfer.js'
+import { digestText } from '../src/util.js'
 
 /** 造一个临时目录并写入给定文件。 */
 function makeDir(files) {
@@ -235,6 +236,41 @@ test('快照清单：写入后可验证，篡改/缺失文件被识别', async (
   })
   assert.equal(correct.checked, 1)
   assert.equal(correct.mismatched, 1, '伪造指纹仍会被识别')
+})
+
+test('快照清单：未知 schema 与 count 不一致判为无效', async () => {
+  const dir = makeDir({ 'snapshot/a.md': 'a' })
+  const fs = makeFakeFs(dir)
+  const source = path.join(dir, 'snapshot')
+  const future = await verifySnapshot(fs, source, { schemaVersion: 2, files: [] })
+  assert.equal(future.verified, false)
+  assert.equal(future.invalid, 1, '未知 schema 不能按当前语义校验')
+  assert.equal(future.checked, 0)
+
+  const digest = digestText('a', 16)
+  const listed = { schemaVersion: 1, files: [{ path: 'a.md', digest }] }
+  assert.equal((await verifySnapshot(fs, source, listed)).verified, true, '缺省 count 的清单仍可验证')
+  const badCount = await verifySnapshot(fs, source, { ...listed, count: 3 })
+  assert.equal(badCount.verified, false)
+  assert.equal(badCount.invalid, 1, 'count 与 files 长度不符判无效')
+  assert.equal(badCount.checked, 1, '仍逐文件校验，便于定位问题')
+})
+
+test('readSnapshotManifest：超大/非对象清单在读取阶段拒绝', async () => {
+  const dir = makeDir({
+    'big/_snapshot.json': '{"files":[]}',
+    'array/_snapshot.json': '[]',
+  })
+  const fs = makeFakeFs(dir)
+  const big = await readSnapshotManifest(fs, path.join(dir, 'big'), { maxBytes: 4 })
+  assert.equal(big.exists, true)
+  assert.equal(big.value, null)
+  assert.match(big.error, /exceeds/)
+
+  const arr = await readSnapshotManifest(fs, path.join(dir, 'array'))
+  assert.equal(arr.exists, true)
+  assert.equal(arr.value, null)
+  assert.match(arr.error, /not a JSON object/)
 })
 
 test('快照清单：缺失返回 exists=false，partial 清单校验失败', async () => {

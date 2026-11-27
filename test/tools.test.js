@@ -500,6 +500,28 @@ test('repowiki-import execute：只导入快照清单登记的文件，未登记
   assert.match(rendered[0].text, /Skipped 1 unlisted file\(s\).*wiki\/zh\/injected\.md/)
 })
 
+test('repowiki-import execute：未知清单 schema 被拒绝且不写入资产', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-schema-'))
+  nodefs.writeFileSync(path.join(dir, 'app.ts'), 'export function main() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  await repowikiExportTool(ctx).execute({ target: 'snapshot' }, fakeExec)
+
+  const manifestPath = path.join(dir, 'snapshot', '_snapshot.json')
+  const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
+  manifest.schemaVersion = 2
+  nodefs.writeFileSync(manifestPath, JSON.stringify(manifest))
+
+  nodefs.rmSync(path.join(dir, '.dsh-repowiki'), { recursive: true, force: true })
+  const imported = await repowikiImportTool(ctx).execute({ source: 'snapshot' }, fakeExec)
+  assert.equal(imported.files, 0)
+  assert.equal(imported.snapshotManifest, true)
+  assert.equal(imported.snapshotVerified, false)
+  assert.equal(imported.snapshotProblems, 1)
+  assert.match(imported.hint, /Snapshot verification failed/)
+  assert.ok(!nodefs.existsSync(path.join(dir, '.dsh-repowiki', 'index.json')), '未知 schema 不得导入')
+})
+
 test('repowiki-memory execute：write/list/accept/reject 审核闭环', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-mem-tool-'))
   const ctx = makeCtx(dir)
