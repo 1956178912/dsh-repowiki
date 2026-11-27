@@ -104,6 +104,12 @@ const MAX_GLEAM_MANIFESTS = 20
 const MAX_ZIG_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的 `.nimble` 清单数（Nim 包清单，文件名可变）。
+ * 通常只有一个；上限防御异常仓库。
+ */
+const MAX_NIMBLE_MANIFESTS = 10
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -124,6 +130,7 @@ function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
     || name === 'gleam.toml' || name === 'build.zig.zon'
+    || name.endsWith('.nimble')
 }
 
 /**
@@ -880,6 +887,51 @@ function resolveJuliaInclude(fromRel, specifier, indexed) {
   if (joined.startsWith('..') || joined === '..') return null
   for (const candidate of [joined, `${joined}.jl`]) {
     if (indexed.has(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * 建立 Nim 模块的搜索根：任意层级名为 `src` 的目录（Nim 常见布局），
+ * 最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 搜索根（末项为项目根 ''）。
+ */
+function buildNimRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!rel.endsWith('.nim') && !rel.endsWith('.nims')) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'src') roots.add(segments.slice(0, i + 1).join('/'))
+    }
+  }
+  return [
+    ...[...roots].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Nim 的 `import`/`include` 模块：先按引用文件目录（相对导入），
+ * 再经每个 `src/` 根与项目根映射为 `<module>.nim`/`.nims`；`std/` 与
+ * 外部包不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 模块路径（`utils/helpers` 或 `./local`）。
+ * @param {string[]} roots - 搜索根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveNimSpecifier(fromRel, specifier, roots, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '' || raw.startsWith('/') || raw.includes('\\') || raw.startsWith('std/')) return null
+  for (const base of [path.posix.dirname(fromRel), ...roots]) {
+    const joined = path.posix.normalize(path.posix.join(base, raw))
+    if (joined.startsWith('..') || joined === '..') continue
+    for (const candidate of [`${joined}.nim`, `${joined}.nims`]) {
+      if (indexed.has(candidate)) return candidate
+    }
   }
   return null
 }
@@ -1750,6 +1802,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   elixirModules:Map<string,string>,
  *   luaRoots:string[],
  *   gleamRoots:string[],
+ *   nimRoots:string[],
  *   phpPsr4:Array<{prefix:string, dir:string}>, phpPaths:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1794,6 +1847,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'shell') return resolveShellSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'r') return resolveRSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'julia') return resolveJuliaInclude(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'nim') return resolveNimSpecifier(fromRel, imp.specifier, ctx.nimRoots, ctx.indexed)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }
@@ -1941,6 +1995,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let mixManifestsRead = 0
   let gleamManifestsRead = 0
   let zigManifestsRead = 0
+  let nimbleManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -1979,6 +2034,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedZig) {
       if (zigManifestsRead >= MAX_ZIG_MANIFESTS) continue
       zigManifestsRead++
+    }
+    const nimble = !MANIFEST_FILES[rel] && baseName.endsWith('.nimble')
+    if (nimble) {
+      if (nimbleManifestsRead >= MAX_NIMBLE_MANIFESTS) continue
+      nimbleManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }
@@ -2033,6 +2093,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     elixirModules: buildElixirModules(files),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
+    nimRoots: buildNimRoots(indexed),
     phpPsr4: buildPhpPsr4(manifestTexts),
     phpPaths: buildPhpPaths(indexed),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),

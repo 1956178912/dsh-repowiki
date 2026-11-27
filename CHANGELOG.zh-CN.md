@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.199.0] - 2026-11-28
+
+- **Nim 支持（第 23 种语言）**：`.nim`/`.nims` 提取 `proc`/`func`/
+  `method`/`iterator`/`template`/`macro`/`converter`、`type Name = …`
+  容器与顶层 `const`/`let`/`var`；`*` 后缀标记模块导出，缩进体内部跳过
+  （嵌套例程不浮出），多行签名先定位再计算体范围。`#` 行注释、可嵌套
+  `#[ … ]#` 块注释与字符串（含三引号）先屏蔽。`import`/`from … import`/
+  `include`/`export` 经引用文件目录、每个 `src/` 根与项目根解析到
+  `<module>.nim`/`.nims`；`std/` 与外部包不建边。`*.nimble` 清单提供项目名
+  （文件名）、版本与 `requires` 去重依赖及 Nim 技术映射。Prompt 围栏与
+  面板语言筛选识别 `nim`。
+- **测试**：597 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖全部例程形态、
+  缩进范围、多行签名、`*` 导出、注释/块注释/字符串屏蔽、嵌套例程排除、
+  import/from/include 与相对路径、`.nimble` 依赖过滤，以及 `src/` 根与
+  `../` 解析的索引端到端夹具。
+
 ## [0.198.0] - 2026-11-28
 
 - **Julia 宏修饰声明**：`@kwdef struct` / `Base.@kwdef mutable struct` 识别

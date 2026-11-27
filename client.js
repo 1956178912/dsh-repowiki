@@ -343,6 +343,7 @@ const LANGUAGE_LABELS = {
   shell: 'Shell',
   r: 'R',
   julia: 'Julia',
+  nim: 'Nim',
   c: 'C',
   cpp: 'C++',
 }

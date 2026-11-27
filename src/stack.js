@@ -731,6 +731,40 @@ function juliaProjectInfo(text) {
   return { name, version, dependencies }
 }
 
+/** Nim 包名 → 技术展示名（只收录常用框架/库，其余只计数）。 */
+const NIM_TECH = {
+  jester: 'Jester',
+  karax: 'Karax',
+  chronicles: 'Chronicles',
+  chronos: 'Chronos',
+  asynctools: 'AsyncTools',
+  cligen: 'cligen',
+  norm: 'Norm',
+  nimble: 'Nimble',
+}
+
+/**
+ * 从 `.nimble` 清单读取项目名（文件名）、版本与 `requires` 依赖。
+ * `requires` 行的引号字符串取首个 token 作为包名，剔除 `nim` 自身；
+ * 版本约束（`>= 1.6.0`）不保留。
+ * @param {string} path - 清单相对路径。
+ * @param {string} text - 清单内容。
+ * @returns {{name:string, version:string|undefined, dependencies:string[]}} 元数据。
+ */
+function nimbleInfo(path, text) {
+  const base = path.slice(path.lastIndexOf('/') + 1)
+  const name = base.replace(/\.nimble$/, '')
+  const version = /^\s*version\s*=\s*"([^"]+)"/m.exec(text)?.[1]
+  const dependencies = []
+  for (const m of text.matchAll(/^\s*requires\s+(.+)$/gm)) {
+    for (const quoted of m[1].matchAll(/"([^"]+)"/g)) {
+      const dep = quoted[1].trim().split(/\s+/)[0]
+      if (dep && dep !== 'nim' && !dependencies.includes(dep)) dependencies.push(dep)
+    }
+  }
+  return { name, version, dependencies }
+}
+
 /**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
@@ -929,6 +963,15 @@ export function detectStack(manifests) {
       for (const dep of julia.dependencies) {
         const name = JULIA_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'julia', source: path })
+      }
+    } else if (path.endsWith('.nimble')) {
+      const nimble = nimbleInfo(path, text)
+      info.dependencyCounts.nim = (info.dependencyCounts.nim ?? 0) + nimble.dependencies.length
+      if (!info.projectName && nimble.name) info.projectName = nimble.name
+      if (!info.projectVersion && nimble.version) info.projectVersion = nimble.version
+      for (const dep of nimble.dependencies) {
+        const name = NIM_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'nim', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

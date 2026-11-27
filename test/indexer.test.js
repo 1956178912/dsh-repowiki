@@ -1471,6 +1471,32 @@ test('R：S4 setGeneric/setMethod/setRefClass 符号', async () => {
   assert.equal(cls.exported, true, 'exportClasses 导出 setRefClass')
 })
 
+test('Nim：src 源根解析、相对路径与 .nimble 技术栈', async () => {
+  const dir = makeProject({
+    'demo.nimble': 'version = "0.1.0"\nrequires "nim >= 1.6.0", "jester"\n',
+    'src/demo.nim': 'import app\nimport std/os\n',
+    'src/app.nim': 'import utils/helpers\nproc run*() = discard\n',
+    'src/utils/helpers.nim': 'proc trim*(s: string): string = s\n',
+    'tests/test_app.nim': 'import ../src/app\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { nim: 4 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/demo.nim', 'src/app.nim')?.line, 1, 'src 源根解析')
+  assert.equal(edge('src/app.nim', 'src/utils/helpers.nim')?.line, 1)
+  assert.equal(edge('tests/test_app.nim', 'src/app.nim')?.line, 1, '相对路径归一')
+  assert.equal(doc.edges.filter(e => e.from === 'src/demo.nim').length, 1, 'std/os 不建边')
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.projectVersion, '0.1.0')
+  assert.equal(doc.stack.dependencyCounts.nim, 1)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Jester' && t.source === 'demo.nimble'))
+
+  const app = doc.files.find(f => f.path === 'src/app.nim')
+  assert.ok(app.symbols.some(s => s.name === 'run' && s.exported))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

@@ -8,7 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan, juliaScan } from './symbols.js'
+import { shellScan, juliaScan, nimScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -908,6 +908,49 @@ function extractJuliaImports(lines) {
 }
 
 /**
+ * 提取 Nim 的 `import` / `from … import` / `include` / `export` 引用。
+ * 支持逗号分隔的多模块与引号路径（`include "x.nim"`）；`except`/`as`
+ * 子句不影响模块名。字符串/块注释内的伪 import 由 `nimScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractNimImports(lines) {
+  const result = []
+  const rows = nimScan(lines)
+  const re = /^\s*(import|from|include|export)\s+(.*)$/
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const m = re.exec(row.masked)
+    if (!m) continue
+    const offset = m.index + m[0].length - m[2].length
+    let rest = row.code.slice(offset).trim()
+    const from = /^([A-Za-z_.][\w./]*)\s+import\b/.exec(rest)
+    if (from) {
+      rest = from[1]
+    } else {
+      rest = rest.replace(/\b(?:except|as)\b.*$/, '')
+    }
+    for (const part of rest.split(',')) {
+      let specifier = part.trim()
+      if (specifier === '') continue
+      if ((specifier.startsWith('"') && specifier.endsWith('"'))
+        || (specifier.startsWith("'") && specifier.endsWith("'"))) {
+        specifier = specifier.slice(1, -1)
+      }
+      if (!/^[A-Za-z_.][\w./]*$/.test(specifier)) continue
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: specifier.startsWith('.'),
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -1033,6 +1076,7 @@ export function extractImports(code, lang) {
   if (lang === 'shell') return extractShellImports(lines)
   if (lang === 'r') return extractRImports(lines)
   if (lang === 'julia') return extractJuliaImports(lines)
+  if (lang === 'nim') return extractNimImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

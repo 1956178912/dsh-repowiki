@@ -355,6 +355,19 @@ test('Project.toml：Julia 包名/版本与 deps/extras 依赖', () => {
   assert.ok(info.technologies.some(t => t.name === 'DataFrames' && t.ecosystem === 'julia'))
 })
 
+test('.nimble：项目名/版本与 requires 依赖', () => {
+  const text = [
+    'version = "0.1.0"',
+    'author = "Demo"',
+    'requires "nim >= 1.6.0", "jester", "karax >= 0.3.0"',
+  ].join('\n')
+  const info = detectStack({ 'demo.nimble': text })
+  assert.equal(info.projectName, 'demo')
+  assert.equal(info.projectVersion, '0.1.0')
+  assert.equal(info.dependencyCounts.nim, 2, '剔除 nim 自身')
+  assert.ok(info.technologies.some(t => t.name === 'Jester' && t.ecosystem === 'nim'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

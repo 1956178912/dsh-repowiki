@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.199.0] - 2026-11-28
+
+### Added
+
+- **Nim indexing (23rd language)**: `.nim`/`.nims` files produce
+  `proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`
+  symbols, `type Name = …` containers, and top-level `const`/`let`/`var`.
+  The `*` suffix marks module exports; indentation bodies are skipped so
+  nested routines never surface, and multi-line signatures are resolved
+  before the body range is measured. `#` comments, nested `#[ … ]#` block
+  comments and strings (including triple-quoted) are masked first.
+  `import`/`from … import`/`include`/`export` resolve through the importing
+  file's directory, every `src/` root and the project root to
+  `<module>.nim`/`.nims`; `std/` and external packages stay edge-free.
+  `*.nimble` manifests supply the project name (file stem), version and
+  deduplicated `requires` dependencies with Nim technology mappings. Prompt
+  fences and the panel language filter know `nim`.
+
+### Tests
+
+- 597 cases pass (LANG=en and LANG=zh); new coverage pins every routine
+  form, indentation ranges, multi-line signatures, `*` export, comment/
+  block-comment/string shielding, nested-routine exclusion, import/from/
+  include variants with relative paths, `.nimble` dependency filtering and
+  an indexer fixture proving `src/`-root and `../` resolution.
+
 ## [0.198.0] - 2026-11-28
 
 ### Added

@@ -488,6 +488,27 @@ test('Julia：include 引号路径、动态参数与字符串/块注释内伪引
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
 })
 
+test('Nim：import/from/include、相对路径与字符串内伪引用', () => {
+  const code = [
+    'import std/os, utils/helpers',
+    'import ./local',
+    'from ../shared/mod import thing',
+    'include "templates/base.nim"',
+    'export public_api',
+    '# import commented',
+    'let text = "import fake/mod"',
+  ].join('\n')
+  const imports = extractImports(code, 'nim')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['std/os', 1, false],
+    ['utils/helpers', 1, false],
+    ['./local', 2, true],
+    ['../shared/mod', 3, true],
+    ['templates/base.nim', 4, false],
+    ['public_api', 5, false],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

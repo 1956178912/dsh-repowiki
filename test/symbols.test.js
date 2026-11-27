@@ -1277,6 +1277,59 @@ test('Julia：@kwdef struct 与 @enum 符号', () => {
   assert.equal(byName.get('blue').line, 11)
 })
 
+test('Nim：proc/func/type/const 与缩进范围、* 导出', () => {
+  const code = [
+    'import std/os',
+    '',
+    '# proc commented() = discard',
+    '#[ proc hidden() = discard ]#',
+    '',
+    'proc greet*(name: string): string =',
+    '  "Hello " & name',
+    '',
+    'func add(a, b: int): int =',
+    '  a + b',
+    '',
+    'type Person* = object',
+    '  name*: string',
+    '  age: int',
+    '',
+    'template twice*(body: untyped) =',
+    '  body',
+    '  body',
+    '',
+    'const Version* = "1.0.0"',
+    'let runtime = 1',
+    '',
+    'proc internal() =',
+    '  proc nested() = discard',
+    '  nested()',
+    '',
+    'iterator items*(x: int): int =',
+    '  yield x',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'nim')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('greet').kind, 'function')
+  assert.equal(byName.get('greet').exported, true)
+  assert.equal(byName.get('greet').endLine, 8, '缩进体范围')
+  assert.equal(byName.get('add').exported, false)
+  assert.equal(byName.get('add').endLine, 11)
+  assert.equal(byName.get('Person').kind, 'class')
+  assert.equal(byName.get('Person').exported, true)
+  assert.equal(byName.get('Person').endLine, 15)
+  assert.equal(byName.get('twice').endLine, 19)
+  assert.equal(byName.get('Version').kind, 'variable')
+  assert.equal(byName.get('Version').exported, true)
+  assert.equal(byName.get('runtime').exported, false)
+  assert.equal(byName.get('internal').endLine, 26)
+  assert.equal(byName.get('items').exported, true)
+  assert.equal(byName.get('items').endLine, 28)
+  assert.ok(!byName.has('commented') && !byName.has('hidden'), '注释不产符号')
+  assert.ok(!byName.has('nested'), '嵌套 proc 不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

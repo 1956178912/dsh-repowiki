@@ -178,6 +178,8 @@ export const EXTENSION_LANGS = {
   R: 'r',
   r: 'r',
   jl: 'julia',
+  nim: 'nim',
+  nims: 'nim',
   c: 'c',
   h: 'c',
   cc: 'cpp',

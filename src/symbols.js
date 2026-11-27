@@ -2736,6 +2736,189 @@ function extractJulia(lines) {
 }
 
 /**
+ * 扫描 Nim 源码行：去除 `#` 行注释与可嵌套的 `#[ … ]#` 块注释，并把
+ * 字符串内容（`"`、跨行 `"""`）替换为空格。返回 code/masked 双视图。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 代码行/掩码行。
+ */
+export function nimScan(lines) {
+  const out = []
+  let blockDepth = 0
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (blockDepth > 0) {
+        if (raw.startsWith('#[', i)) { blockDepth++; masked += '  '; i++; continue }
+        if (raw.startsWith(']#', i)) { blockDepth--; masked += '  '; i++; continue }
+        masked += ' '
+        continue
+      }
+      if (quote === '"""') {
+        if (raw.startsWith('"""', i)) {
+          quote = null
+          code += '"""'
+          masked += '   '
+          i += 2
+          continue
+        }
+        code += ch
+        masked += ' '
+        continue
+      }
+      if (quote) {
+        code += ch
+        if (ch === '\\' && i + 1 < raw.length) {
+          code += raw[i + 1]
+          masked += '  '
+          i++
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      if (raw.startsWith('#[', i)) { blockDepth = 1; masked += '  '; i++; continue }
+      if (ch === '#') break
+      if (raw.startsWith('"""', i)) {
+        quote = '"""'
+        code += '"""'
+        masked += '   '
+        i += 2
+        continue
+      }
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 计算一行 Nim 代码的缩进宽度（Tab 按 4 计）。
+ * @param {string} line - 源码行。
+ * @returns {number} 缩进宽度。
+ */
+function nimIndentOf(line) {
+  let width = 0
+  for (const ch of line) {
+    if (ch === ' ') width++
+    else if (ch === '\t') width += 4
+    else break
+  }
+  return width
+}
+
+/**
+ * 计算 Nim 缩进块的结束行（类型体等）：下一个缩进不大于声明缩进的行之前。
+ * @param {string[]} maskedLines - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {number} indent - 声明行缩进。
+ * @returns {number} 结束行（1-based）。
+ */
+function nimBlockEnd(maskedLines, startIdx, indent) {
+  for (let j = startIdx + 1; j < maskedLines.length; j++) {
+    if (maskedLines[j].trim() === '') continue
+    if (nimIndentOf(maskedLines[j]) <= indent) return j
+  }
+  return maskedLines.length
+}
+
+/**
+ * 计算 Nim 例程（proc/func/…）的结束行：先按括号找签名闭合行，再从
+ * 签名后按缩进找体结束（多行签名中的参数行不会提前截断）。
+ * @param {string[]} maskedLines - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {number} indent - 声明行缩进。
+ * @returns {number} 结束行（1-based）。
+ */
+function nimProcEnd(maskedLines, startIdx, indent) {
+  let depth = 0
+  let opened = false
+  let sigEnd = startIdx
+  const limit = Math.min(maskedLines.length, startIdx + 100)
+  for (let j = startIdx; j < limit; j++) {
+    for (const ch of maskedLines[j]) {
+      if (ch === '(' || ch === '[') { depth++; opened = true }
+      else if (ch === ')' || ch === ']') depth--
+    }
+    sigEnd = j
+    if (!opened || depth <= 0) break
+  }
+  for (let j = sigEnd + 1; j < maskedLines.length; j++) {
+    if (maskedLines[j].trim() === '') continue
+    if (nimIndentOf(maskedLines[j]) <= indent) return j
+  }
+  return maskedLines.length
+}
+
+/**
+ * 提取 Nim 符号：`proc`/`func`/`method`/`iterator`/`template`/`macro`/
+ * `converter`、`type Name = …`、顶层 `const`/`let`/`var`。`*` 后缀表示
+ * 从模块导出；缩进体（函数体/类型体）内部不扫描，嵌套例程不登记。
+ * 只识别缩进 0 的声明（Nim 文件即模块）。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractNim(lines) {
+  const maskedLines = nimScan(lines).map(row => row.masked)
+  const symbols = []
+  const declRe = /^(?:proc|func|method|iterator|template|macro|converter)\s+([A-Za-z_]\w*)(\*?)(?=\s|\(|\[|$)/
+  const typeRe = /^type\s+([A-Za-z_]\w*)(\*?)\s*(?:\[[^\]]*\])?\s*=/
+  const valueRe = /^(?:const|let|var)\s+([A-Za-z_]\w*)(\*?)\s*=/
+  let skipUntil = 0
+  for (let i = 0; i < maskedLines.length; i++) {
+    if (i < skipUntil) continue
+    const rawLine = maskedLines[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    const indent = nimIndentOf(rawLine)
+    if (indent !== 0) continue
+    const decl = declRe.exec(line)
+    if (decl) {
+      const end = nimProcEnd(maskedLines, i, indent)
+      symbols.push({
+        name: decl[1],
+        kind: 'function',
+        line: i + 1,
+        endLine: end,
+        exported: decl[2] === '*',
+      })
+      skipUntil = end
+      continue
+    }
+    const type = typeRe.exec(line)
+    if (type) {
+      const end = nimBlockEnd(maskedLines, i, indent)
+      symbols.push({
+        name: type[1],
+        kind: 'class',
+        line: i + 1,
+        endLine: end,
+        exported: type[2] === '*',
+      })
+      skipUntil = end
+      continue
+    }
+    const value = valueRe.exec(line)
+    if (value) {
+      symbols.push({
+        name: value[1],
+        kind: 'variable',
+        line: i + 1,
+        endLine: i + 1,
+        exported: value[2] === '*',
+      })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -2869,6 +3052,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'shell') return extractShell(lines)
   if (lang === 'r') return extractR(lines)
   if (lang === 'julia') return extractJulia(lines)
+  if (lang === 'nim') return extractNim(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }
