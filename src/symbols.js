@@ -2869,6 +2869,8 @@ function extractNim(lines) {
   const symbols = []
   const declRe = /^(?:proc|func|method|iterator|template|macro|converter)\s+([A-Za-z_]\w*)(\*?)(?=\s|\(|\[|$)/
   const typeRe = /^type\s+([A-Za-z_]\w*)(\*?)\s*(?:\[[^\]]*\])?\s*=/
+  const typeBlockRe = /^type\s*$/
+  const typeMemberRe = /^\s+([A-Za-z_]\w*)(\*?)\s*(?:\[[^\]]*\])?\s*=/
   const valueRe = /^(?:const|let|var)\s+([A-Za-z_]\w*)(\*?)\s*=/
   let skipUntil = 0
   for (let i = 0; i < maskedLines.length; i++) {
@@ -2888,6 +2890,27 @@ function extractNim(lines) {
         endLine: end,
         exported: decl[2] === '*',
       })
+      skipUntil = end
+      continue
+    }
+    // `type` 单独一行 + 缩进成员：逐成员登记（字段/枚举值不含 `=`，不误判）
+    if (typeBlockRe.test(line)) {
+      const end = nimBlockEnd(maskedLines, i, indent)
+      for (let j = i + 1; j < end; j++) {
+        const memberRaw = maskedLines[j]
+        if (memberRaw.trim() === '') continue
+        const memberIndent = nimIndentOf(memberRaw)
+        if (memberIndent <= indent) continue
+        const member = typeMemberRe.exec(memberRaw)
+        if (!member) continue
+        symbols.push({
+          name: member[1],
+          kind: 'class',
+          line: j + 1,
+          endLine: nimBlockEnd(maskedLines, j, memberIndent),
+          exported: member[2] === '*',
+        })
+      }
       skipUntil = end
       continue
     }

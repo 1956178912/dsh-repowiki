@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.200.0] - 2026-11-28
+
+### Added
+
+- **Nim `type` block members**: a standalone `type` section — the dominant
+  multi-definition style in Nim modules — now registers every indented
+  `Name* = object`/`enum`/`ref object`/`tuple`/alias definition as its own
+  class symbol. Each member gets an independent indentation range (fields
+  and the next member bound it), the `*` suffix drives the export flag, and
+  field lines (`name*: string`) plus enum-value lines (`red, green`) never
+  leak as symbols. Previously the whole section was skipped after the
+  `type` keyword, so common Nim domain types were invisible to symbol
+  search. `INDEX_PARSER_VERSION` moves to 6 so existing indexes re-parse
+  Nim files.
+
+### Tests
+
+- 598 cases pass (LANG=en and LANG=zh); a fixture pins exported and private
+  `type`-block members, per-member ranges, field/enum-value exclusion and
+  the following routine's line number.
+
 ## [0.199.0] - 2026-11-28
 
 ### Added

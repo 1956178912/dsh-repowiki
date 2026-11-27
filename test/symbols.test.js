@@ -1330,6 +1330,31 @@ test('Nim：proc/func/type/const 与缩进范围、* 导出', () => {
   assert.ok(!byName.has('nested'), '嵌套 proc 不登记')
 })
 
+test('Nim：type 块成员', () => {
+  const code = [
+    'type',
+    '  Person* = object',
+    '    name*: string',
+    '    age: int',
+    '  Color = enum',
+    '    red, green',
+    '',
+    'proc run*() = discard',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'nim')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Person').kind, 'class')
+  assert.equal(byName.get('Person').exported, true)
+  assert.equal(byName.get('Person').endLine, 4)
+  assert.equal(byName.get('Color').kind, 'class')
+  assert.equal(byName.get('Color').exported, false)
+  assert.equal(byName.get('Color').endLine, 7)
+  assert.ok(!byName.has('name') && !byName.has('age'), '字段不登记')
+  assert.ok(!byName.has('red'), '枚举值不登记')
+  assert.equal(byName.get('run').line, 8)
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.199.0）；测试 597/597（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.09%、分支 87.15%、函数 95.49%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.200.0）；测试 598/598（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.09%、分支 87.11%、函数 95.49%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（597/597，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、23 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（598/598，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、23 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -241,5 +241,5 @@
 | Shell 支持 | 20 语言：`function foo`/`function foo()`/`foo() {`（含分行 `{`）与单行函数体、`export`/`readonly`/`declare`/`typeset` 显式变量；普通赋值/`local` 不登记；`#` 注释、引号（含跨行）与 heredoc 屏蔽，`${…}` 不参与配平；`source`/`.` 先脚本目录再项目根，尝试 `.sh`/`.bash`，动态参数不建边 | v0.191.0 |
 | R 支持 | 21 语言：`name <- function(...)`/`name = function(...)`（含 `<<-`）跨行签名、分行 `{`、单行表达式体；`setClass`/`setRefClass`/`R6Class` 类与方法（method + parent）、`setGeneric` 泛型与 `setMethod` 方法（签名类为 parent）；注释/字符串屏蔽；`source`/`sys.source` 先文件目录再项目根（`.R`/`.r`），动态参数不建边；`DESCRIPTION`（DCF）提供包名/版本/依赖计数与技术映射；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定）；`.bats` 并入 Shell | v0.192.0 / v0.194.0 / v0.195.0 / v0.197.0 |
 | Julia 支持 | 22 语言：`module`/`baremodule`、`struct`/`mutable struct`（含 `@kwdef` 宏前缀）、`abstract`/`primitive` 类型、`@enum`（类型 + 非导出枚举值）、`function`（`Type.method` → method + parent）、短函数、`macro`、`const`；函数/结构体/宏体跳过；注释/块注释/三引号屏蔽，`a[end]` 不计 end；含 `module` 的文件按 `export` 标记可见性；`include` 相对引用文件（缺省补 `.jl`），动态参数不建边；`Project.toml` 提供包名/版本/依赖计数与技术映射 | v0.196.0 / v0.198.0 |
-| Nim 支持 | 23 语言：`proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`、`type` 容器、顶层 `const`/`let`/`var`；`*` 后缀导出；缩进体与嵌套例程不登记，多行签名先定位；注释/块注释/字符串（含三引号）屏蔽；`import`/`from … import`/`include`/`export` 经文件目录、`src/` 根与项目根解析（`.nim`/`.nims`），`std/` 外部不建边；`*.nimble` 提供项目名/版本/`requires` 依赖计数与技术映射 | v0.199.0 |
+| Nim 支持 | 23 语言：`proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`、`type` 容器、`type` 单独成段时的缩进成员（逐成员独立范围与 `*` 导出，字段/枚举值不误登记）、顶层 `const`/`let`/`var`；`*` 后缀导出；缩进体与嵌套例程不登记，多行签名先定位；注释/块注释/字符串（含三引号）屏蔽；`import`/`from … import`/`include`/`export` 经文件目录、`src/` 根与项目根解析（`.nim`/`.nims`），`std/` 外部不建边；`*.nimble` 提供项目名/版本/`requires` 依赖计数与技术映射 | v0.200.0 |
 | Wiki 陈旧原因 | `repowiki-status` 输出 `wiki.staleReasons`（`cards`/`graph`/`memory`，值域与顺序同 `verify:wiki`）并在 `Wiki:` 行展示；页面级 stale 计数为 0 时也能区分依赖图/已采信记忆导致的陈旧 | v0.186.0 |
