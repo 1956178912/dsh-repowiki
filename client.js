@@ -116,6 +116,14 @@ const DICTS = {
     hubHint: '被最多文件依赖（改动影响面最大）',
     coreLabel: '核心文件',
     coreHint: '按静态 import 图 PageRank 排名（计入间接重要性，与 fan-in 互补）',
+    baselineLabel: '架构基线',
+    baselineHint: '来自 .dsh-repowiki/arch-baseline.json（npm run verify:arch -- --update 生成）；新增循环与当前索引的强连通分量对比',
+    baselineNewCycles: '新增循环 {n}',
+    baselineNoNewCycles: '无新增循环',
+    baselineResolved: '已修复 {n}',
+    baselineScore: '架构分 {score}',
+    baselineCeilings: '重复块 {duplicates} · 高复杂度 {high} · 最大复杂度 {max}',
+    baselineSample: '新增循环示例：{routes}',
     cycleBadgeHint: '参与 {n} 个文件的循环依赖',
     cycleBadgeRoute: '（如 {route}）',
     openFile: '打开 {path}',
@@ -240,6 +248,14 @@ const DICTS = {
     hubHint: 'Most imported files (largest change impact)',
     coreLabel: 'Core files',
     coreHint: 'Ranked by PageRank over static imports (weights indirect importance, complementing fan-in)',
+    baselineLabel: 'Architecture baseline',
+    baselineHint: 'From .dsh-repowiki/arch-baseline.json (written by npm run verify:arch -- --update); new cycles compare the current strongly connected components with the baseline',
+    baselineNewCycles: 'new cycle(s) {n}',
+    baselineNoNewCycles: 'no new cycles',
+    baselineResolved: 'resolved {n}',
+    baselineScore: 'architecture score {score}',
+    baselineCeilings: 'duplicate blocks {duplicates} · high complexity {high} · max complexity {max}',
+    baselineSample: 'new cycle examples: {routes}',
     cycleBadgeHint: 'Part of a {n}-file import cycle',
     cycleBadgeRoute: ' (e.g. {route})',
     openFile: 'Open {path}',
@@ -838,13 +854,23 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 文件级循环依赖成员（与 src/cycles.js 同口径的强连通分量）。
-     * 前端无法 import src 模块（浏览器 bundle 自包含），故本地实现：
-     * 返回文件 → 所在循环组大小与代表性最短环路径（仅 size ≥ 2 的组）。
-     * @param {object|null} index - 工作区 index.json。
-     * @returns {Map<string, {size:number, sample:string[]}>} 文件 → 循环组信息。
+     * 循环分析缓存：徽章与架构基线对照共用同一份 SCC 结果，
+     * 避免同一 index 在两次渲染中重复 O(V+E) 计算。
      */
-    function cycleInfoFor(index) {
+    const CYCLE_ANALYSIS_CACHE = new WeakMap()
+
+    /**
+     * 文件级循环依赖分析（与 src/cycles.js 同口径的强连通分量）。
+     * 前端无法 import src 模块（浏览器 bundle 自包含），故本地实现：
+     * 返回文件 → 循环组大小/代表性路径，以及排序后的循环组成员（size ≥ 2）。
+     * @param {object|null} index - 工作区 index.json。
+     * @returns {{infos:Map<string, {size:number, sample:string[]}>, groups:string[][]}}
+     *   文件级信息与循环组列表。
+     */
+    function cycleAnalysisFor(index) {
+      if (!index || typeof index !== 'object') return { infos: new Map(), groups: [] }
+      const cached = CYCLE_ANALYSIS_CACHE.get(index)
+      if (cached) return cached
       /** @type {Map<string, Set<string>>} */
       const edgesByFrom = new Map()
       for (const edge of Array.isArray(index?.edges) ? index.edges : []) {
@@ -863,6 +889,8 @@ window.__ModuleLoader__.load({
       const onStack = new Set()
       const stack = []
       const infos = new Map()
+      /** @type {string[][]} */
+      const groups = []
       let nextDiscovery = 0
       for (const start of [...graph.keys()].sort()) {
         if (discovery.has(start)) continue
@@ -905,13 +933,37 @@ window.__ModuleLoader__.load({
             }
             if (group.length > 1) {
               group.sort()
+              groups.push(group)
               const sample = shortestCycleFrom(group[0], graph, new Set(group))
               for (const member of group) infos.set(member, { size: group.length, sample })
             }
           }
         }
       }
-      return infos
+      const result = {
+        infos,
+        groups: groups.sort((a, b) => a.join('\u0000').localeCompare(b.join('\u0000'))),
+      }
+      CYCLE_ANALYSIS_CACHE.set(index, result)
+      return result
+    }
+
+    /**
+     * 文件 → 循环组信息（徽章用）。
+     * @param {object|null} index - 工作区 index.json。
+     * @returns {Map<string, {size:number, sample:string[]}>} 文件级循环信息。
+     */
+    function cycleInfoFor(index) {
+      return cycleAnalysisFor(index).infos
+    }
+
+    /**
+     * 循环组成员列表（架构基线对照用，成员已排序）。
+     * @param {object|null} index - 工作区 index.json。
+     * @returns {string[][]} 排序后的循环组。
+     */
+    function cycleGroupsFor(index) {
+      return cycleAnalysisFor(index).groups
     }
 
     /**
@@ -1680,6 +1732,8 @@ window.__ModuleLoader__.load({
       const [wikiMeta, setWikiMeta] = useState(null)
       const [memories, setMemories] = useState([])
       const [lastExtract, setLastExtract] = useState(null)
+      /** 架构基线（arch-baseline.json）：仅用于面板的附加漂移提示。 */
+      const [archBaseline, setArchBaseline] = useState(null)
       const [tab, setTab] = useState('cards')
       const [wikiSelected, setWikiSelected] = useState(null)
       // 深链目标章节（来自详情引用）；空串表示页面顶部
@@ -1780,6 +1834,7 @@ window.__ModuleLoader__.load({
           setWikiMeta(null)
           setMemories([])
           setLastExtract(null)
+          setArchBaseline(null)
           return
         }
         const requestId = ++latestRequest.current
@@ -1808,8 +1863,20 @@ window.__ModuleLoader__.load({
             setWikiMeta(null)
             setMemories([])
             setLastExtract(null)
+            setArchBaseline(null)
             return
           }
+          // 架构基线是可选的附加信号：缺失、损坏或超过读取预算都不阻断面板
+          let parsedBaseline = null
+          try {
+            const candidate = await readJson(wf, sessionId, `${ASSET_DIR}/arch-baseline.json`, signal)
+            if (candidate && typeof candidate === 'object' && Array.isArray(candidate.cycles)) {
+              parsedBaseline = candidate
+            }
+          } catch {
+            parsedBaseline = null
+          }
+          if (signal.aborted || requestId !== latestRequest.current) return
           const { cards: loaded, locale: cardLocale } = await loadCards(wf, sessionId, localeName(t), signal)
           const wikiResult = await loadWikiEntries(wf, sessionId, localeName(t), signal)
           const manifest = await readWikiManifest(wf, sessionId, wikiResult.locale, signal)
@@ -1819,6 +1886,7 @@ window.__ModuleLoader__.load({
           const knowledgeManifest = await readKnowledgeManifest(wf, sessionId, cardLocale, signal)
           if (signal.aborted || requestId !== latestRequest.current) return
           setIndex(parsedIndex)
+          setArchBaseline(parsedBaseline)
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
@@ -2125,6 +2193,35 @@ window.__ModuleLoader__.load({
       const hubs = useMemo(() => topDependentsFor(index, 3), [index])
       /** 单库视图的核心文件（PageRank 前三，与 src/graph-rank.js 同口径）。 */
       const coreFiles = useMemo(() => coreFilesFor(index, 3), [index])
+      /**
+       * 架构基线漂移：当前 SCC 循环组与 arch-baseline.json 的循环签名对比。
+       * 基线只记录循环组身份、上限与架构分；面板不重算重复块/复杂度。
+       */
+      const baselineDrift = useMemo(() => {
+        if (!archBaseline || !Array.isArray(archBaseline.cycles)) return null
+        const current = cycleGroupsFor(index)
+        const currentKeys = new Set(current.map(group => group.join('\u0000')))
+        const baselineGroups = archBaseline.cycles
+          .filter(group => Array.isArray(group) && group.length > 1)
+          .map(group => [...group].sort())
+        const baselineKeys = new Set(baselineGroups.map(group => group.join('\u0000')))
+        const added = current.filter(group => !baselineKeys.has(group.join('\u0000')))
+        const resolved = baselineGroups.filter(group => !currentKeys.has(group.join('\u0000')))
+        const ceilings = archBaseline.ceilings
+          && Number.isFinite(archBaseline.ceilings.duplicateBlocks)
+          && Number.isFinite(archBaseline.ceilings.highComplexity)
+          && Number.isFinite(archBaseline.ceilings.maxComplexity)
+          ? archBaseline.ceilings
+          : null
+        return {
+          newCycles: added.length,
+          resolvedCycles: resolved.length,
+          sample: added.slice(0, 2).map(group =>
+            group.slice(0, 3).join(' ↔ ') + (group.length > 3 ? ` (+${group.length - 3})` : '')),
+          score: Number.isFinite(archBaseline.architectureScore) ? archBaseline.architectureScore : null,
+          ceilings,
+        }
+      }, [archBaseline, index])
       /** 索引期告警（Go internal 越界、跳过文件等），统计行计数 + 悬停明细。 */
       const indexWarnings = useMemo(
         () => (Array.isArray(index?.warnings) ? index.warnings.filter(w => typeof w === 'string' && w) : []),
@@ -2397,6 +2494,60 @@ window.__ModuleLoader__.load({
               color: 'var(--dsw-alias-label-secondary, #6b7280)',
             },
           }, `${hub.path} (${hub.dependents})`)),
+        ),
+
+        // 架构基线：循环组身份漂移 + 基线记录的上限/架构分（只读提示）
+        !overview && status === 'ready' && index && baselineDrift && h('div', {
+          'aria-label': t('baselineLabel'),
+          title: [
+            t('baselineHint'),
+            baselineDrift.sample.length > 0
+              ? tt('baselineSample', { routes: baselineDrift.sample.join('; ') })
+              : '',
+          ].filter(Boolean).join(' · '),
+          style: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 12 },
+        },
+          h('span', { style: { fontSize: 12, ...muted } }, t('baselineLabel')),
+          h('span', {
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              color: baselineDrift.newCycles > 0
+                ? 'var(--dsw-alias-state-error-primary, #dc2626)'
+                : 'var(--dsw-alias-label-secondary, #6b7280)',
+            },
+          }, baselineDrift.newCycles > 0
+            ? tt('baselineNewCycles', { n: baselineDrift.newCycles })
+            : t('baselineNoNewCycles')),
+          baselineDrift.resolvedCycles > 0 && h('span', {
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              color: 'var(--dsw-alias-state-success-primary, #16a34a)',
+            },
+          }, tt('baselineResolved', { n: baselineDrift.resolvedCycles })),
+          baselineDrift.score !== null && h('span', {
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              color: 'var(--dsw-alias-label-secondary, #6b7280)',
+            },
+          }, tt('baselineScore', { score: baselineDrift.score })),
+          baselineDrift.ceilings && h('span', {
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              color: 'var(--dsw-alias-label-secondary, #6b7280)',
+            },
+          }, tt('baselineCeilings', {
+            duplicates: baselineDrift.ceilings.duplicateBlocks,
+            high: baselineDrift.ceilings.highComplexity,
+            max: baselineDrift.ceilings.maxComplexity,
+          })),
         ),
 
         // 核心文件：静态 import 图 PageRank 前三（计入间接重要性，与 fan-in 互补）

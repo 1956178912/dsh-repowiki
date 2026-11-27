@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.241.0] - 2026-11-28
+
+### Added
+
+- **Panel architecture-baseline row**: the single-workspace view now loads
+  `.dsh-repowiki/arch-baseline.json` and shows new/resolved cycle groups
+  (current strongly connected components compared with the baseline
+  signatures), the baseline architecture score and the recorded
+  duplicate/high-complexity/max-complexity ceilings. New-cycle examples appear
+  in the tooltip. The row is hidden when the baseline is missing, and a
+  corrupt or oversized baseline never blocks the panel.
+- **Shared SCC cache**: cycle analysis is memoized per index object, so the
+  `⟲` badge computation and the baseline comparison reuse one Tarjan pass.
+
+### Tests
+
+- 764 cases pass (LANG=en and LANG=zh); new DOM coverage for the baseline row
+  (new cycle, score, ceilings) and for the no-baseline case where the row must
+  stay hidden.
+
 ## [0.240.0] - 2026-11-28
 
 ### Added

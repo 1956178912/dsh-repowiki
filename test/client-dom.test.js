@@ -434,3 +434,53 @@ test('DOM 集成：卡片分页初始 120，加载更多追加剩余', async () 
   assert.equal(cardTilesOf(container).length, 130, '加载更多后渲染全部')
   assert.equal([...container.querySelectorAll('button')].some((b) => b.textContent === 'loadMore'), false)
 })
+
+test('DOM 集成：架构基线漂移提示（新增循环/架构分/上限）', async () => {
+  const index = {
+    schemaVersion: 6, generatedAt: 'now',
+    stats: { files: 2, symbols: 0, edges: 2 },
+    stack: { technologies: [] }, modules: [],
+    files: [
+      { path: 'src/a.js', module: 'src', lang: 'javascript', digest: 'a', symbols: [], imports: [] },
+      { path: 'src/b.js', module: 'src', lang: 'javascript', digest: 'b', symbols: [], imports: [] },
+    ],
+    edges: [
+      { from: 'src/a.js', to: 'src/b.js', kind: 'import', line: 1, symbols: [] },
+      { from: 'src/b.js', to: 'src/a.js', kind: 'import', line: 1, symbols: [] },
+    ],
+  }
+  const baseline = {
+    schemaVersion: 1, cycles: [], layerViolations: [], unresolvedImports: [],
+    ceilings: { duplicateBlocks: 2, highComplexity: 3, maxComplexity: 22 },
+    architectureScore: 81,
+  }
+  const makeWf = (extra) => {
+    const files = { '.dsh-repowiki/index.json': JSON.stringify(index), ...extra }
+    const dirs = { '.dsh-repowiki': Object.keys(extra).map(rel => ({ name: rel.split('/').pop(), type: 'file' })) }
+    return {
+      async read(_sid, rel) {
+        if (files[rel] === undefined) {
+          return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
+        }
+        return { ok: true, value: { text: files[rel], lines: files[rel].split('\n').length, offset: 1, eof: true } }
+      },
+      async list(_sid, rel) {
+        if (dirs[rel]) return { ok: true, value: { path: rel, entries: dirs[rel], truncated: false } }
+        return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
+      },
+    }
+  }
+
+  const { container } = await mountLoaded({
+    Page,
+    wf: makeWf({ '.dsh-repowiki/arch-baseline.json': JSON.stringify(baseline) }),
+  })
+  const text = container.textContent
+  assert.ok(text.includes('baselineLabel'), '存在基线时应渲染架构基线行')
+  assert.ok(text.includes('baselineNewCycles'), '基线无循环、当前 a↔b → 新增循环')
+  assert.ok(text.includes('baselineScore'), '应展示基线记录的架构分')
+  assert.ok(text.includes('baselineCeilings'), '应展示基线记录的重复块/复杂度上限')
+
+  const { container: without } = await mountLoaded({ Page, wf: makeWf({}) })
+  assert.ok(!without.textContent.includes('baselineLabel'), '无基线文件时不渲染该行')
+})
