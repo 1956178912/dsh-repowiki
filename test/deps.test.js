@@ -857,3 +857,25 @@ test('Ada：with/limited with/private with 提取，use 与 generic 形式参数
     [3, 'Demo.Secret', false],
   ])
 })
+
+test('SystemVerilog：`include 与 import 提取，注释/字符串屏蔽', () => {
+  const code = [
+    '/* `include "commented.svh"',
+    '   import fake_pkg::*; */',
+    '`include "defs.svh"',
+    '`include <vendor/top.svh>',
+    '// `include "nope.svh"',
+    'import fifo_pkg::*;',
+    'import types_pkg::state_t, util_pkg::*;',
+    'module m; string s = "`include \\"str.svh\\""; endmodule',
+  ].join('\n')
+  const imports = extractImports(code, 'systemverilog')
+  assert.deepEqual(imports.map(item => [item.line, item.specifier, item.kind, item.relative]), [
+    [3, 'defs.svh', 'require', true],
+    [4, 'vendor/top.svh', 'require', false],
+    [6, 'fifo_pkg', 'import', false],
+    [7, 'types_pkg', 'import', false],
+    [7, 'util_pkg', 'import', false],
+  ])
+  assert.deepEqual(imports.filter(item => item.kind === 'import').map(item => item.imported), [[], ['state_t'], []])
+})

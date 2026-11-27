@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan, vbnetScan, tclScan, fsharpScan, adaScan,
+  nixScan, vbnetScan, tclScan, fsharpScan, adaScan, verilogScan,
 } from './symbols.js'
 
 /**
@@ -1543,6 +1543,50 @@ function extractAdaImports(lines) {
 }
 
 /**
+ * 提取 Verilog/SystemVerilog 依赖：`` `include "…" ``/`` `include <…> ``
+ * 与 SystemVerilog 的 `import pkg::*;` / `import pkg::sym;`。
+ *
+ * 注释与字符串按 `verilogScan` 屏蔽：注释里的伪 include/import 不产生
+ * 引用，而 include 的路径字符串保留在 `code` 视图里。`` `include `` 记为
+ * `require`（文件包含；引号形式标记为相对，先查引用方目录，尖括号形式
+ * 只经 include 根查找）；`import` 的 specifier 是包名，由索引器按
+ * 包/容器名映射解析。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractVerilogImports(lines) {
+  const { code } = verilogScan(lines)
+  const result = []
+  for (let i = 0; i < code.length; i++) {
+    const include = /^\s*`include\s*(?:<(?<angle>[^>]+)>|"(?<quote>[^"]+)")/.exec(code[i])
+    if (include) {
+      result.push({
+        specifier: include.groups.quote ?? include.groups.angle,
+        line: i + 1,
+        kind: 'require',
+        relative: include.groups.quote !== undefined,
+        imported: [],
+      })
+      continue
+    }
+    const imports = /^\s*import\s+(?<body>[^;]+);/.exec(code[i])
+    if (!imports) continue
+    for (const part of imports.groups.body.split(',')) {
+      const m = /^\s*([A-Za-z_]\w*)\s*::\s*(?:\*|([A-Za-z_]\w*))/.exec(part)
+      if (!m) continue
+      result.push({
+        specifier: m[1],
+        line: i + 1,
+        kind: 'import',
+        relative: false,
+        imported: m[2] ? [m[2]] : [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -1590,6 +1634,7 @@ export function extractImports(code, lang) {
   if (lang === 'tcl') return extractTclImports(lines)
   if (lang === 'fsharp') return extractFsharpImports(lines)
   if (lang === 'ada') return extractAdaImports(lines)
+  if (lang === 'verilog' || lang === 'systemverilog') return extractVerilogImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -186,6 +186,8 @@ export function fenceLang(lang) {
     case 'tcl': return 'tcl'
     case 'fsharp': return 'fsharp'
     case 'ada': return 'ada'
+    case 'verilog': return 'verilog'
+    case 'systemverilog': return 'systemverilog'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

@@ -5,6 +5,42 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.237.0] - 2026-11-28
+
+### Added
+
+- **Verilog and SystemVerilog indexing (40th/41st languages)**: `.v`/`.vh`
+  and `.sv`/`.svh` files are now indexed. `module`, `interface`,
+  `interface class`, `package`, `program` and `class` declarations become
+  containers with `end*`-matched ranges (one-line blocks included);
+  `function`/`task` declarations handle `automatic`/`static`/`virtual`/
+  `local`/`protected` modifiers, out-of-class `C::f` definitions (method with
+  `parent`) and `extern`/`pure virtual` prototypes that keep their
+  declaration-header range. `typedef` (enum/struct/union bodies and simple
+  aliases) becomes a type, and container-level `parameter`/`localparam`
+  (`parameter type` → type) plus `` `define `` macros are indexed. Multi-line
+  headers, `#(...)` parameter lists and brace-bearing typedefs produce correct
+  ranges, while `//`/`/* */` comments, strings and `` `define `` continuations
+  are masked so they cannot fabricate symbols.
+- **Verilog dependency edges**: `` `include "..." `` resolves from the
+  importing file's directory through `include`/`inc`/`src`/`rtl`/`hdl` roots
+  and the project root (angle-bracket includes skip the file directory), and
+  SystemVerilog `import pkg::*;` / `import pkg::sym;` resolve through a
+  package/module/interface/class name map. External headers and packages stay
+  edge-free.
+- **Coq disambiguation**: `.v` is shared with Coq, so files with Coq
+  declarations and no HDL structural markers are classified as `coq` (indexed
+  without symbols) instead of being misread as Verilog; the panel shows a
+  readable `Coq`/`Verilog`/`SystemVerilog` label.
+
+### Tests
+
+- 753 cases pass (LANG=en and LANG=zh); new coverage for
+  package/typedef/parameter/function/task ranges, class/interface prototypes,
+  out-of-class definitions, comment/string/macro-continuation shielding,
+  unclosed-block ranges, `include`/`import` extraction and resolution, and the
+  `.v` Coq content check.
+
 ## [0.236.0] - 2026-11-28
 
 ### Added

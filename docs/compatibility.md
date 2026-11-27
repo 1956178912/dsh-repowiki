@@ -68,6 +68,8 @@
 | Nim | `proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`、`type Name = …` 容器、`type` 单独成段时的缩进成员（`Name* = object`/`enum`/`ref object`/`tuple`/别名，逐成员独立范围与 `*` 导出）、顶层 `const`/`let`/`var`；`*` 后缀标记导出；缩进体内部与嵌套例程不登记；只识别缩进 0 的声明 | `import`/`from … import`/`include`/`export` 经引用文件目录、每个 `src/` 根与项目根解析 `<module>.nim`/`.nims`；`std/` 与外部包不建边；`*.nimble` 提供项目名（文件名）/版本/`requires` 依赖 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
+| Verilog | `module`（含 `macromodule`）与 `package`/`program`/`class`（class 容器）、`interface`（interface）、`function`/`task`（function；class/interface 内或 `C::f` 限定名为 method，带 `parent`；`extern`/`pure virtual` 原型只占声明头，`local`/`protected` 非导出）、`typedef`（enum/struct/union 体与简单别名，type）、容器内 `parameter`/`localparam`（variable；`parameter type` 为 type）与 `` `define `` 宏（variable）；`//`、`/* */`、双引号字符串与 `` `define `` 续行屏蔽；`end*` 关键字按类型配对，单行块可识别，未闭合块保守延伸到文件尾 | `` `include `` 引号形式先查引用方目录，再经任意层级 `include`/`inc`/`src`/`rtl`/`hdl` 根与项目根；尖括号形式跳过文件目录；外部头文件不建边 |
+| SystemVerilog | 同 Verilog（同一提取器）；`interface class`/`virtual class` 记为 class | 同 Verilog；`import pkg::*;` / `import pkg::sym;` 按 package/module/interface/class 容器名映射到声明文件（同名取字典序最小文件），外部包不建边 |
 
 已知限制：轻量解析不覆盖多行签名、单行类体成员、宏展开、完整泛型与条件编译；
 C#/Kotlin/Scala 的命名空间解析优先按“点分路径后缀/前缀”匹配（不解析完整
@@ -77,7 +79,7 @@ C#/Kotlin/Scala 的命名空间解析优先按“点分路径后缀/前缀”匹
 `endLine` 精度，不影响符号名）。Scala 3 的缩进语法（无花括号的
 `enum`/`object` 体）已按缩进推导类型与 `def` 的块范围；`extension` 方法
 归属被扩展类型，`given` 实例登记为 variable 且内部方法归属该实例（匿名
-given 以类型名登记）。宏展开与条件编译仍不解析；Scala 声明头可跨行
+given 以类型名登记）。宏展开与条件编译仍不解析；`.v` 与 Coq 共用扩展名，索引时按内容识别（含 Coq 声明且无 HDL 结构标记的文件记为 `coq` 且不提取符号，无法判断时保持 Verilog）；Scala 声明头可跨行
 （参数逐行书写、`extends` 续行），缩进体从签名结束行开始计算。JS/TS 别名按文件
 所在目录的就近配置解析（根配置兜底），不跟随 `extends` 链；工作区包只
 按 `exports`/`main` 等入口与源码目录解析，不读取 `node_modules`，入口

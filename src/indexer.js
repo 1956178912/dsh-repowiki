@@ -2246,6 +2246,115 @@ function resolveCppInclude(fromRel, specifier, indexed, roots = [''], relative =
 }
 
 /**
+ * Verilog/SystemVerilog 源码扩展名集合（用于识别 include 根）。
+ */
+const VERILOG_SOURCE_EXTS = ['.v', '.vh', '.sv', '.svh']
+
+/**
+ * 建立 Verilog include 的候选根：任意层级 `include` / `inc` / `src` /
+ * `rtl` / `hdl` 目录（常见的源码与头文件布局），最后回退项目根。
+ * 按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 候选根（根目录为 ''）。
+ */
+function buildVerilogRoots(paths) {
+  const dirs = new Set()
+  for (const rel of paths) {
+    if (!VERILOG_SOURCE_EXTS.some(ext => rel.endsWith(ext))) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'include' || segments[i] === 'inc' || segments[i] === 'src'
+        || segments[i] === 'rtl' || segments[i] === 'hdl') {
+        dirs.add(segments.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+  return [
+    ...[...dirs].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Verilog 的 `` `include ``：引号形式先按引用方文件目录（预处理器的
+ * 第一搜索位），两种形式都再依次尝试 include/src/rtl/hdl 根与项目根；
+ * 尖括号形式不从文件目录起查，系统/外部头文件不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - include 的路径（如 `defs.svh`）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @param {string[]} [roots] - include 候选根（默认仅项目根）。
+ * @param {boolean} [relative] - 是否为引号形式（先查文件目录）。
+ * @returns {string|null} 命中的文件相对路径。
+ */
+function resolveVerilogInclude(fromRel, specifier, indexed, roots = [''], relative = true) {
+  if (specifier.startsWith('/') || specifier === '') return null
+  const candidates = []
+  if (relative) {
+    candidates.push(path.posix.normalize(path.posix.join(path.posix.dirname(fromRel), specifier)))
+  }
+  for (const root of roots) {
+    candidates.push(path.posix.normalize(root === '' ? specifier : `${root}/${specifier}`))
+  }
+  for (const candidate of candidates) {
+    if (indexed.has(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * 建立 Verilog/SystemVerilog 容器名（package/module/interface/class）→
+ * 文件索引：`import pkg::*` 只引用 package，但容器名共用一张表即可覆盖
+ * （模块名不会被 import 语法引用，同名冲突取字典序最小文件，保证确定性）。
+ * @param {Array<{path:string, lang:string, symbols?:Array}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 容器名 → 文件相对路径。
+ */
+function buildVerilogUnits(files) {
+  const units = new Map()
+  for (const file of files) {
+    if (file.lang !== 'verilog' && file.lang !== 'systemverilog') continue
+    for (const symbol of file.symbols ?? []) {
+      if (symbol?.kind !== 'class' && symbol?.kind !== 'interface') continue
+      if (typeof symbol.name !== 'string' || !/^[A-Za-z_]\w*$/.test(symbol.name)) continue
+      const existing = units.get(symbol.name)
+      if (existing === undefined || file.path < existing) units.set(symbol.name, file.path)
+    }
+  }
+  return units
+}
+
+/**
+ * 解析 SystemVerilog 的 `import pkg::*`：包名大小写敏感，未在索引中声明
+ * 的外部包（厂商库/DPI 包）返回 null，不建边。
+ * @param {string} specifier - 包名。
+ * @param {Map<string,string>} units - 容器名 → 文件。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveVerilogUnit(specifier, units) {
+  if (typeof specifier !== 'string') return null
+  return units.get(specifier) ?? null
+}
+
+/**
+ * Coq 声明行（`.v` 与 Coq 共用扩展名，按内容识别，避免把证明脚本当
+ * Verilog 索引）。
+ */
+const COQ_MARKERS = /^\s*(?:Require\s+(?:Import|Export)\b|From\s+\S+\s+Require\b|(?:Theorem|Lemma|Definition|Inductive|Coinductive|Fixpoint|CoFixpoint|Axiom|Hypothesis|Proof|Qed)\b)/m
+
+/** Verilog/SystemVerilog 的结构性标记（出现即按 HDL 处理）。 */
+const HDL_MARKERS = /^\s*(?:`(?:timescale|include|define|ifdef|ifndef|module)\b|(?:module|macromodule|interface|package|program)\s+[A-Za-z_]\w*|end(?:module|interface|package|class|function|task|program)\b)/m
+
+/**
+ * 判断 `.v` 文件是否为 Coq 源码：有 Coq 声明且无 HDL 结构标记。
+ * 纯 `define` 头文件按 HDL 处理；无法判断时保持 Verilog（扩展名主语义）。
+ * @param {string} text - 源码文本。
+ * @returns {boolean} 是否按 Coq 归类。
+ */
+function isCoqSource(text) {
+  if (typeof text !== 'string' || text === '') return false
+  return COQ_MARKERS.test(text) && !HDL_MARKERS.test(text)
+}
+
+/**
  * 建立 SwiftPM 目标索引：优先使用 Package.swift 声明的自定义 `path:`，
  * 其余 target 按 `Sources/<Target>/…` 与旧版 `Source/<Target>/…` 约定
  * 解析；声明了 path 但目录内无 Swift 文件的目标不建边（不猜测）。
@@ -2566,6 +2675,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   pascalUnits:Map<string,string>,
  *   adaUnits:Map<string,{spec?:string, body?:string}>,
  *   fsharpModules:Map<string,string>,
+ *   verilogRoots:string[], verilogUnits:Map<string,string>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   clojureRoots:string[],
@@ -2617,6 +2727,13 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
   if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
   if (lang === 'ada') return resolveAdaUnit(imp.specifier, ctx.adaUnits)
+  if (lang === 'verilog' || lang === 'systemverilog') {
+    // `include 记为 require（文件包含），`import pkg::* 记为 import（包引用）
+    if (imp.kind === 'require') {
+      return resolveVerilogInclude(fromRel, imp.specifier, ctx.indexed, ctx.verilogRoots, imp.relative)
+    }
+    return resolveVerilogUnit(imp.specifier, ctx.verilogUnits)
+  }
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
   if (lang === 'tcl') return resolveTclSource(fromRel, imp.specifier, ctx.indexed)
@@ -2658,7 +2775,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
 async function indexOneFile(fs, entry, previousFiles, allowReuse) {
   const { abs, rel } = entry
   const ext = rel.slice(rel.lastIndexOf('.') + 1)
-  const lang = EXTENSION_LANGS[ext]
+  let lang = EXTENSION_LANGS[ext]
   let text
   try {
     const target = await fs.resolve(abs)
@@ -2667,12 +2784,14 @@ async function indexOneFile(fs, entry, previousFiles, allowReuse) {
     return { file: null, kind: 'skipped', reason: 'unreadable' }
   }
   if (text.length > MAX_FILE_BYTES) return { file: null, kind: 'skipped', reason: 'too-large' }
+  // `.v` 与 Coq 共用扩展名：按内容识别，避免把证明脚本标成 Verilog
+  if (ext === 'v' && lang === 'verilog' && isCoqSource(text)) lang = 'coq'
   const digest = digestText(text)
   const cached = previousFiles.get(rel)
   let symbols
   let imports
   let kind
-  if (allowReuse && cached && cached.digest === digest
+  if (allowReuse && cached && cached.digest === digest && cached.lang === lang
     && Array.isArray(cached.symbols) && Array.isArray(cached.imports)) {
     // 内容未变：复用旧条目的解析结果（提取是 CPU 大头；读盘省不了）
     symbols = cached.symbols
@@ -2915,6 +3034,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     pascalUnits: buildPascalUnits(files),
     adaUnits: buildAdaUnits(files),
     fsharpModules: buildFsharpModules(files),
+    verilogRoots: buildVerilogRoots(indexed),
+    verilogUnits: buildVerilogUnits(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
     clojureRoots: buildClojureRoots(indexed),

@@ -2285,3 +2285,138 @@ test('Ada：注释与字符串中的 end/private 不干扰范围', () => {
   assert.deepEqual([byName.get('Show').line, byName.get('Show').endLine], [4, 7])
   assert.equal(byName.get('Msg').kind, 'variable')
 })
+
+test('SystemVerilog：package/typedef/parameter/function/task 与范围', () => {
+  const code = [
+    'package fifo_pkg;',
+    '  typedef enum logic [1:0] {',
+    '    IDLE,',
+    '    RUN',
+    '  } state_t;',
+    '  typedef struct packed {',
+    '    logic [7:0] data;',
+    '    logic       valid;',
+    '  } beat_t;',
+    '  localparam int DEPTH = 16;',
+    '  parameter type data_t = logic [7:0];',
+    'endpackage',
+    '',
+    'module fifo #(',
+    '  parameter int WIDTH = 8,',
+    '  parameter int ALMOST = WIDTH - 1',
+    ') (',
+    '  input logic clk,',
+    '  input logic rst_n',
+    ');',
+    '  typedef logic [WIDTH-1:0] word_t;',
+    '  function automatic int unsigned count(input logic v);',
+    '    return v ? 1 : 0;',
+    '  endfunction',
+    '  task automatic tick(input int n);',
+    '  endtask',
+    'endmodule',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'systemverilog')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('fifo_pkg').kind, 'class')
+  assert.deepEqual([byName.get('fifo_pkg').line, byName.get('fifo_pkg').endLine], [1, 12])
+  assert.equal(byName.get('state_t').kind, 'type')
+  assert.deepEqual([byName.get('state_t').line, byName.get('state_t').endLine], [2, 5])
+  assert.equal(byName.get('beat_t').kind, 'type')
+  assert.deepEqual([byName.get('beat_t').line, byName.get('beat_t').endLine], [6, 9])
+  assert.equal(byName.get('DEPTH').kind, 'variable')
+  assert.equal(byName.get('DEPTH').exported, false, 'localparam 非导出')
+  assert.equal(byName.get('DEPTH').parent, 'fifo_pkg')
+  assert.equal(byName.get('data_t').kind, 'type')
+  assert.equal(byName.get('data_t').parent, 'fifo_pkg')
+  assert.equal(byName.get('fifo').kind, 'class')
+  assert.deepEqual([byName.get('fifo').line, byName.get('fifo').endLine], [14, 27])
+  assert.equal(byName.get('word_t').kind, 'type')
+  assert.equal(byName.get('word_t').parent, 'fifo')
+  assert.equal(byName.get('count').kind, 'function', '模块内函数不是 method')
+  assert.deepEqual([byName.get('count').line, byName.get('count').endLine], [22, 24])
+  assert.equal(byName.get('tick').kind, 'function')
+  assert.deepEqual([byName.get('tick').line, byName.get('tick').endLine], [25, 26])
+  // 模块头部的 parameter 不登记（只登记容器体内的语句级声明）
+  assert.equal(byName.has('WIDTH'), false)
+  assert.equal(byName.has('ALMOST'), false)
+})
+
+test('SystemVerilog：class/interface class、原型与类外定义', () => {
+  const code = [
+    'interface class bus_c;',
+    '  pure virtual function void send(int x);',
+    '  virtual function void recv();',
+    '  endfunction',
+    '  extern function int peek();',
+    '  local function int hidden();',
+    '  endfunction',
+    'endclass',
+    '',
+    'class driver extends base;',
+    '  function new(string name = "d");',
+    '  endfunction',
+    '  virtual function void run();',
+    '  endfunction',
+    'endclass',
+    '',
+    'function void driver::stop();',
+    'endfunction',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'systemverilog')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('bus_c').kind, 'class')
+  assert.deepEqual([byName.get('bus_c').line, byName.get('bus_c').endLine], [1, 8])
+  assert.equal(byName.get('send').kind, 'method')
+  assert.deepEqual([byName.get('send').line, byName.get('send').endLine], [2, 2], '纯虚原型不展开')
+  assert.equal(byName.get('recv').kind, 'method')
+  assert.deepEqual([byName.get('recv').line, byName.get('recv').endLine], [3, 4])
+  assert.deepEqual([byName.get('peek').line, byName.get('peek').endLine], [5, 5], 'extern 原型不展开')
+  assert.deepEqual([byName.get('hidden').line, byName.get('hidden').endLine], [6, 7])
+  assert.equal(byName.get('hidden').exported, false, 'local 方法非导出')
+  assert.equal(byName.get('driver').kind, 'class')
+  assert.deepEqual([byName.get('driver').line, byName.get('driver').endLine], [10, 15])
+  assert.deepEqual([byName.get('new').line, byName.get('new').endLine], [11, 12])
+  assert.equal(byName.get('new').parent, 'driver')
+  assert.equal(byName.get('stop').kind, 'method')
+  assert.equal(byName.get('stop').parent, 'driver')
+  assert.deepEqual([byName.get('stop').line, byName.get('stop').endLine], [17, 18])
+})
+
+test('Verilog：注释/字符串/宏续行不产生假符号，未闭合模块保守收尾', () => {
+  const code = [
+    '// module fake_one; endmodule',
+    '/* module fake_two;',
+    '   endmodule */',
+    'module real_one;',
+    '  string s = "endmodule";',
+    '  function void f();',
+    '  endfunction',
+    'endmodule',
+    '`define MACRO(a) \\',
+    '  module fake_three; endmodule',
+    'module real_two;',
+    '  // endmodule',
+    'endmodule',
+    '',
+    'module one_liner; endmodule',
+    'module open_ended;',
+    '  function void g();',
+    '  endfunction',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'verilog')
+  const names = symbols.map(s => s.name)
+  assert.equal(names.includes('fake_one'), false)
+  assert.equal(names.includes('fake_two'), false)
+  assert.equal(names.includes('fake_three'), false)
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.deepEqual([byName.get('real_one').line, byName.get('real_one').endLine], [4, 8])
+  assert.deepEqual([byName.get('f').line, byName.get('f').endLine], [6, 7])
+  assert.deepEqual([byName.get('real_two').line, byName.get('real_two').endLine], [11, 13])
+  assert.equal(byName.get('MACRO').kind, 'variable')
+  assert.deepEqual([byName.get('one_liner').line, byName.get('one_liner').endLine], [15, 15], '单行块不延伸到后续行')
+  assert.deepEqual([byName.get('open_ended').line, byName.get('open_ended').endLine], [16, 18], '未闭合时保守延伸到文件尾')
+  assert.deepEqual([byName.get('g').line, byName.get('g').endLine], [17, 18])
+})

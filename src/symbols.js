@@ -5463,6 +5463,401 @@ function extractAda(lines) {
 }
 
 /**
+ * Verilog/SystemVerilog 的注释/字符串屏蔽（双视图）。
+ *
+ * `//` 行注释与 `/* … *\/` 块注释在两个视图里都置空；字符串只在 `masked`
+ * 视图中置空（保留引号位置），`code` 视图保留字符串内容，供 `` `include ``
+ * 提取路径使用。Verilog 的字符串不支持跨行（未闭合的引号按行尾结束），
+ * 因此不需要跨行状态。
+ * @param {string[]} lines - 代码行。
+ * @returns {{code:string[], masked:string[]}} 去注释原行与等长掩码行。
+ */
+export function verilogScan(lines) {
+  const code = []
+  const masked = []
+  let inBlock = false
+  for (const raw of lines) {
+    let visible = ''
+    let blank = ''
+    let inString = false
+    let escaped = false
+    let i = 0
+    while (i < raw.length) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') {
+          visible += '  '
+          blank += '  '
+          inBlock = false
+          i += 2
+        } else {
+          visible += ' '
+          blank += ' '
+          i++
+        }
+        continue
+      }
+      if (inString) {
+        if (escaped) {
+          visible += ch
+          blank += ' '
+          escaped = false
+        } else if (ch === '\\') {
+          visible += ' '
+          blank += ' '
+          escaped = true
+        } else if (ch === '"') {
+          visible += '"'
+          blank += '"'
+          inString = false
+        } else {
+          visible += ch
+          blank += ' '
+        }
+        i++
+        continue
+      }
+      if (ch === '/' && next === '/') {
+        const padding = raw.length - i
+        visible += ' '.repeat(padding)
+        blank += ' '.repeat(padding)
+        break
+      }
+      if (ch === '/' && next === '*') {
+        visible += '  '
+        blank += '  '
+        inBlock = true
+        i += 2
+        continue
+      }
+      if (ch === '"') {
+        inString = true
+        visible += '"'
+        blank += '"'
+        i++
+        continue
+      }
+      visible += ch
+      blank += ch
+      i++
+    }
+    code.push(visible)
+    masked.push(blank)
+  }
+  return { code, masked }
+}
+
+/** Verilog/SystemVerilog 关键字（禁止被误识别为声明名）。 */
+const VERILOG_KEYWORDS = new Set([
+  'module', 'endmodule', 'macromodule', 'interface', 'endinterface',
+  'package', 'endpackage', 'class', 'endclass', 'program', 'endprogram',
+  'function', 'endfunction', 'task', 'endtask', 'typedef', 'parameter',
+  'localparam', 'import', 'export', 'input', 'output', 'inout', 'ref',
+  'logic', 'bit', 'byte', 'int', 'integer', 'shortint', 'longint', 'real',
+  'realtime', 'time', 'string', 'void', 'automatic', 'static', 'virtual',
+  'pure', 'extern', 'local', 'protected', 'begin', 'end', 'generate',
+  'endgenerate', 'genvar', 'if', 'else', 'for', 'foreach', 'while', 'case',
+  'endcase', 'return', 'assign', 'always', 'always_comb', 'always_ff',
+  'always_latch', 'initial', 'final',
+])
+
+/** 函数/任务声明前的修饰符（可叠加，顺序不限）。 */
+const VERILOG_SUB_QUALIFIERS = /^(?:(?:static|automatic|virtual|extern|pure|local|protected)\s+)*/
+
+/** 可承载符号的容器块类型（函数/任务不算容器）。 */
+const VERILOG_CONTAINERS = new Set(['module', 'interface', 'package', 'class', 'program'])
+
+/**
+ * 定位 Verilog 声明头的结束行：`;` 且圆/方/花括号均已配平。
+ * 参数列表、typedef 的 enum/struct 体都可跨行，成员体内的 `;` 不计终结。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 声明起始行索引（0-based）。
+ * @param {number} [maxScan] - 最大扫描行数（默认 60）。
+ * @returns {number} 终结行索引；未找到时退回起始行。
+ */
+function verilogTerminator(masked, startIdx, maxScan = 60) {
+  let paren = 0
+  let brace = 0
+  let bracket = 0
+  const limit = Math.min(masked.length, startIdx + maxScan)
+  for (let i = startIdx; i < limit; i++) {
+    for (const ch of masked[i]) {
+      if (ch === '(') paren++
+      else if (ch === ')') paren = Math.max(0, paren - 1)
+      else if (ch === '{') brace++
+      else if (ch === '}') brace = Math.max(0, brace - 1)
+      else if (ch === '[') bracket++
+      else if (ch === ']') bracket = Math.max(0, bracket - 1)
+      else if (ch === ';' && paren === 0 && brace === 0 && bracket === 0) return i
+    }
+  }
+  return startIdx
+}
+
+/**
+ * 拼接声明头并压缩空白（跨行声明的名称/类型解析基准）。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 起始行索引。
+ * @param {number} endIdx - 终结行索引。
+ * @returns {string} 单行声明头。
+ */
+function verilogHeader(masked, startIdx, endIdx) {
+  return masked.slice(startIdx, endIdx + 1).join(' ').replace(/\s+/g, ' ').trim()
+}
+
+/** 各类块对应的结束关键字（单行块识别用）。 */
+const VERILOG_END_WORDS = {
+  module: 'endmodule',
+  interface: 'endinterface',
+  package: 'endpackage',
+  class: 'endclass',
+  program: 'endprogram',
+  function: 'endfunction',
+  task: 'endtask',
+}
+
+/**
+ * 判断声明头结束行的 `;` 之后是否已在同一行收尾（`module m; endmodule`、
+ * `function int f; return 1; endfunction` 这类单行块）。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} endIdx - 声明头终结行索引。
+ * @param {string} type - 块类型。
+ * @returns {boolean} 同一行是否出现对应 `end*` 关键字。
+ */
+function verilogClosesInline(masked, endIdx, type) {
+  const line = masked[endIdx] ?? ''
+  const semicolon = line.indexOf(';')
+  if (semicolon < 0) return false
+  const endWord = VERILOG_END_WORDS[type]
+  if (!endWord) return false
+  return new RegExp(`\\b${endWord}\\b`).test(line.slice(semicolon + 1))
+}
+
+/**
+ * 从 `function`/`task` 关键字之后的文本解析名称与限定作用域。
+ *
+ * 支持返回类型（`function automatic int unsigned f(...)`）、无参数形式
+ * （`function int f;`）与类外定义（`function void C::f(...)` → name `f`,
+ * scope `C`）；构造器 `function new(...)` 保持原名。
+ * @param {string} text - 关键字之后的声明头文本（可含结尾 `;`）。
+ * @returns {{name:string, scope:string}|null} 解析结果；无法识别时为 null。
+ */
+function verilogSubName(text) {
+  const rest = text.replace(/^\s*(?:(?:automatic|static)\s+)+/, '')
+  const paren = rest.indexOf('(')
+  const semicolon = rest.indexOf(';')
+  let head = rest
+  if (paren >= 0 && (semicolon < 0 || paren < semicolon)) head = rest.slice(0, paren)
+  else if (semicolon >= 0) head = rest.slice(0, semicolon)
+  const m = /([A-Za-z_]\w*(?:\s*::\s*[A-Za-z_]\w*)*)\s*$/.exec(head.trim())
+  if (!m) return null
+  const parts = m[1].split('::').map(part => part.trim())
+  const name = parts[parts.length - 1]
+  if (!name || VERILOG_KEYWORDS.has(name)) return null
+  return { name, scope: parts.slice(0, -1).join('::') }
+}
+
+/**
+ * 提取 Verilog/SystemVerilog 符号。
+ *
+ * 覆盖的声明：
+ * - `module` / `interface` / `program` / `package` / `class`（含
+ *   `virtual class`、`interface class`）作为容器，分别以对应 `end*`
+ *   收尾，嵌套容器带 `parent`；
+ * - `function` / `task`（含 `automatic`/`static`/`virtual`/`local` 等
+ *   修饰与类外 `C::f` 定义），体内到 `endfunction`/`endtask` 收尾；
+ *   `extern`/`pure virtual` 原型只登记声明头，不进入块栈；
+ * - `typedef`（含 enum/struct/union 体，别名取最后一个标识符）；
+ * - 容器内的 `parameter`/`localparam`（按 `name =` 提取，`localparam`
+ *   非导出）与 `` `define `` 宏（variable）。
+ *
+ * 一个文件可包含多个模块（Verilog 常见写法），全部登记。函数/任务在
+ * class/interface 内或带 `C::` 限定名时为 method，其余为 function。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractVerilog(lines) {
+  const { masked } = verilogScan(lines)
+  const symbols = []
+  /** @type {Array<{type:string, name:string, symbolIndex:number, headerEnd:number}>} */
+  const stack = []
+  // `define 的续行（反斜杠结尾）不参与解析，避免宏体里的关键字产生假符号
+  let macroContinuation = false
+
+  /** 关闭栈顶尚未收尾的 function/task 原型（按声明头结束）。 */
+  const closePendingSub = () => {
+    const top = stack[stack.length - 1]
+    if (!top || (top.type !== 'function' && top.type !== 'task')) return
+    symbols[top.symbolIndex].endLine = Math.max(symbols[top.symbolIndex].line, top.headerEnd)
+    stack.pop()
+  }
+
+  /** 最近容器块的名称（class/interface/module/package/program）。 */
+  const enclosingContainer = () => {
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (VERILOG_CONTAINERS.has(stack[i].type)) return stack[i]
+    }
+    return null
+  }
+
+  /**
+   * 登记一个容器或子程序符号。
+   * @param {string} type - 块类型（module/interface/package/class/program/function/task）。
+   * @param {string} name - 符号名。
+   * @param {number} startLine - 起始行（1-based）。
+   * @param {number} headerEnd - 声明头结束行（1-based）。
+   * @param {string} [parent] - 所属容器名。
+   * @param {string} [kind] - 符号种类（默认 class）。
+   * @param {boolean} [exported] - 是否导出（默认 true）。
+   * @returns {number} 符号在数组中的下标。
+   */
+  const pushDecl = (type, name, startLine, headerEnd, parent = '', kind = 'class', exported = true) => {
+    /** @type {object} */
+    const symbol = { name, kind, line: startLine, endLine: headerEnd, exported }
+    if (parent) symbol.parent = parent
+    symbols.push(symbol)
+    return symbols.length - 1
+  }
+
+  for (let i = 0; i < masked.length; i++) {
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    if (macroContinuation) {
+      macroContinuation = rawLine.trimEnd().endsWith('\\')
+      continue
+    }
+
+    const endMatch = /^end(module|interface|package|class|function|task|program)\b/.exec(line)
+    if (endMatch) {
+      const want = endMatch[1]
+      const sub = want === 'function' || want === 'task'
+      for (let j = stack.length - 1; j >= 0; j--) {
+        const frame = stack[j]
+        const matched = sub ? frame.type === 'function' || frame.type === 'task' : frame.type === want
+        if (!matched) continue
+        symbols[frame.symbolIndex].endLine = Math.max(symbols[frame.symbolIndex].line, i + 1)
+        stack.length = j
+        break
+      }
+      continue
+    }
+
+    const moduleMatch = /^(?:macromodule\s+)?module\s+(?:automatic\s+|static\s+)?([A-Za-z_]\w*)\b/.exec(line)
+    const classMatch = /^(?:(?:virtual|interface)\s+)?class\s+(?:automatic\s+|static\s+)?([A-Za-z_]\w*)\b/.exec(line)
+    const interfaceMatch = /^interface\s+(?!class\b)(?:automatic\s+|static\s+)?([A-Za-z_]\w*)\b/.exec(line)
+    const packageMatch = /^package\s+(?:automatic\s+|static\s+)?([A-Za-z_]\w*)\b/.exec(line)
+    const programMatch = /^program\s+(?:automatic\s+|static\s+)?([A-Za-z_]\w*)\b/.exec(line)
+    const container = moduleMatch ?? classMatch ?? interfaceMatch ?? packageMatch ?? programMatch
+    if (container) {
+      closePendingSub()
+      const type = moduleMatch ? 'module'
+        : classMatch ? 'class'
+          : interfaceMatch ? 'interface'
+            : packageMatch ? 'package' : 'program'
+      const endIdx = verilogTerminator(masked, i)
+      const headerEnd = endIdx + 1
+      const parentFrame = enclosingContainer()
+      const outerParent = parentFrame ? parentFrame.name : ''
+      const index = pushDecl(
+        type,
+        container[1],
+        i + 1,
+        headerEnd,
+        outerParent,
+        type === 'interface' ? 'interface' : 'class',
+      )
+      if (!verilogClosesInline(masked, endIdx, type)) {
+        stack.push({ type, name: container[1], symbolIndex: index, headerEnd })
+      }
+      // 声明头内部（`#(...)` 参数、端口列表）不参与后续语句解析
+      i = endIdx
+      continue
+    }
+
+    const qualifierPrefix = VERILOG_SUB_QUALIFIERS.exec(line)?.[0] ?? ''
+    const subLine = line.slice(qualifierPrefix.length)
+    const subMatch = /^(function|task)\b/.exec(subLine)
+    if (subMatch) {
+      closePendingSub()
+      const keyword = subMatch[1]
+      const endIdx = verilogTerminator(masked, i)
+      const header = verilogHeader(masked, i, endIdx)
+      const headerNoQual = header.replace(VERILOG_SUB_QUALIFIERS, '')
+      const parsed = verilogSubName(headerNoQual.slice(keyword.length))
+      if (!parsed) continue
+      const parentFrame = enclosingContainer()
+      const parent = parsed.scope || (parentFrame ? parentFrame.name : '')
+      const isMethod = Boolean(parsed.scope)
+        || parentFrame?.type === 'class' || parentFrame?.type === 'interface'
+      const exported = !/\b(?:local|protected)\b/.test(qualifierPrefix)
+      const prototype = /\bextern\b/.test(qualifierPrefix)
+        || (/\bpure\b/.test(qualifierPrefix) && /\bvirtual\b/.test(qualifierPrefix))
+      const index = pushDecl(
+        keyword,
+        parsed.name,
+        i + 1,
+        endIdx + 1,
+        parent,
+        isMethod ? 'method' : 'function',
+        exported,
+      )
+      if (!prototype && !verilogClosesInline(masked, endIdx, keyword)) {
+        stack.push({ type: keyword, name: parsed.name, symbolIndex: index, headerEnd: endIdx + 1 })
+      }
+      i = endIdx
+      continue
+    }
+
+    if (/^typedef\b/.test(line)) {
+      const endIdx = verilogTerminator(masked, i)
+      const header = verilogHeader(masked, i, endIdx).replace(/;\s*$/, '')
+      const nameMatch = /([A-Za-z_]\w*)\s*$/.exec(header)
+      if (!nameMatch || VERILOG_KEYWORDS.has(nameMatch[1])) continue
+      const parentFrame = enclosingContainer()
+      pushDecl('typedef', nameMatch[1], i + 1, endIdx + 1, parentFrame ? parentFrame.name : '', 'type')
+      i = endIdx
+      continue
+    }
+
+    const paramMatch = /^(localparam|parameter)\b/.exec(line)
+    if (paramMatch) {
+      const endIdx = verilogTerminator(masked, i)
+      const rest = verilogHeader(masked, i, endIdx).replace(/^(?:localparam|parameter)\b/, '')
+      const isTypeParam = /^\s*type\b/.test(rest)
+      const parentFrame = enclosingContainer()
+      const parent = parentFrame ? parentFrame.name : ''
+      const exported = paramMatch[1] === 'parameter'
+      const names = /([A-Za-z_]\w*)\s*=(?!=)/g
+      let first = true
+      let match
+      while ((match = names.exec(rest)) !== null) {
+        if (VERILOG_KEYWORDS.has(match[1])) continue
+        pushDecl('parameter', match[1], i + 1, endIdx + 1, parent, isTypeParam && first ? 'type' : 'variable', exported)
+        first = false
+      }
+      i = endIdx
+      continue
+    }
+
+    const defineMatch = /^`define\s+([A-Za-z_]\w*)/.exec(line)
+    if (defineMatch) {
+      pushDecl('define', defineMatch[1], i + 1, i + 1, '', 'variable')
+      macroContinuation = rawLine.trimEnd().endsWith('\\')
+      continue
+    }
+  }
+
+  // 未闭合容器/子程序（截断/异常语法）保守延伸到文件尾
+  for (const frame of stack) {
+    const symbol = symbols[frame.symbolIndex]
+    symbol.endLine = Math.max(symbol.endLine, lines.length)
+  }
+  return symbols
+}
+
+/**
  * 从源码提取符号（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识（见 schema.js 的 EXTENSION_LANGS）。
@@ -5508,6 +5903,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'tcl') return extractTcl(lines)
   if (lang === 'fsharp') return extractFsharp(lines)
   if (lang === 'ada') return extractAda(lines)
+  if (lang === 'verilog' || lang === 'systemverilog') return extractVerilog(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

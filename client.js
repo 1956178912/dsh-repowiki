@@ -360,6 +360,9 @@ const LANGUAGE_LABELS = {
   tcl: 'Tcl',
   fsharp: 'F#',
   ada: 'Ada',
+  verilog: 'Verilog',
+  systemverilog: 'SystemVerilog',
+  coq: 'Coq',
   c: 'C',
   cpp: 'C++',
 }

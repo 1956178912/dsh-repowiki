@@ -3,6 +3,30 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.237.0] - 2026-11-28
+
+- **Verilog/SystemVerilog 支持（第 40/41 种语言）**：`.v`/`.vh` 与
+  `.sv`/`.svh` 进入索引。`module`/`interface`/`interface class`/`package`/
+  `program`/`class` 为容器，按对应 `end*` 关键字收尾（含单行块）；
+  `function`/`task` 支持 `automatic`/`static`/`virtual`/`local`/`protected`
+  修饰、类外 `C::f` 定义（method + `parent`），`extern`/`pure virtual`
+  原型只占声明头。`typedef`（enum/struct/union 体与简单别名）记为 type，
+  容器内 `parameter`/`localparam`（`parameter type` 记为 type）与
+  `` `define `` 宏也会登记。多行声明头、`#(...)` 参数列表与带花括号的
+  typedef 范围正确；`//`/`/* */` 注释、字符串与 `` `define `` 续行被屏蔽，
+  不会产生假符号。
+- **Verilog 依赖边**：`` `include "..." `` 从引用方目录起，经
+  `include`/`inc`/`src`/`rtl`/`hdl` 根与项目根解析（尖括号形式跳过文件
+  目录）；SystemVerilog `import pkg::*;` / `import pkg::sym;` 经
+  package/module/interface/class 名映射解析；外部头文件与包不建边。
+- **Coq 消歧**：`.v` 与 Coq 共用扩展名，含 Coq 声明且无 HDL 结构标记的
+  文件归为 `coq`（不提取符号），避免被误读成 Verilog；面板显示
+  `Coq`/`Verilog`/`SystemVerilog` 可读标签。
+- **测试**：753 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 package/
+  typedef/parameter/function/task 范围、class/interface 原型与类外定义、
+  注释/字符串/宏续行屏蔽、未闭合块范围、`include`/`import` 提取与解析，
+  以及 `.v` 的 Coq 内容识别。
+
 ## [0.236.0] - 2026-11-28
 
 - **影响面的架构上下文**：`repowiki-impact` 在爆炸半径之外回答"这次改动在

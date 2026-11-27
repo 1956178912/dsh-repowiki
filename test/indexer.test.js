@@ -2006,3 +2006,34 @@ test('Ada：点分子单元支持连字符与目录两种文件名约定', async
     [2, 'src/demo/io.ads'],
   ])
 })
+
+test('Verilog/SystemVerilog：include 根与包名解析，`.v` 按内容区分 Coq', async () => {
+  const dir = makeProject({
+    'rtl/pkg/fifo_pkg.sv': 'package fifo_pkg;\n  typedef logic [7:0] byte_t;\nendpackage\n',
+    'rtl/include/defs.svh': '`define WIDTH 8\n',
+    'rtl/fifo.sv': [
+      '`include "defs.svh"',
+      'import fifo_pkg::*;',
+      'module fifo(input logic clk);',
+      'endmodule',
+    ].join('\n'),
+    'proof/list.v': 'Require Import Coq.Lists.List.\nTheorem foo : True.\nProof. trivial. Qed.\n',
+    'legacy.v': 'module legacy(input clk);\nendmodule\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { coq: 1, systemverilog: 3, verilog: 1 })
+
+  const fifo = doc.files.find(file => file.path === 'rtl/fifo.sv')
+  assert.equal(fifo.lang, 'systemverilog')
+  assert.deepEqual(fifo.symbols.map(symbol => symbol.name), ['fifo'])
+
+  const proof = doc.files.find(file => file.path === 'proof/list.v')
+  assert.equal(proof.lang, 'coq', 'Coq 源码不被标成 Verilog')
+  assert.deepEqual(proof.symbols, [])
+
+  const edges = doc.edges.filter(edge => edge.from === 'rtl/fifo.sv')
+  assert.deepEqual(edges.map(edge => [edge.line, edge.to]).sort(), [
+    [1, 'rtl/include/defs.svh'],
+    [2, 'rtl/pkg/fifo_pkg.sv'],
+  ], 'quote include 经 include 根命中，import 经包名映射')
+})
