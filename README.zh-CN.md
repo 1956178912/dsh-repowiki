@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径完整性、status 缺页/路径非法计数、缺页健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.155.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法计数、缺页健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.156.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -374,11 +374,11 @@ npm run bench -- 2000
 npm run verify:host
 
 # Wiki 新鲜度门禁：断链/行号越界/内容漂移/卡片或已采信记忆变化后的
-# 陈旧 Wiki/清单页缺失/清单路径非法/页面相对链接（页面或项目文件）死链
-# 或越界/上次生成失败页/严格模式下的空清单失败；未覆盖/未验证默认警告，
-# --strict 时失败（缺陈旧指纹、探测截断、旧索引与无法验证的行号范围也
-# 失败）；--require 在无资产或空清单时失败；支持 --root/--locale/--json
-# （v0.155.0）
+# 陈旧 Wiki/清单页缺失/清单路径或条目重复/页面相对链接（页面或项目
+# 文件）死链或越界/上次生成失败页/严格模式下的空清单失败；未覆盖/未验证
+# 默认警告，--strict 时失败（缺陈旧指纹、探测截断、旧索引与无法验证的
+# 行号范围也失败）；--require 在无资产或空清单时失败；支持
+# --root/--locale/--json（v0.156.0）
 npm run verify:wiki -- --root . --strict --require
 ```
 
@@ -407,6 +407,7 @@ npm run verify:wiki -- --root . --strict --require
 | `assets/missing` | warning（`--require`：error） | 没有 Wiki 清单 |
 | `manifest/missing`、`manifest/invalid` | error | 指定清单缺失或非法 |
 | `manifest/empty` | warning（`--strict`/`--require`：error） | 清单没有任何页面 |
+| `manifest/duplicate-pages` | error | 清单重复登记同一 slug 或路径 |
 | `manifest/missing-digests` | warning（`--strict`：error） | 缺卡片/记忆陈旧指纹 |
 | `citation/missing` | error | 引用路径不存在 |
 | `citation/range` | error | 引用行号越界 |
@@ -418,6 +419,7 @@ npm run verify:wiki -- --root . --strict --require
 | `wiki/stale-cards`、`wiki/stale-memory` | error | 卡片/已采信记忆在生成后变化 |
 | `wiki/missing-pages` | error | 清单页文件缺失 |
 | `wiki/orphaned-pages` | warning | 页面文件未列入清单 |
+| `wiki/duplicate-page-slug` | error | 两个页面文件声明同一 slug |
 | `wiki/generation-failed` | warning（`--strict`：error） | 上次生成记录了失败页 |
 | `wiki/invalid-page-path`、`wiki/page-path-mismatch` | error | 清单路径非法或与实际文件不符 |
 | `wiki/unsafe-link`、`wiki/broken-link` | error | 相对链接越出项目根或目标缺失（页面与项目文件链接） |
@@ -489,7 +491,7 @@ src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
 src/types.d.ts         ctx.fs / 工具定义的共享类型声明
-test/                  单元与集成测试（518 用例）
+test/                  单元与集成测试（519 用例）
 ```
 
 ## 许可

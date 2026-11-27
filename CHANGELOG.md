@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.156.0] - 2026-11-27
+
+### Added
+
+- **Duplicate page detection in `verify:wiki`**: a locale now fails with
+  `wiki/duplicate-page-slug` when two page files declare the same slug.
+  Without this check the slug map silently shadowed one page, so the hidden
+  file was neither shown nor reported as orphaned.
+- **Duplicate manifest entries**: a manifest that repeats a page slug or path
+  fails with `manifest/duplicate-pages`, catching merge/copy corruption
+  before it produces ambiguous page resolution.
+
+### Tests
+
+- 519 cases pass (LANG=en and LANG=zh); a new gate case covers both a second
+  file claiming an existing slug and a manifest with two identical pages.
+
 ## [0.155.0] - 2026-11-27
 
 ### Fixed

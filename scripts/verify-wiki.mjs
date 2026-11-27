@@ -405,8 +405,9 @@ function memoriesDigest(memories) {
  * 枚举某 locale 的 Wiki 页面文件（slug 优先取 frontmatter，与 listWikiPages 一致）。
  * @param {string} root - 项目根。
  * @param {string} locale - 语言。
- * @returns {Promise<Map<string, {path:string, rel:string, title:string, text:string}>>}
- *   slug → 页面信息（rel 相对资产根，text 为正文）。
+ * @returns {Promise<{pages:Map<string, {path:string, rel:string, title:string, text:string}>,
+ *   duplicateSlugs:Array<{slug:string, files:string[]}>}>}
+ *   slug → 页面信息（rel 相对资产根，text 为正文），以及被多个文件占用的 slug。
  */
 async function readWikiPages(root, locale) {
   const base = path.join(root, ASSET_DIR, WIKI_DIR, locale)
@@ -462,8 +463,20 @@ async function readWikiPages(root, locale) {
     }
   })
   const pages = new Map()
-  for (const item of parsedPages) pages.set(item.slug, item.page)
-  return pages
+  const duplicates = new Map()
+  for (const item of parsedPages) {
+    const existing = pages.get(item.slug)
+    if (existing) {
+      const files = duplicates.get(item.slug) ?? [existing.rel]
+      files.push(item.page.rel)
+      duplicates.set(item.slug, files)
+    }
+    pages.set(item.slug, item.page)
+  }
+  const duplicateSlugs = [...duplicates.entries()]
+    .map(([slug, files]) => ({ slug, files: [...new Set(files)].sort() }))
+    .sort((a, b) => a.slug.localeCompare(b.slug))
+  return { pages, duplicateSlugs }
 }
 
 /**
@@ -566,12 +579,31 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   }
   // 页面完整性：generate 的短路要求清单里的每个 slug 都仍在磁盘上；
   // 缺失页说明 Wiki 被部分删除或写入失败，不重新生成就会一直缺页。
-  const diskPages = await readWikiPages(root, locale)
-  const manifestSlugs = [...new Set(
-    manifest.pages
-      .map(page => (typeof page?.slug === 'string' ? page.slug : ''))
-      .filter(Boolean),
+  const disk = await readWikiPages(root, locale)
+  const { pages: diskPages, duplicateSlugs } = disk
+  const rawManifestSlugs = manifest.pages
+    .map(page => (typeof page?.slug === 'string' ? page.slug : ''))
+    .filter(Boolean)
+  const manifestSlugs = [...new Set(rawManifestSlugs)]
+  const duplicateManifestSlugs = [...new Set(
+    rawManifestSlugs.filter((slug, index) => rawManifestSlugs.indexOf(slug) !== index),
   )]
+  const rawManifestPaths = manifest.pages
+    .map(page => (typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''))
+    .filter(Boolean)
+  const duplicateManifestPaths = [...new Set(
+    rawManifestPaths.filter((rel, index) => rawManifestPaths.indexOf(rel) !== index),
+  )]
+  if (duplicateManifestSlugs.length > 0 || duplicateManifestPaths.length > 0) {
+    const parts = []
+    if (duplicateManifestSlugs.length > 0) {
+      parts.push(`slug(s): ${duplicateManifestSlugs.slice(0, 3).join(', ')}`)
+    }
+    if (duplicateManifestPaths.length > 0) {
+      parts.push(`path(s): ${duplicateManifestPaths.slice(0, 3).join(', ')}`)
+    }
+    addIssue('manifest/duplicate-pages', `manifest contains duplicate page entries (${parts.join('; ')})`)
+  }
   const manifestSlugSet = new Set(manifestSlugs)
   const missingPages = manifestSlugs.filter(slug => !diskPages.has(slug))
   const orphanedPages = [...diskPages.keys()].filter(slug => !manifestSlugSet.has(slug)).sort()
@@ -580,6 +612,15 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   }
   if (orphanedPages.length > 0) {
     addWarning('wiki/orphaned-pages', `${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
+  }
+  // 两个文件声明同一 slug 时 Map 会静默覆盖其一：清单/面板按 slug 解析页面，
+  // 被覆盖的页面永远不会被展示，必须在门禁里点名而不是当成孤儿或不存在。
+  if (duplicateSlugs.length > 0) {
+    const summary = duplicateSlugs
+      .slice(0, 3)
+      .map(item => `${item.slug} (${item.files.join(', ')})`)
+      .join('; ')
+    addIssue('wiki/duplicate-page-slug', `${duplicateSlugs.length} page slug(s) are used by more than one file: ${summary}`)
   }
   // 清单路径与页面内部链接：generate 只写净化后的路径，但手工改清单/正文
   // 可能引入跨 locale、路径穿越或指向已删除文件/页面的死链。

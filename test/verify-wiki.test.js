@@ -444,6 +444,46 @@ test('verify-wiki：清单页面路径非法或与文件位置不符失败', asy
   assert.ok(mismatch.problems.some(problem => problem.code === 'wiki/page-path-mismatch'))
 })
 
+test('verify-wiki：重复页面 slug 与清单重复条目失败', async () => {
+  const root = makeRoot()
+  const text = 'one\ntwo\n'
+  writeText(path.join(root, 'a.ts'), text)
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))],
+  })
+  writeText(
+    path.join(root, '.dsh-repowiki/wiki/zh/copy.md'),
+    `${encodeFrontmatter({ slug: 'overview', title: 'Copy' })}\n# Copy\n`,
+  )
+
+  const duplicatePage = await verifyWiki({ root })
+  assert.equal(duplicatePage.ok, false)
+  assert.ok(duplicatePage.problems.some(problem => problem.code === 'wiki/duplicate-page-slug'
+    && problem.severity === 'error'))
+  assert.match(formatReport(duplicatePage), /Copy|copy\.md/)
+
+  const root2 = makeRoot()
+  writeText(path.join(root2, 'a.ts'), text)
+  writeIndex(root2, [{ path: 'a.ts', lines: 2 }])
+  const page = pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))
+  writeManifest(root2, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [page, { ...page }],
+  })
+
+  const duplicateManifest = await verifyWiki({ root: root2 })
+  assert.equal(duplicateManifest.ok, false)
+  assert.ok(duplicateManifest.problems.some(problem => problem.code === 'manifest/duplicate-pages'
+    && problem.severity === 'error'))
+})
+
+
 test('verify-wiki：并发读取多卡片并跳过坏卡', async () => {
   const root = makeRoot()
   writeText(path.join(root, 'a.ts'), 'one\n')
