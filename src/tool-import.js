@@ -8,7 +8,9 @@
  */
 
 import { resolveAssetRoot, readIndex } from './assets.js'
-import { copyTree, dirHasContent } from './transfer.js'
+import {
+  copyTree, dirHasContent, readSnapshotManifest, verifySnapshot, SNAPSHOT_MANIFEST,
+} from './transfer.js'
 import { cwdOf, toAbsPath } from './util.js'
 import { withLock } from './lock.js'
 
@@ -20,8 +22,10 @@ const DESCRIPTION = [
   'existing assets are present unless overwrite=true, in which case the snapshot is',
   'merged in: files present in the snapshot overwrite their counterparts, and files',
   'that exist only in your assets are kept (import never deletes anything). Pure',
-  'file copy with no model calls. After import, index.json compatibility is',
-  'verified and reported.',
+  'file copy with no model calls. When the snapshot contains the _snapshot.json',
+  'manifest written by repowiki-export, every listed file is checked against its',
+  'content digest before copying; a partial or corrupted snapshot is refused unless',
+  'allowCorrupt=true. After import, index.json compatibility is verified and reported.',
 ].join(' ')
 
 /**
@@ -46,6 +50,10 @@ export function repowikiImportTool(ctx) {
         type: 'boolean',
         description: 'Overwrite an existing .dsh-repowiki/ in the project. Default false (the import is refused while existing assets are present).',
       },
+      allowCorrupt: {
+        type: 'boolean',
+        description: 'Import even when the snapshot manifest reports mismatched/missing files or a partial export. Default false (integrity failures refuse the import).',
+      },
     },
     output: {
       schema: {
@@ -59,16 +67,30 @@ export function repowikiImportTool(ctx) {
           skipped: { type: 'integer' },
           failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] }, description: 'Bounded list (first 20) of items that could not be copied.' },
           aborted: { type: 'boolean', description: 'True when the caller cancelled; the import may be partial.' },
+          snapshotManifest: { type: 'boolean', description: `True when ${SNAPSHOT_MANIFEST} was found in the source snapshot.` },
+          snapshotVerified: { type: 'boolean', description: 'True when every listed file matched its digest and the snapshot was not partial.' },
+          snapshotChecked: { type: 'integer', description: 'Number of snapshot files whose digest was compared.' },
+          snapshotProblems: { type: 'integer', description: 'Mismatched + missing + unreadable + invalid entries reported by the manifest.' },
+          snapshotCapped: { type: 'boolean', description: 'True when verification stopped at the 500-file cap.' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
-        required: ['root', 'source', 'files', 'dirs', 'skipped', 'indexOk', 'durationMs'],
+        required: [
+          'root', 'source', 'files', 'dirs', 'skipped', 'snapshotManifest',
+          'snapshotVerified', 'snapshotChecked', 'snapshotProblems', 'snapshotCapped',
+          'indexOk', 'durationMs',
+        ],
       },
       render: (_args, value) => [{
         type: 'text',
         text: [
           `Imported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.source} in ${value.durationMs}ms.`,
+          value.snapshotManifest
+            ? (value.snapshotVerified
+              ? `Snapshot: verified ${value.snapshotChecked} file(s).`
+              : `Warning: snapshot verification found ${value.snapshotProblems} problem(s)${value.snapshotCapped ? ' (check capped)' : ''}; imported anyway.`)
+            : 'Snapshot: no manifest found; integrity was not verified (legacy or hand-made snapshot).',
           ...(value.aborted ? ['Cancelled: the import may be partial.'] : []),
           ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
           value.indexOk ? 'index.json is present and compatible.' : 'Warning: index.json is missing or its schema version is incompatible — run repowiki-index.',
@@ -85,27 +107,76 @@ export function repowikiImportTool(ctx) {
 
       if (typeof args.source !== 'string' || !args.source.trim()) {
         return {
-          root, source: '', files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+          root, source: '', files: 0, dirs: 0, skipped: 0,
+          snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
+          snapshotProblems: 0, snapshotCapped: false,
+          indexOk: false, durationMs: 0,
           hint: 'source is required: the snapshot directory to import from.',
         }
       }
       const sourceAbs = toAbsPath(args.source, cwdOf(ctx))
       if (!(await dirHasContent(fs, sourceAbs))) {
         return {
-          root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+          root, source: sourceAbs, files: 0, dirs: 0, skipped: 0,
+          snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
+          snapshotProblems: 0, snapshotCapped: false,
+          indexOk: false, durationMs: 0,
           hint: `Source ${sourceAbs} does not exist or is empty. Nothing to import.`,
         }
       }
-      // 写操作串行化（O5，ADR-0005）：覆盖判定与复制整体进入临界区，
+      // 写操作串行化（O5，ADR-0005）：校验、覆盖判定与复制整体进入临界区，
       // 避免“检查通过→另一路并发改动→复制”的 TOCTOU 交错
       return withLock(root, async () => {
         if (!args.overwrite && (await dirHasContent(fs, assetDir))) {
           return {
-            root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+            root, source: sourceAbs, files: 0, dirs: 0, skipped: 0,
+            snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
+            snapshotProblems: 0, snapshotCapped: false,
+            indexOk: false, durationMs: 0,
             hint: `${assetDir} already holds assets. Pass overwrite=true to replace them.`,
           }
         }
-        const counts = await copyTree(fs, sourceAbs, assetDir, { signal: exec.signal })
+        // 快照清单校验：导出写入的 _snapshot.json 记录每个文件的指纹；
+        // 损坏/缺失/部分导出默认拒绝，allowCorrupt=true 才继续。
+        const snapshot = await readSnapshotManifest(fs, sourceAbs)
+        let verification = null
+        let manifestError = snapshot.error
+        if (snapshot.exists && snapshot.value) {
+          verification = await verifySnapshot(fs, sourceAbs, snapshot.value)
+        } else if (snapshot.exists) {
+          manifestError = manifestError || 'snapshot manifest is not valid JSON'
+        }
+        const problems = verification
+          ? verification.mismatched + verification.missing + verification.unreadable
+            + verification.invalid + (verification.partial ? 1 : 0)
+          : (snapshot.exists ? 1 : 0)
+        const allowCorrupt = args.allowCorrupt === true
+        if (snapshot.exists && (!verification || !verification.verified) && !allowCorrupt) {
+          const detail = verification
+            ? [
+              verification.mismatched > 0 ? `${verification.mismatched} mismatched` : '',
+              verification.missing > 0 ? `${verification.missing} missing` : '',
+              verification.unreadable > 0 ? `${verification.unreadable} unreadable` : '',
+              verification.invalid > 0 ? `${verification.invalid} invalid` : '',
+              verification.capped ? 'verification capped at 500 files' : '',
+              verification.partial ? 'the export was partial' : '',
+            ].filter(Boolean).join(', ')
+            : (manifestError || 'manifest invalid')
+          return {
+            root, source: sourceAbs, files: 0, dirs: 0, skipped: 0,
+            snapshotManifest: true,
+            snapshotVerified: false,
+            snapshotChecked: verification?.checked ?? 0,
+            snapshotProblems: problems,
+            snapshotCapped: verification?.capped ?? false,
+            indexOk: false, durationMs: Date.now() - startedAt,
+            hint: `Snapshot verification failed (${detail}). Pass allowCorrupt=true to import anyway.`,
+          }
+        }
+        const counts = await copyTree(fs, sourceAbs, assetDir, {
+          signal: exec.signal,
+          exclude: new Set([SNAPSHOT_MANIFEST]),
+        })
         // 导入后校验索引可读性（版本不兼容时提示重建而非失败）
         const indexOk = (await readIndex(fs, root)) !== null
         return {
@@ -116,8 +187,17 @@ export function repowikiImportTool(ctx) {
           skipped: counts.skipped,
           failed: counts.failed,
           aborted: counts.aborted,
+          snapshotManifest: snapshot.exists,
+          snapshotVerified: verification?.verified === true,
+          snapshotChecked: verification?.checked ?? 0,
+          snapshotProblems: problems,
+          snapshotCapped: verification?.capped ?? false,
           indexOk,
           ...(counts.aborted ? { hint: 'Cancelled: the import may be partial. Re-run repowiki-import to complete it.' } : {}),
+          ...(snapshot.exists && !verification ? { hint: `Snapshot manifest is invalid (${manifestError}); imported because allowCorrupt=true.` } : {}),
+          ...(snapshot.exists && verification && !verification.verified
+            ? { hint: `Snapshot verification failed; imported because allowCorrupt=true.` }
+            : {}),
           durationMs: Date.now() - startedAt,
         }
       })

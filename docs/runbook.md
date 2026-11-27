@@ -23,6 +23,7 @@ repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
 | 面板点击无反应 | DevTools Console 红错 | 面板有 `ErrorBoundary` 与 `role=status` 失败行；把错误文本反馈 |
 | Wiki 页签提示失败页/缺页/路径非法/重复页/卡片或记忆陈旧 | 面板诊断行 | 上次生成有页面写失败、清单页被删除、清单路径非法、slug 或清单条目重复，或生成后卡片/已采信记忆已变化；重新 `repowiki-generate`，再用 `verify:wiki --strict` 复核 |
 | 升级 dsh 后样式/功能异常 | `npm run verify:host` | 令牌漂移按输出修正；跑 `npm test` 回归 |
+| 导入提示 `Snapshot verification failed` | 快照根 `_snapshot.json` | 快照文件被修改/删除，或上次导出取消/有复制失败；重新 `repowiki-export`。确认内容可用时才传 `allowCorrupt=true` |
 | CI 提示 Wiki 引用失败 | `npm run verify:wiki -- --json` | 断链/越界/漂移按报告修引用或重新 `repowiki-generate`；未覆盖可 `--strict` 收紧 |
 | CI 提示 Wiki 陈旧（`stale`） | `npm run verify:wiki -- --json` 的 `locales[].stale`/`staleReasons` | 卡片或已采信记忆在生成后变化；重新 `repowiki-generate`（必要时 `force=true`）。旧清单缺指纹默认只告警、`--strict` 失败，重建一次即可纳入检测 |
 | CI 提示清单页缺失 | `verify:wiki` 的 `missingPages` 或 `status.wiki.missing` | 页面文件被删除或写入失败；重新 `repowiki-generate`。未入清单的孤儿页只告警，可保留手工页或清理 |

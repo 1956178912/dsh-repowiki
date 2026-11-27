@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.163.0] - 2026-11-27
+
+### Added
+
+- **Digest-verified snapshots**: `repowiki-export` now writes
+  `_snapshot.json` at the snapshot root with every copied file and a
+  sha256-16 content digest (plus a `partial` flag when the export was
+  cancelled or had copy failures). `repowiki-import` verifies the manifest
+  before copying: mismatched, missing, unreadable or unsafe paths and partial
+  exports refuse the import by default, with `allowCorrupt=true` as an
+  explicit override. Legacy snapshots without a manifest still import with a
+  notice that integrity was not verified, and the manifest file itself is
+  never copied into `.dsh-repowiki/`.
+
+### Tests
+
+- 530 cases pass (LANG=en and LANG=zh); transfer cases cover digest entries,
+  manifest round-trips and tamper/missing detection, and the export/import
+  tool case asserts a verified import, a refused tampered import and the
+  `allowCorrupt` override.
+
 ## [0.162.0] - 2026-11-27
 
 ### Added

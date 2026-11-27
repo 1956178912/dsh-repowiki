@@ -420,6 +420,8 @@ test('repowiki-export/import execute：快照导出与恢复端到端', async ()
 
   const rendered = exportTool.output.render({}, exported)
   assert.match(rendered[0].text, /Exported 1 file\(s\)/)
+  assert.match(rendered[0].text, /Snapshot manifest:/)
+  assert.ok(nodefs.existsSync(path.join(dir, 'snapshot', '_snapshot.json')), '导出应写快照清单')
 
   // 目标已存在且非空：默认拒绝
   const refused = await exportTool.execute({ target: 'snapshot' }, fakeExec)
@@ -440,9 +442,27 @@ test('repowiki-export/import execute：快照导出与恢复端到端', async ()
   const imported = await importTool.execute({ source: 'snapshot' }, fakeExec)
   assert.equal(imported.files, 1)
   assert.equal(imported.indexOk, true, '导入的索引版本可读')
+  assert.equal(imported.snapshotManifest, true)
+  assert.equal(imported.snapshotVerified, true, '快照清单应与文件指纹一致')
+  assert.equal(imported.snapshotChecked, 1)
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki', 'index.json')))
   const impRendered = importTool.output.render({}, imported)
+  assert.match(impRendered[0].text, /Snapshot: verified 1 file\(s\)/)
   assert.match(impRendered[0].text, /index.json is present and compatible/)
+
+  // 篡改快照文件：默认拒绝，allowCorrupt=true 才导入
+  nodefs.rmSync(path.join(dir, '.dsh-repowiki'), { recursive: true, force: true })
+  nodefs.writeFileSync(path.join(dir, 'snapshot', 'index.json'), '{"tampered":true}')
+  const corrupt = await importTool.execute({ source: 'snapshot' }, fakeExec)
+  assert.equal(corrupt.files, 0)
+  assert.equal(corrupt.snapshotVerified, false)
+  assert.match(corrupt.hint, /Snapshot verification failed/)
+  assert.ok(!nodefs.existsSync(path.join(dir, '.dsh-repowiki', 'index.json')), '校验失败不得导入')
+
+  const forced = await importTool.execute({ source: 'snapshot', allowCorrupt: true }, fakeExec)
+  assert.equal(forced.files, 1, 'allowCorrupt 允许导入')
+  assert.equal(forced.snapshotVerified, false)
+  assert.match(forced.hint, /allowCorrupt=true/)
 
   // 资产已存在且无 overwrite：导入被拒
   const impRefused = await importTool.execute({ source: 'snapshot' }, fakeExec)

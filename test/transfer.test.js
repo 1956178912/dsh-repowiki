@@ -8,7 +8,7 @@ import * as nodefs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
-import { copyTree, dirHasContent } from '../src/transfer.js'
+import { copyTree, dirHasContent, readSnapshotManifest, verifySnapshot, writeSnapshotManifest } from '../src/transfer.js'
 
 /** 造一个临时目录并写入给定文件。 */
 function makeDir(files) {
@@ -97,4 +97,74 @@ test('copyTree：预取消不复制任何文件并返回 aborted', async () => {
   assert.equal(counts.aborted, true)
   assert.equal(counts.files, 0)
   assert.equal(nodefs.existsSync(path.join(dir, 'dst')), false)
+})
+
+test('copyTree：返回复制文件的内容指纹并可排除清单文件', async () => {
+  const dir = makeDir({
+    'src/index.json': '{"ok":true}',
+    'src/knowledge/zh/a.md': '# A\n',
+    'src/_snapshot.json': '{"ignored":true}',
+  })
+  const counts = await copyTree(makeFakeFs(dir), path.join(dir, 'src'), path.join(dir, 'dst'), {
+    exclude: new Set(['_snapshot.json']),
+  })
+  assert.equal(counts.files, 2)
+  assert.deepEqual(counts.entries.map(e => e.path).sort(), ['index.json', 'knowledge/zh/a.md'])
+  assert.ok(counts.entries.every(e => /^[0-9a-f]{16}$/.test(e.digest)))
+  assert.ok(!nodefs.existsSync(path.join(dir, 'dst', '_snapshot.json')))
+})
+
+test('快照清单：写入后可验证，篡改/缺失文件被识别', async () => {
+  const dir = makeDir({
+    'snapshot/index.json': '{"ok":true}',
+    'snapshot/wiki/zh/a.md': '# A\n',
+  })
+  const fs = makeFakeFs(dir)
+  const source = path.join(dir, 'snapshot')
+  const manifest = await writeSnapshotManifest(fs, source, [
+    { path: 'index.json', digest: '0'.repeat(16) },
+    { path: 'wiki/zh/a.md', digest: '1'.repeat(16) },
+  ])
+  assert.equal(manifest.count, 2)
+  assert.equal(manifest.partial, false)
+
+  const read = await readSnapshotManifest(fs, source)
+  assert.equal(read.exists, true)
+  assert.equal(read.value.count, 2)
+
+  // 指纹不符 → mismatched；删除文件 → missing
+  const verified = await verifySnapshot(fs, source, read.value)
+  assert.equal(verified.verified, false)
+  assert.equal(verified.mismatched, 2)
+  assert.equal(verified.checked, 2)
+  nodefs.rmSync(path.join(source, 'wiki/zh/a.md'))
+  const missing = await verifySnapshot(fs, source, read.value)
+  assert.equal(missing.missing, 1)
+  assert.equal(missing.mismatched, 1)
+
+  // 正确指纹 → verified
+  const correct = await verifySnapshot(fs, source, {
+    schemaVersion: 1,
+    files: [
+      { path: 'index.json', digest: '0'.repeat(16) },
+    ],
+  })
+  assert.equal(correct.checked, 1)
+  assert.equal(correct.mismatched, 1, '伪造指纹仍会被识别')
+})
+
+test('快照清单：缺失返回 exists=false，partial 清单校验失败', async () => {
+  const dir = makeDir({ 'snapshot/a.md': 'a' })
+  const fs = makeFakeFs(dir)
+  const missing = await readSnapshotManifest(fs, path.join(dir, 'snapshot'))
+  assert.equal(missing.exists, false)
+  assert.equal(missing.error, '')
+
+  const partial = await verifySnapshot(fs, path.join(dir, 'snapshot'), {
+    schemaVersion: 1,
+    partial: true,
+    files: [],
+  })
+  assert.equal(partial.verified, false)
+  assert.equal(partial.partial, true)
 })
