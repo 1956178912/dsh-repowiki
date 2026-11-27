@@ -281,11 +281,19 @@ export function findCitationRangeIssues(manifest, lineCounts = new Map(), knownP
     if (!page || typeof page !== 'object') continue
     const slug = typeof page.slug === 'string' ? page.slug : ''
     const title = typeof page.title === 'string' && page.title ? page.title : slug
-    for (const source of Array.isArray(page.sources) ? page.sources : []) check(source, slug, title)
+    // 页级 sources 是章节 sources 的并集：按页去重，否则 total/unchecked
+    // 会重复计数（与面板/覆盖率口径保持一致）。
+    const sources = new Set()
+    for (const source of Array.isArray(page.sources) ? page.sources : []) {
+      if (typeof source === 'string' && source) sources.add(source)
+    }
     for (const section of Array.isArray(page.sections) ? page.sections : []) {
       if (!section || typeof section !== 'object') continue
-      for (const source of Array.isArray(section.sources) ? section.sources : []) check(source, slug, title)
+      for (const source of Array.isArray(section.sources) ? section.sources : []) {
+        if (typeof source === 'string' && source) sources.add(source)
+      }
     }
+    for (const source of sources) check(source, slug, title)
   }
   const pages = [...byPage.values()]
     .map(page => ({

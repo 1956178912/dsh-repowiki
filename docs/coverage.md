@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.136.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.137.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.136.0）；测试 490/490（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.22%、分支 86.54%、函数 95.24%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.137.0）；测试 498/498（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.12%、分支 86.33%、函数 95.03%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（490/490，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（498/498，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -197,7 +197,7 @@
 | Wiki 引用完整性 | `findBrokenWikiCitations` 校验页面级/章节级 `sources`：先查索引，非索引用 fs 探测；绝对/上跳路径直接判缺失；探测超 200 时未验证引用按存在处理并告警；status 输出有界明细并渲染 | v0.123.0 |
 | 保守导出审计 | `src/unused-exports.js` 仅审计"有入边且全部入边具名"的文件；无入边/含无名导入的文件计入 skippedFiles；忽略 default；明细 10×10 有界、总数精确；status 输出并渲染，措辞为"无 import 证据" | v0.124.0 |
 | 模块耦合指标 | `src/coupling.js` 在跨模块 import 图上计算 Ca/Ce 与不稳定性 Ce/(Ca+Ce)，同模块/自引用/未知模块忽略，模块对去重；status 输出前 10 并渲染 `Module instability` 行 | v0.125.0 |
-| 引用行号越界 | 索引 schema v6 记录 `files[].lines`（空文件 0 行、结尾换行不加行）；`parseWikiSource` 解析 `#Lx-Ly`/`#Lx`/`#Lx-y`；`findCitationRangeIssues` 标记零起始/倒置/超出 EOF，行数未知计入 unchecked，status 有界输出并渲染 | v0.126.0 |
+| 引用行号越界 | 索引 schema v6 记录 `files[].lines`（空文件 0 行、结尾换行不加行）；`parseWikiSource` 解析 `#Lx-Ly`/`#Lx`/`#Lx-y`；`findCitationRangeIssues` 标记零起始/倒置/超出 EOF，行数未知计入 unchecked，status 有界输出并渲染；页级与章节 sources 去重后统计（v0.137.0 修复重复计数） | v0.126.0 / v0.137.0 |
 | 面板引用问题 | 客户端 `parseCitation`/`citationIssuesFor` 从清单与索引行数派生越界/未检查；Wiki 页签展示汇总与逐页 `⚠ N` 徽章（可访问 title）；不做文件系统存在性检查 | v0.127.0 / v0.132.0 |
 | 面板指纹覆盖率 | 客户端从清单派生页级/汇总覆盖率，不读源码；未覆盖页显示弱化的 `◌ N` 徽章与 `tracked/total` 汇总，旧清单只显示一次无指纹记录；页级/章节 `sources` 去重后再统计引用问题与覆盖率 | v0.132.0 / v0.134.0 |
 | 面板未覆盖原因 | 客户端读取清单 `citationMisses`，在 `◌ N` 徽章 tooltip/可访问标签与覆盖率汇总中展示 `unreadable`/`range`/`cap`/`unknown` 的本地化分类；旧清单不逐页展示，仍不读源码 | v0.134.0 |
@@ -208,6 +208,7 @@
 | 未覆盖原因分类 | 生成清单页记录 `citationMisses`（source → `unreadable`/`range`/`cap`/`unknown`）；`summarizeCitationCoverage` 输出与 `untracked` 同口径的 `reasons`；generate hint/渲染与 status `Citation digests` 行展示分类，旧清单为 `unknown` | v0.133.0 |
 | 有界并发漂移读取 | `checkCitationDrift` 先收集安全且在上限内的唯一路径，按默认 8（硬上限 16，`options.concurrency`）并发预取，再按清单顺序比较；结果、截断与 `unchecked` 口径不变 | v0.135.0 |
 | 页级覆盖率明细 | `citationCoveragePages` 复用页级计数，列出最多 10 个未覆盖页面（按未覆盖数降序，带 `reasons` 与 `truncated`）；status 输出并在 `Citation digests` 行点名示例；health 只加提示不扣分 | v0.136.0 |
+| CI Wiki 门禁 | `scripts/verify-wiki.mjs` 复用 `wiki-references`/`citation-drift`：断链（索引 + 200 探测）、越界（索引 v6）、漂移（清单 v3）默认失败；未覆盖/未验证默认警告、`--strict` 失败；支持 `--root`/`--locale`/`--json`，退出码 0/1/2 | v0.137.0 |
 | 多行 JS/TS 导入与解析缓存版本 | 跨行 import/export-from 保留起始行与完整具名符号；`parserVersion` 在解析规则升级时使旧 symbols/imports 缓存失效，保留正确增量统计，同版本后续恢复复用 | v0.117.0 |
 
 **剩余未覆盖项全部集中在浏览器侧**（无浏览器控制，见 `docs/checkpoints/phase-15-convergence.md`）。

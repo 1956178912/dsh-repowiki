@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.136.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.137.0)
 
 | Capability | Description |
 |---|---|
@@ -133,6 +133,7 @@ Roadmap:
 - Panel reason tooltips (v0.134.0): the Wiki tab reads `citationMisses` and puts the localized reason breakdown into each `◌ N` tooltip and the coverage summary, still without reading source files
 - Concurrent drift reads (v0.135.0): drift verification prefetches unique cited files with bounded concurrency (default 8, cap 16) while preserving caps, ordering and `unchecked` totals
 - Page-level coverage details (v0.136.0): `repowiki-status` lists up to ten pages with untracked citations (most affected first, with reasons) and names an example in the text report; health lists the count without changing the score
+- CI wiki freshness gate (v0.137.0): `verify:wiki` fails on missing citations, out-of-range lines or drift, warns on untracked/unverifiable citations unless `--strict`, supports `--root`/`--locale`/`--json`, and deduplicates overlapping page/section range counts
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights
@@ -195,7 +196,20 @@ npm run bench -- 2000
 # (with a dark-mode override). Skips with exit code 3 when app.asar is not
 # present (CI). v0.22.0.
 npm run verify:host
+
+# Wiki freshness gate: fail on missing citations, out-of-range lines or
+# content drift; untracked/unverifiable citations warn unless --strict.
+# --root / --locale / --json are supported. v0.137.0.
+npm run verify:wiki -- --root . --strict
 ```
+
+### CI usage
+
+`npm run verify:wiki -- --json` prints a machine-readable report and exits
+non-zero when a wiki is broken, so the gate can run after `repowiki-generate`
+in any pipeline. Exit codes: `0` pass, `1` verification failed, `2` usage or
+read error. `--strict` also fails on untracked citations and unverifiable
+digests; without it they are warnings.
 
 ## Upgrade operations (dsh is in rc; public seams change often)
 
@@ -208,6 +222,7 @@ npm run verify:host
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
+scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/coverage, v0.137.0)
 scripts/check-coverage.mjs      Coverage gate (lines/branches/functions)
 scripts/scan-secrets.mjs        Git-tracked secret scan
 scripts/bench.mjs               Synthetic-repo index benchmark
@@ -262,7 +277,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (490 cases)
+test/                  Unit and integration tests (498 cases)
 ```
 
 ## License

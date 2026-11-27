@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.137.0] - 2026-11-27
+
+- **`verify:wiki` CI 门禁**：`npm run verify:wiki`（或
+  `node scripts/verify-wiki.mjs`）校验全部 Wiki 清单：缺失引用路径
+  （索引 + 有界文件系统探测）、行号越界（索引 v6）、内容漂移（清单 v3）
+  与指纹覆盖率。支持 `--root`、可重复 `--locale`、`--json` 与 `--strict`；
+  断链/越界/漂移默认失败，未覆盖/未验证默认警告、严格模式失败。没有 Wiki
+  资产退出 0；显式请求缺失 locale 失败。退出码：0 通过、1 失败、2 参数/读取错误。
+- **修复**：页级 `sources` 是章节 `sources` 的并集，服务端
+  `findCitationRangeIssues` 此前两者都计数，导致越界/未检查总数与健康分
+  扣分翻倍；现按页去重，与面板/覆盖率口径一致。
+- **测试**：498 例在 LANG=en 与 LANG=zh 下全通过；新增门禁的干净/严格、
+  断链/越界/漂移、未覆盖、缺失 locale、参数解析、main 输出与 CLI 退出码
+  用例，以及页级/章节重叠计数回归。
+
 ## [0.136.0] - 2026-11-27
 
 - **页级覆盖率明细**：`repowiki-status` 新增 `citationCoveragePages`，

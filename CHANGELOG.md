@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.137.0] - 2026-11-27
+
+### Added
+
+- **`verify:wiki` CI gate**: `npm run verify:wiki` (or
+  `node scripts/verify-wiki.mjs`) validates every wiki manifest: missing
+  citation paths (index plus bounded filesystem probes), out-of-range line
+  ranges (index v6), content drift (manifest v3) and digest coverage.
+  `--root`, repeatable `--locale`, `--json` and `--strict` are supported;
+  broken paths, out-of-range ranges and drift fail by default, while
+  untracked/unverifiable citations warn unless `--strict`. No wiki assets
+  exits 0; an explicitly requested missing locale fails. Exit codes: 0 pass,
+  1 verification failed, 2 usage/read error.
+
+### Fixed
+
+- **Duplicate range counts**: page-level `sources` are the union of section
+  sources; the server-side `findCitationRangeIssues` counted both, doubling
+  `total` / `unchecked` and the health penalty. It now deduplicates per page,
+  matching the panel and coverage accounting.
+
+### Tests
+
+- 498 cases pass (LANG=en and LANG=zh); the new suite covers clean/strict
+  manifests, broken/range/drift failures, untracked citations, missing
+  locales, argument parsing, `main` output and CLI exit codes, plus a
+  regression for overlapping page/section range counts.
+
 ## [0.136.0] - 2026-11-27
 
 ### Added

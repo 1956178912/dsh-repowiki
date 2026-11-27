@@ -1,6 +1,6 @@
 {
   "name": "dsh-repowiki",
-  "version": "0.136.0",
+  "version": "0.137.0",
   "private": true,
   "description": "Symbol-level repository knowledge index, task context packs, impact analysis, cards and wiki for DeepSeek Harness",
   "license": "MIT",
@@ -14,7 +14,8 @@
     "lint": "eslint index.js src client.js scripts test",
     "bench": "node scripts/bench.mjs",
     "release": "node scripts/release.mjs",
-    "verify:host": "node scripts/verify-host-tokens.mjs"
+    "verify:host": "node scripts/verify-host-tokens.mjs",
+    "verify:wiki": "node scripts/verify-wiki.mjs"
   },
   "main": "./index.js",
   "exports": {

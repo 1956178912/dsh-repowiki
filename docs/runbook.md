@@ -22,11 +22,13 @@ repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
 | 子代理成本过高 | — | 设置 `repowiki-plan.json` 的 `exclude`/`maxCardsPerRun`/`cardComplexityThreshold` |
 | 面板点击无反应 | DevTools Console 红错 | 面板有 `ErrorBoundary` 与 `role=status` 失败行；把错误文本反馈 |
 | 升级 dsh 后样式/功能异常 | `npm run verify:host` | 令牌漂移按输出修正；跑 `npm test` 回归 |
+| CI 提示 Wiki 引用失败 | `npm run verify:wiki -- --json` | 断链/越界/漂移按报告修引用或重新 `repowiki-generate`；未覆盖可 `--strict` 收紧 |
 
 ## 常用命令
 
 ```sh
 npm run verify:host      # 主题令牌漂移
+npm run verify:wiki      # Wiki 断链/越界/漂移/覆盖率门禁
 npm test                 # 全量回归
 npm run coverage:check   # 覆盖率门禁
 npm run scan:secrets     # 密钥扫描

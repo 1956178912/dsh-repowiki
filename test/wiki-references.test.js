@@ -171,6 +171,24 @@ test('findCitationRangeIssues：越界/反向/零起始与未检查计数', () =
   assert.equal(plain.unchecked, 0)
 })
 
+test('findCitationRangeIssues：页级/章节级重叠引用只计一次', () => {
+  const manifest = {
+    pages: [{
+      slug: 'p',
+      title: 'P',
+      sources: ['a.ts#L9-L9', 'c.ts#L1-L1'],
+      sections: [{ heading: 'S', sources: ['a.ts#L9-L9', 'c.ts#L1-L1'] }],
+    }],
+  }
+  const out = findCitationRangeIssues(
+    manifest,
+    new Map([['a.ts', 5]]),
+    new Set(['a.ts', 'c.ts']),
+  )
+  assert.equal(out.total, 1, '重叠的越界引用只计一次')
+  assert.equal(out.unchecked, 1, '重叠的未检查引用只计一次')
+})
+
 test('findCitationRangeIssues：页面明细有界但总数不受展示截断影响', () => {
   const pages = Array.from({ length: 12 }, (_, index) => ({
     slug: `p${index}`,
