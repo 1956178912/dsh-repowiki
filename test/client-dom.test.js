@@ -30,12 +30,18 @@ test('DOM 集成：真实 React 渲染 + 真实 change 事件装载语料', asyn
   // 页面根须自管滚动（宿主 mainPanel 为 overflow:hidden 的 flex 列；
   // 缺此声明内容超出即被裁掉、无法滑动——用户反馈的“无法滑动”根因）
   const root = container.querySelector('[aria-label="title"]')
-  assert.ok(root, '应渲染带 aria-label 的页面根')
+  assert.ok(root, '应渲染带 aria-label 的页面根（外层滚动器）')
   const st = root.style
-  assert.equal(st.height, '100%', '页面根应 height:100%')
-  assert.equal(st.overflowY, 'auto', '页面根应 overflow-y:auto')
-  assert.equal(st.overflowX, 'hidden', '页面根应 overflow-x:hidden')
-  assert.ok(st.paddingTop.includes('dsh-frame-top-clearance'),
+  assert.equal(st.height, '100%', '外层应 height:100%')
+  assert.equal(st.overflowY, 'auto', '外层应 overflow-y:auto')
+  assert.equal(st.overflowX, 'hidden', '外层应 overflow-x:hidden')
+  assert.equal(st.scrollbarGutter, 'stable', '外层应 scrollbar-gutter:stable')
+  assert.ok(st.background.includes('dsw-alias-bg-base'), '页面应自绘底色 bg-base')
+  // 内层 960 内容列：顶部留白走官方顶条令牌
+  const column = root.firstElementChild
+  assert.ok(column, '应存在内层内容列')
+  assert.equal(column.style.maxWidth, '960px', '内容列 max-width:960px')
+  assert.ok(column.style.paddingTop.includes('dsh-frame-top-clearance'),
     'macOS 顶条留白应走官方 --dsh-frame-top-clearance 令牌')
 })
 

@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.37.0] - 2026-11-27
+
+### Changed
+
+- **Page structure aligned with the reference pages** (continuing the
+  layout audit opened by the scroll bug): the closest sibling page
+  (TaskManager, which sits beside our entry in the same automation area)
+  uses a two-layer structure — a full-width scroller with the centered
+  960px content column inside, so "the 960px column reaches the
+  scrollbar". Our single-layer 960px scroller placed the scrollbar inset
+  from the viewport edge on wide screens. Restructured to the official
+  shape: the outer layer owns scrolling (`height:100%; overflow-y:auto;
+  overflow-x:hidden; scrollbar-gutter: stable`), paints the page's base
+  background (`--dsw-alias-bg-base`) and sets the sibling pages' base
+  typography (14px / 1.6); the inner column carries the 960px width,
+  responsive `clamp(24px, 4vw, 48px)` inline insets, 48px bottom inset,
+  and the top clearance. DOM regression asserts both layers.
+
 ## [0.36.0] - 2026-11-27
 
 ### Fixed

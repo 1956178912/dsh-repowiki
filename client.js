@@ -843,20 +843,32 @@ window.__ModuleLoader__.load({
       }, `${label}${count > 0 ? ` ${count}` : ''}`)
 
       return h(ErrorBoundary, null, h('div', {
-        // 宿主 mainPanel 为 flex 列 + overflow:hidden——页面须自管滚动
-        // （官方 PluginManagerPage 同款：height:100% + overflow-y:auto，
-        // 头部与内容共用一个滚动器）。缺此声明时内容超出即被裁掉、无法滑动。
-        // macOS 顶部窗口条（交通灯/侧栏开关）会压住入口页首行：官方参照页
-        // 以 var(--dsh-frame-top-clearance) 补 padding-top（非 darwin 回退 0）。
+        // 外层（滚动器）：宿主 mainPanel 为 overflow:hidden 的 flex 列——
+        // 页面须自管滚动。参照 TaskManagerPage 的两层结构：滚动器全宽
+        // （滚动条贴视口边，scrollbar-gutter 防出现时布局抖动），内容列
+        // 居中在内部。页面自绘底色与基础排版（官方参照页同款）。
         style: {
-          paddingTop: 'calc(24px + var(--dsh-frame-top-clearance, 0px))',
-          paddingRight: '28px', paddingBottom: '48px', paddingLeft: '28px',
-          maxWidth: 960, margin: '0 auto',
-          height: '100%', boxSizing: 'border-box',
+          height: '100%', width: '100%', minWidth: 0, minHeight: 0,
+          boxSizing: 'border-box',
           overflowY: 'auto', overflowX: 'hidden',
+          scrollbarGutter: 'stable',
+          background: 'var(--dsw-alias-bg-base, transparent)',
+          fontSize: 14, lineHeight: 1.6,
+          color: 'var(--dsw-alias-label-primary, inherit)',
         },
         'aria-label': t('title'),
       },
+        h('div', {
+          // 内层（960 内容列）：顶部留白 = 28px + macOS 窗口条高度令牌；
+          // 内边距响应式 clamp 与官方参照页一致（窄屏自然收窄）
+          style: {
+            maxWidth: 960, margin: '0 auto',
+            paddingTop: 'calc(28px + var(--dsh-frame-top-clearance, 0px))',
+            paddingRight: 'clamp(24px, 4vw, 48px)',
+            paddingBottom: '48px',
+            paddingLeft: 'clamp(24px, 4vw, 48px)',
+          },
+        },
         h('h1', { style: { margin: '0 0 4px', fontSize: 22 } }, t('title')),
         h('p', { style: { margin: '0 0 20px', ...muted } }, t('subtitle')),
 
@@ -1055,6 +1067,7 @@ window.__ModuleLoader__.load({
           style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-label-primary, #111827)' },
         }, message),
         notice,
+        ),
       ),
       )
     }
