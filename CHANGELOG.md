@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.143.0] - 2026-11-27
+
+### Added
+
+- **Persisted generation failures**: `repowiki-generate` now records failed
+  page writes in the manifest (`failed` up to 10 entries, `failedTotal` for
+  the full count). Previously a partially failed run still advanced the input
+  digests, so the next gate could treat an incomplete wiki as fresh.
+- `verify:wiki` reports these as `wiki/generation-failed` (warning by default,
+  failure under `--strict`) and exposes `failedPages` per locale.
+- `repowiki-status` adds `wiki.failed`/`wiki.failedPages` and prints the count
+  in its `Wiki:` line.
+
+### Tests
+
+- 506 cases pass (LANG=en and LANG=zh); new cases cover a manifest with failed
+  pages through the gate (lenient/strict) and through status text/structure,
+  plus the empty `failed`/`failedTotal` fields on a clean generation.
+
 ## [0.142.0] - 2026-11-27
 
 ### Added

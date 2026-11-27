@@ -691,6 +691,8 @@ test('repowiki-generate execute：granularity=module 确定性生成模块页与
   assert.ok(citationDigests && typeof citationDigests === 'object', '清单记录引用内容指纹')
   assert.ok('a.ts' in citationDigests && 'b.ts' in citationDigests, '模块页源文件均有指纹')
   for (const value of Object.values(citationDigests)) assert.match(value, /^[0-9a-f]{12}$/)
+  assert.deepEqual(manifest.failed, [], '无失败页时清单记录空数组')
+  assert.strictEqual(manifest.failedTotal, 0)
   assert.strictEqual(out.manifest, '.dsh-repowiki/wiki/zh/_index.json')
 })
 

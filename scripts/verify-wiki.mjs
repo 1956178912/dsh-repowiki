@@ -9,6 +9,7 @@
  * - 引用内容漂移（清单 v3 `citationDigests`）
  * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
  * - 清单登记但磁盘缺失的页面（孤儿页仅告警）
+ * - 上次生成失败页（清单 `failed`/`failedTotal`）
  * - 空清单（默认告警，`--strict`/`--require` 失败）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
  *
@@ -481,6 +482,16 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   if (orphanedPages.length > 0) {
     addWarning('wiki/orphaned-pages', `${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
   }
+  // 上次生成失败页：清单已按新输入指纹更新，但部分页面没写成功；
+  // 不报告就会把一次不完整的生成当成新鲜 Wiki。
+  const failedTotal = Number.isInteger(manifest.failedTotal)
+    ? manifest.failedTotal
+    : Array.isArray(manifest.failed) ? manifest.failed.length : 0
+  if (failedTotal > 0) {
+    const message = `manifest records ${failedTotal} failed page(s) from the last generation (run repowiki-generate)`
+    if (strict) addIssue('wiki/generation-failed', message)
+    else addWarning('wiki/generation-failed', message)
+  }
   const { known, capped } = await resolveKnown(root, manifest, index.files)
   const broken = findBrokenWikiCitations(manifest, known)
   const ranges = findCitationRangeIssues(manifest, lineCounts(index.files), known)
@@ -524,6 +535,7 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
     pageFiles: diskPages.size,
     missingPages,
     orphanedPages,
+    failedPages: failedTotal,
     broken,
     ranges,
     drift,

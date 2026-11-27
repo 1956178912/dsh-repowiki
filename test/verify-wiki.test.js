@@ -304,6 +304,33 @@ test('verify-wiki：清单页面缺失失败，孤儿页仅警告', async () => 
   assert.ok(codes.includes('wiki/orphaned-pages'))
 })
 
+test('verify-wiki：上次生成失败页默认告警，严格模式失败', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    failed: [{ slug: 'overview', reason: 'write failed' }],
+    failedTotal: 1,
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+
+  const lenient = await verifyWiki({ root })
+  assert.equal(lenient.ok, true)
+  assert.equal(lenient.locales[0].failedPages, 1)
+  assert.match(lenient.warnings.join(' '), /1 failed page/)
+  assert.ok(lenient.problems.some(problem => problem.code === 'wiki/generation-failed'
+    && problem.severity === 'warning'))
+
+  const strict = await verifyWiki({ root, strict: true })
+  assert.equal(strict.ok, false)
+  assert.match(strict.issues.join(' '), /1 failed page/)
+  assert.ok(strict.problems.some(problem => problem.code === 'wiki/generation-failed'
+    && problem.severity === 'error'))
+})
+
 test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
   const root = makeRoot()
   const optional = await verifyWiki({ root })

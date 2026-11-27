@@ -39,6 +39,9 @@ const RETRY_MAX_MS = 1000
 /** 生成清单时最多读取的引用源文件数（防止极端卡片集放大 IO）。 */
 const MAX_CITATION_SOURCE_READS = 200
 
+/** 清单里最多记录的失败页明细（其余用 failedTotal 汇总）。 */
+const MAX_MANIFEST_FAILED = 10
+
 /** 工具描述。 */
 const DESCRIPTION = [
   'Synthesize knowledge cards into Wiki pages under .dsh-repowiki/wiki/<locale>/,',
@@ -615,6 +618,10 @@ export function repowikiGenerateTool(ctx) {
             inputDigest,
             // 记忆指纹：面板/状态只读卡片指纹判陈旧，生成侧用它做增量短路
             memoryDigest,
+            // 生成失败页持久化：写页面失败后清单仍会更新输入指纹，
+            // 不记录就会让 verify 把一次不完整的生成当成新鲜 Wiki。
+            failed: failed.slice(0, MAX_MANIFEST_FAILED),
+            failedTotal: failed.length,
             pages: manifestPages,
           })
         } catch (err) {

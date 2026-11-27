@@ -246,9 +246,11 @@ export function repowikiStatusTool(ctx) {
               count: { type: 'integer' },
               manifest: { type: 'boolean' },
               stale: { type: 'integer' },
+              failed: { type: 'integer', description: 'Pages that failed to write during the last generation.' },
+              failedPages: { type: 'array', items: { type: 'string' } },
               orphaned: { type: 'integer' },
             },
-            required: ['count', 'manifest', 'stale', 'orphaned'],
+            required: ['count', 'manifest', 'stale', 'failed', 'failedPages', 'orphaned'],
           },
           brokenCitations: {
             type: 'object',
@@ -623,7 +625,7 @@ export function repowikiStatusTool(ctx) {
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
           `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
-          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, orphaned ${value.wiki.orphaned}`,
+          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
             ? [`Broken citations: ${value.brokenCitations.total === 0
               ? '(none)'
@@ -749,6 +751,17 @@ export function repowikiStatusTool(ctx) {
       const manifestSlugs = new Set((manifest?.pages ?? []).map(p => p.slug))
       const wikiOrphaned = manifest ? wikiPages.filter(p => !manifestSlugs.has(p.slug)).length : 0
       const wikiStale = wikiPages.filter(p => p.inputDigest && p.inputDigest !== currentDigest).length
+      // 上次生成失败页：清单已更新输入指纹，但部分页面没写成功；
+      // 只在清单里持久化，不在本次 status 里重新推断。
+      const wikiFailed = manifest && Number.isInteger(manifest.failedTotal)
+        ? manifest.failedTotal
+        : Array.isArray(manifest?.failed) ? manifest.failed.length : 0
+      const wikiFailedPages = Array.isArray(manifest?.failed)
+        ? manifest.failed
+          .map(item => (typeof item?.slug === 'string' ? item.slug : ''))
+          .filter(Boolean)
+          .slice(0, 10)
+        : []
       if (!manifest && wikiPages.length > 0) {
         warnings.push('wiki/_index.json is missing; page ordering/orphan detection is degraded until repowiki-generate runs.')
       }
@@ -933,6 +946,8 @@ export function repowikiStatusTool(ctx) {
           count: wikiPages.length,
           manifest: manifest !== null,
           stale: wikiStale,
+          failed: wikiFailed,
+          failedPages: wikiFailedPages,
           orphaned: wikiOrphaned,
         },
         ...(brokenCitations ? { brokenCitations } : {}),

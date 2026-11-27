@@ -211,6 +211,32 @@ test('repowiki-status：非法 locale 回退 / plan 错误 / Wiki 陈旧 / rejec
   assert.ok(out.warnings.some(w => /repowiki-plan\.json/.test(w)), 'plan 损坏应告警')
 })
 
+test('repowiki-status：上次生成失败页计数与文本', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-failed-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function main() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const index = JSON.parse(nodefs.readFileSync(path.join(dir, '.dsh-repowiki/index.json'), 'utf8'))
+  const digest = index.files.find(f => f.path === 'a.ts').digest
+  await writeCard(ctx.fs, dir, 'a.ts', 'zh', `${encodeFrontmatter({
+    schemaVersion: 1, path: 'a.ts', lang: 'typescript', locale: 'zh',
+    sourceDigest: digest, title: '入口', tags: [], manuallyEdited: false, generatedAt: 'now',
+  })}\n# 入口\n`)
+  await repowikiGenerateTool(ctx).execute({ locale: 'zh', granularity: 'module' }, fakeExec)
+
+  const manifestPath = path.join(dir, '.dsh-repowiki/wiki/zh/_index.json')
+  const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
+  manifest.failed = [{ slug: 'modules/root', reason: 'write failed' }]
+  manifest.failedTotal = 1
+  nodefs.writeFileSync(manifestPath, JSON.stringify(manifest))
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.wiki.failed, 1)
+  assert.deepEqual(out.wiki.failedPages, ['modules/root'])
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /failed 1/)
+})
+
 test('repowiki-status：模块依赖热点（跨模块 import 边，按边数）', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-deps-'))
   nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })

@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.143.0] - 2026-11-27
+
+- **生成失败页持久化**：`repowiki-generate` 在清单记录写失败的页面
+  （`failed` 最多 10 条，`failedTotal` 记录完整数量）。此前部分失败仍会
+  推进输入指纹，下一次门禁会把不完整的 Wiki 当成新鲜。
+- **门禁报告**：`verify:wiki` 以 `wiki/generation-failed` 报告（默认警告、
+  `--strict` 失败），locale 结果新增 `failedPages`。
+- **状态诊断**：`repowiki-status` 新增 `wiki.failed`/`wiki.failedPages`，
+  并在 `Wiki:` 行显示失败数。
+- **测试**：506 例在 LANG=en 与 LANG=zh 下全通过；新增清单失败页的
+  宽松/严格门禁用例与 status 结构/文本用例，以及干净生成的空字段断言。
+
 ## [0.142.0] - 2026-11-27
 
 - **结构化问题码**：`verify:wiki --json` 在 issues/warnings 之外输出
