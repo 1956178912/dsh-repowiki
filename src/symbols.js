@@ -1493,6 +1493,119 @@ function cppTerminator(lines, startIdx) {
 }
 
 /**
+ * 去除 Elixir 行注释（`#`，但 `?#` 字符字面量与字符串内的 `#` 不算）。
+ * 只做行级处理：多行 heredoc 内的 `#` 可能被误删，但只影响符号/块检测，
+ * 不影响源码内容。
+ * @param {string} line - 源码行。
+ * @returns {string} 去注释后的行。
+ */
+function stripElixirComment(line) {
+  let quote = ''
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (ch === '\\') { i++; continue }
+      if (ch === quote) quote = ''
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === '#' && line[i - 1] !== '?') return line.slice(0, i)
+  }
+  return line
+}
+
+/**
+ * 计算一行 Elixir 的 do/end 深度增量。
+ * 块起始：`do`（排除 `do:` 关键字形式）与 `fn`；块结束：`end`。
+ * 单行 `fn -> ... end` 与 `if x, do: y` 的增量为 0。
+ * @param {string} line - 源码行。
+ * @returns {number} 深度增量。
+ */
+function elixirBlockDelta(line) {
+  const code = stripElixirComment(line)
+  if (code.trim() === '') return 0
+  const count = (re) => (code.match(re) ?? []).length
+  return count(/(?<![\w.:@])fn\b/g)
+    + count(/(?<![\w.:@])do\b(?!:)/g)
+    - count(/(?<![\w.:@])end\b/g)
+}
+
+/**
+ * 计算 Elixir 块（defmodule/def…do 或 fn）的结束行（1-based）。
+ * 多行函数签名先向后找到 `do` 所在行作为块起点（最多 20 行）；
+ * 单行 `do:` 形式直接返回声明行；`scan=false` 用于 defguard/defdelegate
+ * 这类永不开启 do 块的声明（否则会把后续模块的 `do` 误当自己的块）。
+ * @param {string[]} lines - 代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {boolean} [scan] - 是否向后寻找 `do`（默认 true）。
+ * @returns {number} 结束行（1-based，含 `end`）。
+ */
+function elixirBlockEnd(lines, startIdx, scan = true) {
+  if (!scan || /\bdo:/.test(stripElixirComment(lines[startIdx]))) return startIdx + 1
+  let head = startIdx
+  const limit = Math.min(lines.length - 1, startIdx + 20)
+  while (head <= limit && !/(?<![\w.:@])do\b(?!:)/.test(stripElixirComment(lines[head]))) head++
+  if (head > limit) return startIdx + 1
+  let depth = 0
+  for (let i = head; i < lines.length; i++) {
+    depth += elixirBlockDelta(lines[i])
+    if (depth <= 0) return i + 1
+  }
+  return lines.length
+}
+
+/**
+ * 提取 Elixir 符号：defmodule（模块/结构体）、def/defp、defmacro(p)、
+ * defguard(p)、defdelegate。
+ * - 模块内函数记为 method 并带 parent（模块全名）；
+ * - `defp` 等私有形式 exported=false；
+ * - 多行签名按 `do` 所在行起算块范围；`do:` 单行形式只占一行。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractElixir(lines) {
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const ranges = []
+  for (let i = 0; i < lines.length; i++) {
+    while (ranges.length > 0 && ranges[ranges.length - 1].end <= i) ranges.pop()
+    const code = stripElixirComment(lines[i]).trim()
+    if (code === '') continue
+
+    // defmodule MyApp.Accounts.User do
+    const mm = /^defmodule\s+([A-Z][\w.]*)\s+do\b/.exec(code)
+    if (mm) {
+      // 嵌套 `defmodule Inner` 的真实模块名是 `Outer.Inner`（Elixir 语义）
+      const outer = ranges.length > 0 ? ranges[ranges.length - 1].name : ''
+      const name = outer && !mm[1].startsWith(`${outer}.`) ? `${outer}.${mm[1]}` : mm[1]
+      const end = elixirBlockEnd(lines, i)
+      symbols.push({
+        name, kind: 'class', line: i + 1, endLine: end, exported: true,
+      })
+      if (end > i + 1) ranges.push({ name, end })
+      continue
+    }
+
+    // def/defp/defmacro/defmacrop/defguard/defguardp/defdelegate name
+    const fm = /^(defp?|defmacro(?:p)?|defguard(?:p)?|defdelegate)\s+([a-z_][\w!?]*)/.exec(code)
+    if (fm) {
+      const parent = ranges.length > 0 ? ranges[ranges.length - 1].name : undefined
+      symbols.push({
+        name: fm[2],
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: elixirBlockEnd(lines, i, fm[1] !== 'defguard' && fm[1] !== 'defguardp'
+          && fm[1] !== 'defdelegate'),
+        exported: fm[1] === 'def' || fm[1] === 'defmacro' || fm[1] === 'defguard'
+          || fm[1] === 'defdelegate',
+        ...(parent ? { parent } : {}),
+      })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -1619,6 +1732,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'swift') return extractSwift(lines)
   if (lang === 'scala') return extractScala(lines)
   if (lang === 'dart') return extractDart(lines)
+  if (lang === 'elixir') return extractElixir(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

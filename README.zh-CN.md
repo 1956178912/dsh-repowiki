@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、15 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度（v0.176.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、16 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度，以及 Elixir 模块/别名索引与 `mix.exs` 技术栈（v0.177.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -312,6 +312,7 @@
   `inputDigest`，与清单不一致即提示；Web Crypto 不可用时静默降级
 - 面板记忆陈旧提示（v0.149.0）：同一套检查覆盖已采信记忆的
   `memoryDigest`，与门禁的陈旧视图一致
+- Elixir 支持（v0.177.0）：`defmodule` 模块索引（嵌套记录完整名）、`def`/`defp`/`defmacro`/`defguard`/`defdelegate` 的 do/end 范围、`alias`/`import`/`require`/`use` 依赖边（含分组与重命名），以及 `mix.exs` 应用名/依赖计数/Hex 技术识别
 - 依赖图感知的 Wiki 新鲜度（v0.176.0）：清单记录索引文件集合与依赖边的 `graphDigest`；增量生成要求其一致，`verify:wiki` 报告 `wiki/stale-graph`，状态工具告警，面板把结构不匹配并入“Wiki 落后”提示——配置驱动的边变化不再让架构页静默过期
 - 更精确的中文查询分词（v0.175.0）：多字中文查询只产出双字组（文档侧仍保留单字），"无匹配"不再命中所有含"无"的文档，单字查询照常可用
 - GFM 表格与嵌套列表（v0.174.0）：面板渲染器支持列对齐表格（分割行驱动对齐、单元格行内格式与 `\|` 转义）以及按缩进嵌套的 `ul`/`ol`，生成的卡片与 Wiki 按原样呈现
@@ -331,7 +332,7 @@
 - **全部文件 IO 走 `ctx.fs`**（方案 §9.1），不经裸 node fs，保持策略一致性；资产写入后回读校验，内容不一致立即报错而非静默成功。
 - **LLM 子任务走 spawn 子代理**（ADR-0003）：`ctx.subagents.startActivation({provider:'spawn'})` 继承会话模型；结构化输出经 `outputSchema` 约束；取消走 `exec.signal`；Markdown 格式由插件渲染，模型不决定格式。
 - **`inject: ['fs', 'tools', 'subagents']`**：均为能力 seam，缺失时插件在该 profile 不激活而非抛错。
-- **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、C、C++ 的函数/类/方法/接口/类型/导入；本地依赖边分别按 Python 绝对/相对导入（项目根 + pyproject 自定义根 + `src`/`lib` 布局根）、C/C++ `#include`（引号形式先查文件目录；两种形式都经 `include`/`src`/`inc` 根）、`go.mod`、Rust crate/模块约定、Java 包后缀、C#/Kotlin/Scala 点分路径、PHP 大小写不敏感 `use` 解析（根与嵌套清单的 composer `psr-4` 映射优先，命名空间后缀兜底）、Ruby `require_relative` 与 `lib/` 加载路径 `require`、SwiftPM `Package.swift` 目标路径（`Sources/<Target>/` 兜底），以及 JS/TS 的 `tsconfig`/`jsconfig` `paths` + `baseUrl` 别名与工作区包 `exports` 解析（外部模块忽略）。目录条目按名称字节序排序后遍历，兄弟目录最多 8 个并发预取，文件读取与解析采用有界并发（默认 8 路），结果按路径装配——远程后端重叠往返等待，同时保持逐字节可复现的索引。
+- **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、Elixir、C、C++ 的函数/类/方法/接口/类型/导入；本地依赖边分别按 Python 绝对/相对导入（项目根 + pyproject 自定义根 + `src`/`lib` 布局根）、C/C++ `#include`（引号形式先查文件目录；两种形式都经 `include`/`src`/`inc` 根）、`go.mod`、Rust crate/模块约定、Java 包后缀、C#/Kotlin/Scala 点分路径、PHP 大小写不敏感 `use` 解析（根与嵌套清单的 composer `psr-4` 映射优先，命名空间后缀兜底）、Ruby `require_relative` 与 `lib/` 加载路径 `require`、Elixir `defmodule` 模块索引（`alias`/`import`/`use`）、SwiftPM `Package.swift` 目标路径（`Sources/<Target>/` 兜底），以及 JS/TS 的 `tsconfig`/`jsconfig` `paths` + `baseUrl` 别名与工作区包 `exports` 解析（外部模块忽略）。目录条目按名称字节序排序后遍历，兄弟目录最多 8 个并发预取，文件读取与解析采用有界并发（默认 8 路），结果按路径装配——远程后端重叠往返等待，同时保持逐字节可复现的索引。
 - **Git 溯源不启子进程**：`index.json` 的 `git.branch`/`git.commit` 来自 `.git/HEAD`、松散引用、`packed-refs` 与 worktree `commondir`；非 Git 仓库省略该字段。
 - **并发写安全**（ADR-0005）：六个写工具按解析出的资产根排队（进程内 promise 链锁）；extract/generate 的模型调用在锁外，临界区内做写前二次判定；抽取可按 `concurrency` 并行最多 4 路模型调用，并按 `attempts` 做有界重试，写盘仍逐张串行；不同仓库互不阻塞，只读检索不加锁。
 - **零依赖排序检索**：卡片/Wiki/已采信记忆的 BM25（拉丁词 + 中文单字/二元组），无 embedding、无向量库。
@@ -458,7 +459,7 @@ docs/compatibility.md  DSH / Node / OS 兼容矩阵
 docs/benchmarks.md     基准方法与最近数据
 cordis.patch.yml       Loader patch（插入插件行）
 src/schema.js          常量与领域约定（单一来源）
-src/symbols.js         零依赖符号提取（15 语言 + Vue/Svelte SFC）
+src/symbols.js         零依赖符号提取（16 语言 + Vue/Svelte SFC）
 src/deps.js            import/require 依赖边提取
 src/stack.js           技术栈识别（npm/pip/go/cargo/maven/gradle/composer/bundler/swiftpm/sbt/pub/cmake）
 src/assets.js          资产定位与读写（ctx.fs 注入）

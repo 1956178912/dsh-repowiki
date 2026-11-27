@@ -352,6 +352,35 @@ test('Dart：import/export/part 提取相对语义与 show 符号', () => {
   assert.ok(!imports.some(i => i.specifier === 'commented.dart'), '注释不提取')
 })
 
+test('Elixir：alias/import/require/use 与分组别名', () => {
+  const code = [
+    'defmodule MyApp.Accounts do',
+    '  alias MyApp.Repo',
+    '  alias MyApp.{Helpers, Format}',
+    '  alias MyApp.Legacy, as: Old',
+    '  import MyApp.QueryHelpers, only: [where: 2]',
+    '  require Logger',
+    '  use MyApp.Schema',
+    '  # alias MyApp.Commented',
+    '  def list, do: Repo.all()',
+    'end',
+  ].join('\n')
+  const imports = extractImports(code, 'elixir')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['MyApp.Repo', 2],
+    ['MyApp.Helpers', 3],
+    ['MyApp.Format', 3],
+    ['MyApp.Legacy', 4],
+    ['MyApp.QueryHelpers', 5],
+    ['Logger', 6],
+    ['MyApp.Schema', 7],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
+  assert.deepEqual(imports[1].imported, ['Helpers'])
+  assert.deepEqual(imports[3].imported, ['Legacy'], 'as: 别名不改变目标模块')
+  assert.ok(!imports.some(i => i.specifier.includes('Commented')), '注释行不提取')
+})
+
 test('C/C++：#include 引号与尖括号都提取，仅引号为相对语义', () => {
   const code = [
     '#include "core/util.h"',

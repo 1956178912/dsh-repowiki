@@ -606,6 +606,68 @@ function extractCppImports(lines) {
 }
 
 /**
+ * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
+ * @param {string} line - 源码行。
+ * @returns {string} 去注释后的行。
+ */
+function stripElixirComment(line) {
+  let quote = ''
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (ch === '\\') { i++; continue }
+      if (ch === quote) quote = ''
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === '#' && line[i - 1] !== '?') return line.slice(0, i)
+  }
+  return line
+}
+
+/**
+ * 提取 Elixir 的 alias/import/require/use 引用。
+ * - `alias MyApp.{Repo, Mailer}` 展开为多条；
+ * - `alias Foo, as: Bar` 仍指向 Foo；
+ * - `__MODULE__` 前缀、`:atom` 与 `unquote(...)` 等无法静态定位的形式跳过。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractElixirImports(lines) {
+  const result = []
+  /**
+   * 登记一条模块引用。
+   * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
+   * @param {number} line - 行号。
+   * @returns {void}
+   */
+  const push = (specifier, line) => {
+    if (!/^[A-Z][\w.]*$/.test(specifier)) return
+    result.push({
+      specifier,
+      line,
+      kind: 'import',
+      relative: false,
+      imported: [specifier.split('.').pop()],
+    })
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const code = stripElixirComment(lines[i]).trim()
+    const grouped = /^(alias|import|require|use)\s+([A-Z][\w.]*)\.\{([^}]*)\}/.exec(code)
+    if (grouped) {
+      for (const part of grouped[3].split(',')) {
+        const name = part.trim().replace(/\s+as:\s+\w+$/, '')
+        if (name) push(`${grouped[2]}.${name}`, i + 1)
+      }
+      continue
+    }
+    const m = /^(alias|import|require|use)\s+([A-Z][\w.]*)/.exec(code)
+    if (m) push(m[2], i + 1)
+  }
+  return result
+}
+
+/**
  * 提取 Dart 的 import/export/part 引用。
  * @param {string[]} lines - 代码行。
  * @returns {ImportInfo[]} 引用记录。
@@ -662,6 +724,7 @@ export function extractImports(code, lang) {
   if (lang === 'swift') return extractSwiftImports(lines)
   if (lang === 'scala') return extractScalaImports(lines)
   if (lang === 'dart') return extractDartImports(lines)
+  if (lang === 'elixir') return extractElixirImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

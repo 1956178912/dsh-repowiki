@@ -1085,6 +1085,69 @@ test('C/C++：#include 相对目录与 include/src 根解析，系统头不建�
   assert.ok(header.symbols.some(s => s.name === 'helper' && s.kind === 'function'), '头文件原型计入符号')
 })
 
+test('Elixir：defmodule 模块索引解析 alias/import，mix.exs 技术栈', async () => {
+  const dir = makeProject({
+    'mix.exs': [
+      'defmodule Demo.MixProject do',
+      '  use Mix.Project',
+      '  def project do',
+      '    [app: :demo, version: "0.1.0", deps: deps()]',
+      '  end',
+      '  defp deps do',
+      '    [',
+      '      {:phoenix, "~> 1.7"},',
+      '      {:ecto_sql, "~> 3.10"}',
+      '    ]',
+      '  end',
+      'end',
+    ].join('\n'),
+    'lib/my_app/repo.ex': 'defmodule MyApp.Repo do\n  use Ecto.Repo\nend\n',
+    'lib/my_app/accounts.ex': [
+      'defmodule MyApp.Accounts do',
+      '  alias MyApp.Repo',
+      '  import MyApp.Helpers',
+      '  def list, do: Repo.all()',
+      'end',
+    ].join('\n'),
+    'lib/my_app/helpers.ex': 'defmodule MyApp.Helpers do\n  def format(x), do: x\nend\n',
+    'lib/my_app/nested.ex': [
+      'defmodule MyApp.Outer do',
+      '  defmodule Inner do',
+      '    def run, do: :ok',
+      '  end',
+      'end',
+    ].join('\n'),
+    'lib/my_app/caller.ex': [
+      'defmodule MyApp.Caller do',
+      '  alias MyApp.Outer.Inner',
+      '  def go, do: Inner.run()',
+      'end',
+    ].join('\n'),
+    'apps/web/lib/web/router.ex': 'defmodule Web.Router do\n  use Plug.Router\nend\n',
+    'apps/web/lib/web/endpoint.ex': 'defmodule Web.Endpoint do\n  alias Web.Router\nend\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { elixir: 7 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('lib/my_app/accounts.ex', 'lib/my_app/repo.ex')?.line, 2, 'alias 边与行号')
+  assert.equal(edge('lib/my_app/accounts.ex', 'lib/my_app/helpers.ex')?.line, 3, 'import 边')
+  assert.equal(edge('lib/my_app/caller.ex', 'lib/my_app/nested.ex')?.line, 2, '嵌套模块 alias 解析到声明文件')
+  assert.equal(edge('apps/web/lib/web/endpoint.ex', 'apps/web/lib/web/router.ex')?.line, 2, 'umbrella 布局按 defmodule 解析')
+  assert.equal(doc.edges.length, 4, '外部 Ecto/Plug 不建边')
+
+  const accounts = doc.files.find(f => f.path === 'lib/my_app/accounts.ex')
+  assert.ok(accounts.symbols.some(s => s.name === 'MyApp.Accounts' && s.kind === 'class'))
+  assert.ok(accounts.symbols.some(s => s.name === 'list' && s.kind === 'method' && s.parent === 'MyApp.Accounts'))
+  assert.ok(doc.files.find(f => f.path === 'lib/my_app/nested.ex').symbols
+    .some(s => s.name === 'MyApp.Outer.Inner' && s.kind === 'class'), '嵌套模块记录完整名')
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.dependencyCounts.mix, 2)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Phoenix' && t.ecosystem === 'mix'))
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Ecto' && t.ecosystem === 'mix'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

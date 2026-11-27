@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.177.0] - 2026-11-28
+
+### Added
+
+- **Elixir indexing (16th language)**: `.ex` files produce `defmodule`
+  symbols (nested `defmodule Inner` records its full `Outer.Inner` name),
+  `def`/`defp`, `defmacro(p)`, `defguard(p)` and `defdelegate` with
+  do/end-aware ranges, `do:` one-liners, multi-line signatures and
+  private visibility. `alias` / `import` / `require` / `use` resolve to the
+  file that declares the module (grouped `alias MyApp.{A, B}` and `as:`
+  aliases included), so Phoenix umbrella apps, nested modules and
+  multi-module files get real dependency edges; external modules
+  (`Logger`, `Ecto`, …) stay edge-free. `mix.exs` contributes the app name,
+  the dependency count and Hex technology names (Phoenix, Ecto, Plug, Oban,
+  …). Prompt fences and the panel language filter know `elixir`.
+
+### Tests
+
+- 561 cases pass (LANG=en and LANG=zh); new symbol coverage pins module /
+  function / macro / guard / delegate extraction, nested full names,
+  multi-line heads and `do:` one-liners; a dependency fixture covers grouped
+  and renamed aliases; the indexer end-to-end fixture asserts alias/import
+  edges with line numbers, umbrella layout, nested-module resolution,
+  external-package exclusion and the `mix` stack counts.
+
 ## [0.176.0] - 2026-11-28
 
 ### Added

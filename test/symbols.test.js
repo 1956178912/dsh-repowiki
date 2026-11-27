@@ -777,6 +777,72 @@ test('Dart：类型/顶层函数/变量、构造器/方法/getter 与私有可�
   assert.ok(!symbols.some(s => s.name === 'red'), '枚举常量不产符号')
 })
 
+test('Elixir：模块/函数/宏/guard/delegate 与嵌套模块命名', () => {
+  const code = [
+    'defmodule MyApp.Accounts.User do',
+    '  @moduledoc "用户"',
+    '',
+    '  def new(name), do: %__MODULE__{name: name}',
+    '',
+    '  def find(',
+    '    id,',
+    '    opts \\\\ []',
+    '  ) do',
+    '    case id do',
+    '      nil -> :error',
+    '      _ -> :ok',
+    '    end',
+    '  end',
+    '',
+    '  defp validate(x) do',
+    '    if x, do: :ok, else: :error',
+    '  end',
+    '',
+    '  defmacro helper(a) do',
+    '    quote do',
+    '      unquote(a)',
+    '    end',
+    '  end',
+    '',
+    '  defguard is_id(v) when is_integer(v)',
+    '  defdelegate name(user), to: MyApp.Repo',
+    '',
+    '  # def commented_out(x), do: x',
+    '',
+    '  defmodule Inner do',
+    '    def run, do: :ok',
+    '  end',
+    'end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'elixir')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('MyApp.Accounts.User').kind, 'class')
+  assert.equal(byName.get('MyApp.Accounts.User').endLine, 34)
+  assert.equal(byName.get('MyApp.Accounts.User.Inner').kind, 'class', '嵌套模块使用完整名')
+  assert.equal(byName.get('MyApp.Accounts.User.Inner').endLine, 33)
+
+  assert.equal(byName.get('new').kind, 'method')
+  assert.equal(byName.get('new').exported, true)
+  assert.equal(byName.get('new').parent, 'MyApp.Accounts.User')
+  assert.equal(byName.get('new').endLine, 4, 'do: 单行形式只占一行')
+
+  assert.equal(byName.get('find').line, 6, '多行签名按声明行定位')
+  assert.equal(byName.get('find').endLine, 14, '范围从 do 行到匹配的 end')
+
+  assert.equal(byName.get('validate').exported, false, 'defp 为私有')
+  assert.equal(byName.get('validate').endLine, 18)
+
+  assert.equal(byName.get('helper').kind, 'method', '宏记为方法')
+  assert.equal(byName.get('helper').endLine, 24)
+  assert.equal(byName.get('is_id').exported, true)
+  assert.equal(byName.get('name').kind, 'method')
+  assert.equal(byName.get('name').endLine, 27)
+
+  assert.equal(byName.get('run').parent, 'MyApp.Accounts.User.Inner')
+  assert.ok(!byName.has('commented_out'), '注释行不产出符号')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

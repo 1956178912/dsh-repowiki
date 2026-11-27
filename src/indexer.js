@@ -611,6 +611,39 @@ function resolveDartPackage(specifier, packages, indexed) {
 }
 
 /**
+ * 建立 Elixir 模块名 → 文件索引：使用 defmodule 符号（覆盖一个文件内
+ * 多个模块、嵌套命名与 umbrella 布局）；同名模块取字典序最小文件，
+ * 保证确定性。
+ * @param {Array<{path:string, lang:string, symbols?:Array}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 模块名 → 文件相对路径。
+ */
+function buildElixirModules(files) {
+  const modules = new Map()
+  for (const file of files) {
+    if (file.lang !== 'elixir') continue
+    for (const symbol of file.symbols ?? []) {
+      if (symbol?.kind !== 'class' || typeof symbol.name !== 'string') continue
+      if (!/^[A-Z][\w.]*$/.test(symbol.name)) continue
+      const existing = modules.get(symbol.name)
+      if (existing === undefined || file.path < existing) modules.set(symbol.name, file.path)
+    }
+  }
+  return modules
+}
+
+/**
+ * 解析 Elixir 模块引用：alias/import/require/use 的点分模块名精确匹配
+ * 仓库内 defmodule 或 `lib/` 布局文件；外部依赖返回 null。
+ * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
+ * @param {Map<string,string>} modules - 模块名索引。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveElixirSpecifier(specifier, modules) {
+  if (typeof specifier !== 'string' || !/^[A-Z][\w.]*$/.test(specifier)) return null
+  return modules.get(specifier) ?? null
+}
+
+/**
  * 解析工作区包 import：按最长包名前缀匹配，子路径优先走 package.json 的
  * exports（含通配），其次按包内相对路径落地；包根按 exports → main 等
  * 入口 → src/index → index 依次尝试。
@@ -1461,6 +1494,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   swiftTargets:Map<string,string>,
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
+ *   elixirModules:Map<string,string>,
  *   phpPsr4:Array<{prefix:string, dir:string}>, phpPaths:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1498,6 +1532,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     }
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
+  if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }
@@ -1694,6 +1729,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     jsAliases,
     workspacePackages: buildWorkspacePackages(manifestTexts),
     dartPackages: buildDartPackages(manifestTexts),
+    elixirModules: buildElixirModules(files),
     phpPsr4: buildPhpPsr4(manifestTexts),
     phpPaths: buildPhpPaths(indexed),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),

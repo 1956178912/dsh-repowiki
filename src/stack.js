@@ -157,6 +157,38 @@ const PUB_TECH = {
   mockito: 'Mockito',
 }
 
+/** Hex 包名 → 技术展示名。 */
+const MIX_TECH = {
+  phoenix: 'Phoenix',
+  phoenix_live_view: 'Phoenix LiveView',
+  phoenix_html: 'Phoenix HTML',
+  ecto: 'Ecto',
+  ecto_sql: 'Ecto',
+  plug: 'Plug',
+  plug_cowboy: 'Plug',
+  bandit: 'Bandit',
+  absinthe: 'Absinthe',
+  ash: 'Ash',
+  oban: 'Oban',
+  tesla: 'Tesla',
+  req: 'Req',
+  finch: 'Finch',
+  mint: 'Mint',
+  jason: 'Jason',
+  poison: 'Poison',
+  nimble_csv: 'NimbleCSV',
+  postgrex: 'Postgrex',
+  myxql: 'MyXQL',
+  ecto_sqlite3: 'Ecto SQLite3',
+  redix: 'Redix',
+  ex_machina: 'ExMachina',
+  credo: 'Credo',
+  dialyxir: 'Dialyxir',
+  ex_doc: 'ExDoc',
+  guardian: 'Guardian',
+  ueberauth: 'Ueberauth',
+}
+
 /** sbt 的 artifact 名 → 技术展示名。 */
 const SBT_TECH = {
   'spark-core': 'Apache Spark', 'spark-sql': 'Apache Spark',
@@ -470,6 +502,29 @@ function pubspecName(text) {
 }
 
 /**
+ * 从 mix.exs 提取依赖名（`{:dep, "~> x"}` 元组，按出现顺序去重）。
+ * 只识别字符串版本形式；`:path`/`:git` 等选项不影响依赖名提取。
+ * @param {string} text - mix.exs 内容。
+ * @returns {string[]} 依赖名。
+ */
+function mixDependencies(text) {
+  const deps = []
+  for (const m of text.matchAll(/\{\s*:([a-z_][\w]*)\s*,\s*"/g)) {
+    if (!deps.includes(m[1])) deps.push(m[1])
+  }
+  return deps
+}
+
+/**
+ * 从 mix.exs 读取 `app: :name` 项目名。
+ * @param {string} text - mix.exs 内容。
+ * @returns {string|undefined} 项目名。
+ */
+function mixAppName(text) {
+  return /\bapp:\s*:([a-z_][\w]*)/.exec(text)?.[1]
+}
+
+/**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
  * @returns {{group:string, artifact:string, version?:string}[]} 依赖列表。
@@ -623,6 +678,14 @@ export function detectStack(manifests) {
       for (const dep of deps) {
         const name = PUB_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'pub', source: path })
+      }
+    } else if (path === 'mix.exs') {
+      const deps = mixDependencies(text)
+      info.dependencyCounts.mix = deps.length
+      if (!info.projectName) info.projectName = mixAppName(text)
+      for (const dep of deps) {
+        const name = MIX_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'mix', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

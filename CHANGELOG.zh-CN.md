@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.177.0] - 2026-11-28
+
+- **Elixir 支持（第 16 种语言）**：`.ex` 文件提取 `defmodule`（嵌套
+  `defmodule Inner` 记录完整 `Outer.Inner`）、`def`/`defp`、
+  `defmacro(p)`、`defguard(p)` 与 `defdelegate`，范围按 do/end 配平，
+  支持 `do:` 单行、多行签名与私有可见性。`alias` / `import` / `require` /
+  `use` 解析到声明该模块的文件（含 `alias MyApp.{A, B}` 与 `as:` 别名），
+  Phoenix umbrella、嵌套模块与单文件多模块都有真实依赖边；外部模块
+  （`Logger`、`Ecto` 等）不建边。`mix.exs` 提供应用名、依赖计数与 Hex
+  技术名（Phoenix/Ecto/Plug/Oban 等）。Prompt 围栏与面板语言筛选识别
+  `elixir`。
+- **测试**：561 例在 LANG=en 与 LANG=zh 下全通过；新增符号用例覆盖
+  模块/函数/宏/guard/delegate、嵌套全名、多行函数头与 `do:` 单行；
+  依赖夹具覆盖分组/重命名 alias；索引端到端夹具断言 alias/import 行号、
+  umbrella 布局、嵌套模块解析、外部包排除与 `mix` 技术栈计数。
+
 ## [0.176.0] - 2026-11-28
 
 - **Wiki 新鲜度覆盖依赖图**：Wiki 清单新增 `graphDigest`（索引文件集合 +

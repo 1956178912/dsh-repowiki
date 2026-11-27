@@ -122,6 +122,7 @@ export const MANIFEST_FILES = {
   'Package.swift': 'swiftpm',
   'build.sbt': 'sbt',
   'pubspec.yaml': 'pub',
+  'mix.exs': 'mix',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -153,6 +154,7 @@ export const EXTENSION_LANGS = {
   swift: 'swift',
   scala: 'scala',
   dart: 'dart',
+  ex: 'elixir',
   c: 'c',
   h: 'c',
   cc: 'cpp',
