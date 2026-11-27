@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/stale-card/memory notices, index-version/range-unverified strictness, internal-link/page-path integrity, status missing-page counts, missing-page health scoring and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.150.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/stale-card/memory notices, index-version/range-unverified strictness, internal-link/page-path integrity, status missing-page counts, missing-page health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.151.0)
 
 | Capability | Description |
 |---|---|
@@ -145,6 +145,7 @@ Roadmap:
 - Link and path integrity (v0.146.0): manifest page paths must stay under `wiki/<locale>/` and match their files; relative `.md` links in page bodies fail when they escape the project root or point to missing files, with a 200-probe cap that fails under `--strict`
 - Status missing pages (v0.147.0): `repowiki-status` reports `wiki.missing`/`wiki.missingPages` and prints the count, matching the gate and the panel
 - Missing-page health penalty (v0.150.0): missing pages count in the wiki denominator and lower the wiki component by up to 40 points, with the issue surfaced ahead of stale pages
+- Bounded gate reads (v0.151.0): cards, accepted memory and wiki pages are read through 8-way bounded concurrency while preserving order and duplicate-slug semantics
 - Panel stale-cards notice (v0.148.0): the Wiki tab recomputes the card `inputDigest` with Web Crypto and warns when the wiki fell behind; unavailable crypto degrades to silence
 - Panel stale-memory notice (v0.149.0): the same check now covers the accepted-memory `memoryDigest`, matching the gate's staleness view
 - Optional semantic index stays deferred (YAGNI per the plan)
@@ -248,7 +249,7 @@ stale-failure exit code.
 ```
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
-scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/paths/coverage, v0.146.0)
+scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/paths/coverage, v0.151.0)
 scripts/check-coverage.mjs      Coverage gate (lines/branches/functions)
 scripts/scan-secrets.mjs        Git-tracked secret scan
 scripts/bench.mjs               Synthetic-repo index benchmark
@@ -303,7 +304,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (514 cases)
+test/                  Unit and integration tests (515 cases)
 ```
 
 ## License

@@ -409,6 +409,30 @@ test('verify-wiki：清单页面路径非法或与文件位置不符失败', asy
   assert.ok(mismatch.problems.some(problem => problem.code === 'wiki/page-path-mismatch'))
 })
 
+test('verify-wiki：并发读取多卡片并跳过坏卡', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\n')
+  writeText(path.join(root, 'b.ts'), 'two\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 1 }, { path: 'b.ts', lines: 1 }])
+  const card = (sourcePath, digest) => `${encodeFrontmatter({
+    schemaVersion: 1, path: sourcePath, lang: 'typescript', locale: 'zh',
+    sourceDigest: digest, title: sourcePath, tags: [], manuallyEdited: false, generatedAt: 'now',
+  })}\n# ${sourcePath}\n`
+  writeText(path.join(root, '.dsh-repowiki/knowledge/zh/a.md'), card('a.ts', 'd1'))
+  writeText(path.join(root, '.dsh-repowiki/knowledge/zh/b.md'), card('b.ts', 'd2'))
+  writeText(path.join(root, '.dsh-repowiki/knowledge/zh/broken.md'), 'not a card')
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('a.ts:d1\nb.ts:d2', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\n', 1, 1))],
+  })
+
+  const result = await verifyWiki({ root })
+  assert.equal(result.ok, true)
+  assert.equal(result.locales[0].stale, false)
+})
+
 test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
   const root = makeRoot()
   const optional = await verifyWiki({ root })

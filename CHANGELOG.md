@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.151.0] - 2026-11-27
+
+### Changed
+
+- **Bounded reads in the gate**: `verify:wiki` now reads cards, accepted
+  memory and wiki page files through an 8-way bounded concurrency helper
+  (`mapLimit`), keeping result order and duplicate-slug semantics. Large
+  repositories no longer pay serial file reads on every CI run; the
+  link/existence probes remain capped and sequential.
+
+### Tests
+
+- 515 cases pass (LANG=en and LANG=zh); a new case reads two valid cards plus
+  one malformed card concurrently and asserts the digest still matches.
+
 ## [0.150.0] - 2026-11-27
 
 ### Added

@@ -54,6 +54,33 @@ const MAX_PAGE_DEPTH = 3
 /** 页面内部链接的存在性探测上限（防止异常页面放大 IO）。 */
 const MAX_LINK_PROBES = 200
 
+/** 卡片/记忆/页面读取的并发上限（本地文件小、读多时收益明显）。 */
+const READ_CONCURRENCY = 8
+
+/**
+ * 有界并发映射，结果保持输入顺序。
+ * @param {Array} items - 输入数组。
+ * @param {number} limit - 并发上限。
+ * @param {(item:any, index:number)=>Promise<any>} fn - 异步映射函数。
+ * @returns {Promise<Array>} 与输入同序的结果。
+ */
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length)
+  let cursor = 0
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    async () => {
+      while (true) {
+        const index = cursor++
+        if (index >= items.length) return
+        results[index] = await fn(items[index], index)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return results
+}
+
 /**
  * 提取 Markdown 正文中的相对 `.md` 链接（跳过代码、图片、外链、锚点与根路径）。
  * @param {string} text - 页面正文。
@@ -278,16 +305,18 @@ async function readCards(root, locale) {
     return new Map()
   }
   const cards = new Map()
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+  const files = entries.filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+  const parsedCards = await mapLimit(files, READ_CONCURRENCY, async (entry) => {
     try {
       const parsed = parseCard(await readFile(path.join(dir, entry.name), 'utf8'))
-      if (parsed && typeof parsed.meta.path === 'string') {
-        cards.set(parsed.meta.path, parsed.meta)
-      }
+      return parsed && typeof parsed.meta.path === 'string' ? parsed.meta : null
     } catch {
       // 单张坏卡不阻断门禁；缺失会让 inputDigest 不匹配而报 stale
+      return null
     }
+  })
+  for (const meta of parsedCards) {
+    if (meta) cards.set(meta.path, meta)
   }
   return cards
 }
@@ -322,16 +351,22 @@ async function readMemories(root, locale) {
     return new Map()
   }
   const memories = new Map()
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+  const files = entries.filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+  const parsedMemories = await mapLimit(files, READ_CONCURRENCY, async (entry) => {
     try {
       const parsed = parseMemoryText(await readFile(path.join(dir, entry.name), 'utf8'))
-      if (!parsed || parsed.meta.status !== 'accepted') continue
-      const slug = entry.name.replace(/\.md$/, '')
-      memories.set(slug, parsed.body.replace(/^\s*#[^\n]*\n+/, '').trim())
+      if (!parsed || parsed.meta.status !== 'accepted') return null
+      return {
+        slug: entry.name.replace(/\.md$/, ''),
+        body: parsed.body.replace(/^\s*#[^\n]*\n+/, '').trim(),
+      }
     } catch {
       // 单条坏记忆不阻断门禁；缺失会让 memoryDigest 不匹配而报 stale
+      return null
     }
+  })
+  for (const item of parsedMemories) {
+    if (item) memories.set(item.slug, item.body)
   }
   return memories
 }
@@ -357,9 +392,10 @@ function memoriesDigest(memories) {
  */
 async function readWikiPages(root, locale) {
   const base = path.join(root, ASSET_DIR, WIKI_DIR, locale)
-  const pages = new Map()
+  /** @type {string[]} */
+  const files = []
   /**
-   * 递归枚举目录（深度上限防异常树）。
+   * 递归枚举目录（深度上限防异常树），只收集文件路径。
    * @param {string} dir - 绝对目录。
    * @param {number} depth - 当前深度。
    * @returns {Promise<void>}
@@ -378,30 +414,37 @@ async function readWikiPages(root, locale) {
         continue
       }
       if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-      const file = path.join(dir, entry.name)
-      let slug = entry.name.replace(/\.md$/, '')
-      let title = slug
-      let text = ''
-      try {
-        text = await readFile(file, 'utf8')
-        const parsed = parseFrontmatter(text)
-        if (parsed) {
-          if (typeof parsed.meta.slug === 'string' && parsed.meta.slug) slug = parsed.meta.slug
-          if (typeof parsed.meta.title === 'string' && parsed.meta.title) title = parsed.meta.title
-          text = parsed.body
-        }
-      } catch {
-        // 坏页仍以文件名参与缺失/孤儿判定
+      files.push(path.join(dir, entry.name))
+    }
+  }
+  await walk(base, 0)
+  const parsedPages = await mapLimit(files, READ_CONCURRENCY, async (file) => {
+    let slug = path.basename(file, '.md')
+    let title = slug
+    let text = ''
+    try {
+      text = await readFile(file, 'utf8')
+      const parsed = parseFrontmatter(text)
+      if (parsed) {
+        if (typeof parsed.meta.slug === 'string' && parsed.meta.slug) slug = parsed.meta.slug
+        if (typeof parsed.meta.title === 'string' && parsed.meta.title) title = parsed.meta.title
+        text = parsed.body
       }
-      pages.set(slug, {
+    } catch {
+      // 坏页仍以文件名参与缺失/孤儿判定
+    }
+    return {
+      slug,
+      page: {
         path: path.relative(root, file).split(path.sep).join('/'),
         rel: path.relative(path.join(root, ASSET_DIR), file).split(path.sep).join('/'),
         title,
         text,
-      })
+      },
     }
-  }
-  await walk(base, 0)
+  })
+  const pages = new Map()
+  for (const item of parsedPages) pages.set(item.slug, item.page)
   return pages
 }
 
