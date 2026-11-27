@@ -82,6 +82,38 @@ test('readPlan：layers 归一化（非法条目丢弃）', async () => {
   assert.deepEqual((await readPlan(makeFakeFs(missing), missing)).plan.layers, [])
 })
 
+test('readPlan：分析阈值归一与钳制', async () => {
+  const dir = makeProject(JSON.stringify({
+    complexityThreshold: 25,
+    duplicateMinLines: 6,
+    maxStatusSourceFiles: 80,
+  }))
+  const { plan } = await readPlan(makeFakeFs(dir), dir)
+  assert.equal(plan.complexityThreshold, 25)
+  assert.equal(plan.duplicateMinLines, 6)
+  assert.equal(plan.maxStatusSourceFiles, 80)
+
+  const clamped = makeProject(JSON.stringify({
+    complexityThreshold: 0,
+    duplicateMinLines: 999,
+    maxStatusSourceFiles: 1,
+  }))
+  const clampedPlan = (await readPlan(makeFakeFs(clamped), clamped)).plan
+  assert.equal(clampedPlan.complexityThreshold, 1)
+  assert.equal(clampedPlan.duplicateMinLines, 50)
+  assert.equal(clampedPlan.maxStatusSourceFiles, 20)
+
+  const invalid = makeProject(JSON.stringify({
+    complexityThreshold: 'high',
+    duplicateMinLines: 2.5,
+    maxStatusSourceFiles: null,
+  }))
+  const invalidPlan = (await readPlan(makeFakeFs(invalid), invalid)).plan
+  assert.equal(invalidPlan.complexityThreshold, DEFAULT_PLAN.complexityThreshold)
+  assert.equal(invalidPlan.duplicateMinLines, DEFAULT_PLAN.duplicateMinLines)
+  assert.equal(invalidPlan.maxStatusSourceFiles, DEFAULT_PLAN.maxStatusSourceFiles)
+})
+
 test('readPlan：concurrency 归一与钳制（1–4）', async () => {
   const dir = makeProject(JSON.stringify({ concurrency: 3 }))
   const { plan } = await readPlan(makeFakeFs(dir), dir)

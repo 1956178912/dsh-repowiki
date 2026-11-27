@@ -98,6 +98,34 @@ test('repowiki-status：跨文件重复代码块进入报告与渲染', async ()
   assert.match(rendered[0].text, /Duplicates: 1 block/)
 })
 
+test('repowiki-status：plan 阈值作用于重复检测与复杂度', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-thresholds-'))
+  const block = ['export const a = 1', 'export const b = 2', 'export const c = 3', 'export const d = 4']
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), `${block.join('\n')}\n`)
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), `${block.join('\n')}\n`)
+  nodefs.writeFileSync(path.join(dir, 'c.ts'), [
+    'export function f(x: number) {',
+    '  if (x > 0) { x -= 1 }',
+    '  if (x > 1) { x -= 2 }',
+    '  return x',
+    '}',
+  ].join('\n'))
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki/repowiki-plan.json'), JSON.stringify({
+    duplicateMinLines: 4,
+    complexityThreshold: 3,
+  }))
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+
+  assert.ok(out.duplicates)
+  assert.equal(out.duplicates.windowLines, 4, 'plan 缩短重复窗口')
+  assert.ok(out.duplicates.total >= 1)
+  assert.equal(out.complexity.threshold, 3, 'plan 降低复杂度阈值')
+  assert.ok(out.complexity.high.some(item => item.name === 'f'))
+})
+
 test('repowiki-status：未解析相对导入进入报告与渲染', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-unresolved-'))
   nodefs.writeFileSync(path.join(dir, 'b.ts'), 'export const b = 1\n')

@@ -19,6 +19,8 @@ import {
   EXTRACT_ATTEMPTS_DEFAULT, MAX_EXTRACT_ATTEMPTS,
 } from './schema.js'
 import { normalizeLayers } from './layers.js'
+import { COMPLEXITY_THRESHOLD } from './complexity.js'
+import { DUPLICATE_WINDOW_LINES, MAX_DUPLICATE_FILES } from './duplicates.js'
 
 /**
  * 配置对象（全部可选，缺省即默认值）。
@@ -33,6 +35,9 @@ import { normalizeLayers } from './layers.js'
  * @property {number} [attempts] - 单文件提取最大尝试次数（1–3，含首次）。
  * @property {Array<{name:string, paths:string[], mayDependOn:string[]}>} [layers]
  *   - 架构分层规则：路径前缀归属与允许的跨层依赖。
+ * @property {number} [complexityThreshold] - 高复杂度函数阈值（1–100）。
+ * @property {number} [duplicateMinLines] - 重复块最小行数（4–50）。
+ * @property {number} [maxStatusSourceFiles] - status 源码分析最多读取的文件数（20–500）。
  */
 
 /** 默认配置。 */
@@ -46,6 +51,9 @@ export const DEFAULT_PLAN = Object.freeze({
   concurrency: EXTRACT_CONCURRENCY_DEFAULT,
   attempts: EXTRACT_ATTEMPTS_DEFAULT,
   layers: [],
+  complexityThreshold: COMPLEXITY_THRESHOLD,
+  duplicateMinLines: DUPLICATE_WINDOW_LINES,
+  maxStatusSourceFiles: MAX_DUPLICATE_FILES,
 })
 
 /**
@@ -105,6 +113,9 @@ export async function readPlan(fs, root) {
       concurrency: normalizeConcurrency(parsed.concurrency, DEFAULT_PLAN.concurrency),
       attempts: normalizeAttempts(parsed.attempts, DEFAULT_PLAN.attempts),
       layers: normalizeLayers(parsed.layers),
+      complexityThreshold: clampInt(parsed.complexityThreshold, DEFAULT_PLAN.complexityThreshold, 1, 100),
+      duplicateMinLines: clampInt(parsed.duplicateMinLines, DEFAULT_PLAN.duplicateMinLines, 4, 50),
+      maxStatusSourceFiles: clampInt(parsed.maxStatusSourceFiles, DEFAULT_PLAN.maxStatusSourceFiles, 20, 500),
     }
     return { plan, source: 'file' }
   } catch (err) {
@@ -171,4 +182,17 @@ function arrayOfStrings(v) {
  */
 function nonNegativeInt(v, fallback) {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : fallback
+}
+
+/**
+ * 整数钳制到 [min, max]；非法值回退默认。
+ * @param {unknown} v - 值。
+ * @param {number} fallback - 默认值。
+ * @param {number} min - 下界。
+ * @param {number} max - 上界。
+ * @returns {number} 结果。
+ */
+function clampInt(v, fallback, min, max) {
+  if (typeof v !== 'number' || !Number.isInteger(v)) return fallback
+  return Math.min(max, Math.max(min, v))
 }

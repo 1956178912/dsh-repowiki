@@ -45,10 +45,11 @@ const DUPLICATE_READ_CONCURRENCY = 8
  * @param {FsService} fs - ctx.fs。
  * @param {string} root - 项目根。
  * @param {Array<{path:string}>} files - 索引文件（已按路径排序）。
+ * @param {number} [limit] - 最多读取的文件数（默认 MAX_DUPLICATE_FILES）。
  * @returns {Promise<Array<{path:string, text:string}>>} 读取成功的源码，按路径排序。
  */
-async function readStatusSources(fs, root, files) {
-  const targets = files.slice(0, MAX_DUPLICATE_FILES)
+async function readStatusSources(fs, root, files, limit = MAX_DUPLICATE_FILES) {
+  const targets = files.slice(0, Math.max(1, limit))
   const sources = []
   let cursor = 0
   const worker = async () => {
@@ -1194,14 +1195,16 @@ export function repowikiStatusTool(ctx) {
       }
       // 重复代码与复杂度：共用一次有界源码读取（数量上限内）
       const statusSources = index && (index.files ?? []).length > 0
-        ? await readStatusSources(fs, root, index.files ?? [])
+        ? await readStatusSources(fs, root, index.files ?? [], plan.maxStatusSourceFiles)
         : []
-      const duplicates = statusSources.length >= 2 ? findDuplicates(statusSources) : null
+      const duplicates = statusSources.length >= 2
+        ? findDuplicates(statusSources, { windowLines: plan.duplicateMinLines })
+        : null
       if (duplicates && duplicates.total > 0) {
         warnings.push(`${duplicates.total} cross-file duplicate block(s) detected; see status.duplicates.`)
       }
       const complexity = statusSources.length > 0
-        ? computeComplexity(index?.files ?? [], statusSources)
+        ? computeComplexity(index?.files ?? [], statusSources, { threshold: plan.complexityThreshold })
         : null
       if (complexity && complexity.high.length > 0) {
         warnings.push(`${complexity.high.length} function(s) reach complexity ≥ ${complexity.threshold}; see status.complexity.`)

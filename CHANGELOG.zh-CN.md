@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.230.0] - 2026-11-28
+
+- **可配置分析阈值**：plan 新增 `complexityThreshold`（1–100，默认 15）、
+  `duplicateMinLines`（4–50，默认 8）与 `maxStatusSourceFiles`（20–500，
+  默认 150）；越界整数钳制到最近边界、非整数回退默认值，实际生效值由
+  `status.complexity.threshold` 与 `status.duplicates.windowLines` 输出。
+- **默认值单一来源**：默认常量仍定义在 `complexity.js`/`duplicates.js`，
+  `config.js` 引用它们，plan 默认值与分析器不会漂移。
+- **测试**：685 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖自定义值、
+  钳制、非法回退与 status 集成（实际阈值/窗口）。
+
 ## [0.229.0] - 2026-11-28
 
 - **坏相对导入**：`repowiki-status` 把每条索引 import 记录与已解析边表

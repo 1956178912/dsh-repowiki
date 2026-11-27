@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.230.0] - 2026-11-28
+
+### Added
+
+- **Configurable analysis thresholds**: the plan now accepts
+  `complexityThreshold` (1–100, default 15), `duplicateMinLines`
+  (4–50, default 8) and `maxStatusSourceFiles` (20–500, default 150).
+  Out-of-range integers clamp to the nearest bound, non-integers fall
+  back to the defaults, and the values actually applied are reported by
+  `status.complexity.threshold` and `status.duplicates.windowLines`.
+- **Single source of defaults**: the default constants stay in
+  `complexity.js`/`duplicates.js` and `config.js` imports them, so the
+  plan defaults and the analyzers cannot drift apart.
+
+### Tests
+
+- 685 cases pass (LANG=en and LANG=zh); new coverage for custom values,
+  clamping, invalid fallbacks and status integration showing the applied
+  threshold/window.
+
 ## [0.229.0] - 2026-11-28
 
 ### Added
