@@ -156,3 +156,19 @@ test('usages：selectUsageFiles 去重排序并按上限截断', () => {
   })
   assert.equal(MAX_USAGE_FILES, 20)
 })
+
+test('usages：skipRanges 排除定义范围并忽略非法区间', () => {
+  const source = [
+    'export function parseConfig() {',
+    '  return parseConfig.cache',
+    '}',
+    'export const first = parseConfig()',
+  ].join('\n')
+  const found = findSymbolUsages(source, 'parseConfig', { skipRanges: [[1, 3]] })
+  assert.deepEqual(found.usages.map(item => item.line), [4], '定义体内部不计入使用点')
+
+  const invalid = findSymbolUsages(source, 'parseConfig', {
+    skipRanges: [[0, 2], [4, 2], ['a', 2], [1], null],
+  })
+  assert.deepEqual(invalid.usages.map(item => item.line), [1, 2, 4], '非法区间被忽略')
+})

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.241.0）；测试 764/764（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.08%、分支 87.92%、函数 95.58%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.242.0）；测试 765/765（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.08%、分支 87.89%、函数 95.53%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（764/764，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、42 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada/Verilog/SystemVerilog/Objective-C）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（765/765，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、42 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada/Verilog/SystemVerilog/Objective-C）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -273,5 +273,6 @@
 | 面板架构基线漂移 | 单库视图读取 `.dsh-repowiki/arch-baseline.json`（缺失/损坏/超大均忽略）：当前 SCC 循环组与 `cycles` 签名对比得出新增/已修复数量（新增示例进 tooltip），并展示基线 `architectureScore` 与 `ceilings`（重复块/高复杂度/最大复杂度）；`cycleAnalysisFor` 以 WeakMap 按 index 缓存，徽章与基线共用一次 Tarjan；无基线时整行隐藏，DOM 测试覆盖有/无基线两种状态 | v0.241.0 |
 | iOS 依赖元数据与测试路由 | `Podfile`（根/嵌套，`pod 'Name', '~> 1.0'`、`Firebase/Core` 子规格、`:path` 本地 pod）与 `Cartfile`/`Cartfile.private`（`github`/`git`/`binary`，仓库名取 URL 末段）计入 `dependencyCounts.cocoapods`/`carthage`，`IOS_TECH` 只映射经过核对的主流库；嵌套清单上限各 20；`*Tests.m`/`*Tests.mm`/`*Spec.m` 纳入测试路径，影响面据此路由 `affectedTests` | v0.240.0 |
 | Objective-C 支持 | 第 42 种语言：`@interface`/`@implementation`（class；类扩展成员非导出，category 归到所属类）、`@protocol`（interface）、`-`/`+` 方法（method，完整选择器，原型止于 `;`、实现按花括号配平）、`@property`（variable，含 block `(^name)`）；`//`、`/* */`、字符串/字符字面量屏蔽；与 `extractCpp` 合并（结构体/typedef/函数保留）；`.h` 按 `@` 声明改判、MATLAB 写法的 `.m` 归为 `matlab`；`#import`/`#include` 经引用方目录与 `include`/`src`/`inc` 根，框架头与 `@import` 不建边 | v0.239.0 |
+| 同文件使用点 | `repowiki-cards usages=true` 追加扫描定义文件：`findSymbolUsages` 新增 `skipRanges`（闭区间、非法区间忽略），定义范围不参与匹配，因此递归/签名文本不会被误算；定义文件优先读取且不占 20 个导入方上限，`filesScanned` 同时计入定义文件；DOM/工具测试覆盖定义行跳过、局部调用命中与上限记账 | v0.242.0 |
 | 符号使用点查询 | `repowiki-cards usages=true`：对命中符号取直接具名导入方（`usageImporters`，要求 `edge.symbols` 含该符号），在导入方源码中按标识符边界定位使用行（`findSymbolUsages`，排除 import 行/块与整行注释），输出 `symbolUsages`（定义文件、导入位置、站点、已扫描文件数、不可读导入方、单符号截断）；上限 5 符号 / 20 文件 / 100 站点（单符号 10），超出部分计入 `symbolUsagesSkipped` / `symbolUsagesSkippedFiles`，不可读文件披露为 unknown；import 边不带具名符号的语言不产生证据 | v0.238.0 |
 | 影响面架构上下文 | `src/impact-architecture.js` + `repowiki-impact`：声明层与索引文件数、改动/受影响文件所属层、改动↔受影响文件之间的跨层边（按层对精确计数，只统计一端改动、另一端受影响的边）与改动文件内高复杂度函数（精确总数 + ≤10 明细）；`src/layers.js` 导出 `assignLayer`（最长前缀优先），status/棘轮门禁/影响面共用同一归属规则；文本渲染 `Architecture:` 行，跨层与热点进入 hint | v0.236.0 |

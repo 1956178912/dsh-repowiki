@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.242.0] - 2026-11-28
+
+### Added
+
+- **Local usage scans in `repowiki-cards`**: `usages=true` now also scans the
+  symbol's defining file, so same-file calls are reported next to importer
+  usages. The definition range is excluded with exact line ranges
+  (`findSymbolUsages` gained `skipRanges`), so the definition text and
+  recursive references are not counted as evidence. Defining files do not
+  consume the 20-importer-file cap; they are read in addition (at most five).
+
+### Tests
+
+- 765 cases pass (LANG=en and LANG=zh); new coverage for `skipRanges`
+  (definition body excluded, malformed ranges ignored), same-file usage in the
+  cards tool and the adjusted file-cap accounting (20 importers + 1 defining
+  file).
+
 ## [0.241.0] - 2026-11-28
 
 ### Added

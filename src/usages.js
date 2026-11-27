@@ -102,8 +102,8 @@ function displayLine(line) {
  * 一次首个命中位置。空行、整行注释与 `skipLines`（import/定义行）跳过。
  * @param {string} source - 源码文本。
  * @param {string} symbolName - 精确符号名。
- * @param {{skipLines?:Iterable<number>, limit?:number}} [options] - 需排除的
- *   行号（1 起）与返回上限。
+ * @param {{skipLines?:Iterable<number>, skipRanges?:Array<[number, number]>, limit?:number}}
+ *   [options] - 需排除的行号/闭区间（1 起）与返回上限。
  * @returns {{usages:Array<{line:number, text:string}>, truncated:boolean}}
  *   使用点与截断标记。
  */
@@ -116,6 +116,13 @@ export function findSymbolUsages(source, symbolName, options = {}) {
   const skip = new Set()
   for (const line of options.skipLines ?? []) {
     if (Number.isInteger(line) && line > 0) skip.add(line)
+  }
+  const ranges = []
+  for (const range of Array.isArray(options.skipRanges) ? options.skipRanges : []) {
+    if (!Array.isArray(range) || range.length !== 2) continue
+    const [start, end] = range
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) continue
+    ranges.push([start, end])
   }
   // 通用标识符字符集：JS/PHP 的 `$`、Python/Go/Rust 的 `_` 均覆盖。
   const pattern = new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(name)}($|[^A-Za-z0-9_$])`)
@@ -135,7 +142,8 @@ export function findSymbolUsages(source, symbolName, options = {}) {
       blockDepth = updateBlockDepth(line, 0)
       continue
     }
-    if (skip.has(number) || line.trim() === '' || isCommentLine(line)) continue
+    if (skip.has(number) || ranges.some(([start, end]) => number >= start && number <= end)) continue
+    if (line.trim() === '' || isCommentLine(line)) continue
     if (!pattern.test(line)) continue
     if (usages.length >= limit) {
       truncated = true

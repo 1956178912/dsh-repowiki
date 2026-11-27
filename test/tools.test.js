@@ -721,7 +721,10 @@ test('repowiki-cards execute：target=docs/all 走 BM25 正文检索', async () 
 
 test('repowiki-cards execute：usages=true 返回具名导入方的词法使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-usages-'))
-  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parseThing() { return 1 }\n')
+  nodefs.writeFileSync(
+    path.join(dir, 'a.ts'),
+    'export function parseThing() { return 1 }\nexport const local = parseThing()\n',
+  )
   nodefs.writeFileSync(
     path.join(dir, 'b.ts'),
     "import { parseThing } from './a'\n// parseThing appears in a comment\nexport const value = parseThing()\n",
@@ -741,18 +744,21 @@ test('repowiki-cards execute：usages=true 返回具名导入方的词法使用�
     path: 'a.ts',
     symbol: 'parseThing',
     importers: [{ path: 'b.ts', line: 1 }, { path: 'c.ts', line: 1 }],
-    usages: [{ path: 'b.ts', line: 3, text: 'export const value = parseThing()' }],
-    filesScanned: 1,
+    usages: [
+      { path: 'a.ts', line: 2, text: 'export const local = parseThing()' },
+      { path: 'b.ts', line: 3, text: 'export const value = parseThing()' },
+    ],
+    filesScanned: 2,
     unreadable: ['c.ts'],
     truncated: false,
-  }], '注释行与 import 行被排除，不可读文件单独披露')
+  }], '定义行被跳过、同文件局部调用计入；注释/import 行排除，不可读文件单独披露')
   assert.equal(out.symbolUsagesSkipped, 0)
   assert.equal(out.symbolUsagesSkippedFiles, 0)
   assert.equal(out.symbolUsagesTruncated, false)
 
   const rendered = cards.output.render({}, out)
   assert.match(rendered[0].text, /Usages:/)
-  assert.match(rendered[0].text, /parseThing in a\.ts — 1 site\(s\) in 1 file\(s\)/)
+  assert.match(rendered[0].text, /parseThing in a\.ts — 2 site\(s\) in 2 file\(s\)/)
   assert.match(rendered[0].text, /unreadable: c\.ts \(usage unknown, not absent\)/)
 
   const docs = await cards.execute({ query: 'parseThing', target: 'docs', usages: true }, fakeExec)
@@ -802,9 +808,9 @@ test('repowiki-cards execute：usages 的导入方文件数有界并标记截断
   const cards = repowikiCardsTool(ctx)
 
   const out = await cards.execute({ query: 'parse', usages: true }, fakeExec)
-  assert.equal(out.symbolUsages[0].filesScanned, 20, '最多读取 20 个导入方文件')
+  assert.equal(out.symbolUsages[0].filesScanned, 21, '20 个导入方 + 定义文件')
   assert.equal(out.symbolUsages[0].usages.length, 20)
-  assert.equal(out.symbolUsagesSkippedFiles, 1, '第 21 个文件计入缺口')
+  assert.equal(out.symbolUsagesSkippedFiles, 1, '第 21 个导入方文件计入缺口')
   assert.equal(out.symbolUsages[0].truncated, true)
   assert.equal(out.symbolUsagesTruncated, true)
 })
