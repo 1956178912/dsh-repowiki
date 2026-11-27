@@ -9,7 +9,7 @@
  * - 引用内容漂移（清单 v3 `citationDigests`）
  * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
  * - 清单登记但磁盘缺失的页面（孤儿页仅告警）
- * - 清单页面路径非法/与页面位置不符，以及页面内相对 `.md` 死链
+ * - 清单页面路径非法/与页面位置不符，以及页面内相对链接死链或越出项目根
  * - 上次生成失败页（清单 `failed`/`failedTotal`）
  * - 空清单（默认告警，`--strict`/`--require` 失败）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
@@ -82,11 +82,14 @@ async function mapLimit(items, limit, fn) {
 }
 
 /**
- * 提取 Markdown 正文中的相对 `.md` 链接（跳过代码、图片、外链、锚点与根路径）。
+ * 提取 Markdown 正文中的相对链接（跳过代码、图片、外链、锚点与根路径）。
+ *
+ * Wiki 页面也会直接链接到源码或文档（例如 `../../../src/indexer.js#L10`），
+ * 这些链接与 `.md` 页面链接一样会随重构失效，因此统一纳入存在性校验。
  * @param {string} text - 页面正文。
  * @returns {string[]} 目标路径（已剥离锚点与查询串，保留原始 URL 编码）。
  */
-function extractMarkdownLinks(text) {
+function extractRelativeLinks(text) {
   const sanitized = String(text ?? '')
     // 代码块/行内代码里的示例链接不应被当成真实链接
     .replace(/```[\s\S]*?```/g, '')
@@ -98,12 +101,13 @@ function extractMarkdownLinks(text) {
     if (match[1] === '!') continue
     const raw = match[2].trim()
     if (!raw || raw.startsWith('#') || raw.startsWith('/')) continue
-    if (/^(?:https?:|mailto:|tel:|data:)/i.test(raw)) continue
+    // 任意 URI scheme（https:、mailto:、tel:、data:、javascript: …）都不做文件探测。
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) continue
     const hash = raw.indexOf('#')
     const withoutHash = hash >= 0 ? raw.slice(0, hash) : raw
     const query = withoutHash.indexOf('?')
     const target = query >= 0 ? withoutHash.slice(0, query) : withoutHash
-    if (!target || !target.toLowerCase().endsWith('.md')) continue
+    if (!target) continue
     links.push(target)
   }
   return links
@@ -189,6 +193,20 @@ async function readJson(file) {
 async function isFile(file) {
   try {
     return (await stat(file)).isFile()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 判断路径是否存在（文件或目录；目录链接也是有效目标）。
+ * @param {string} target - 绝对路径。
+ * @returns {Promise<boolean>} 是否存在。
+ */
+async function pathExists(target) {
+  try {
+    await stat(target)
+    return true
   } catch {
     return false
   }
@@ -564,7 +582,7 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
     addWarning('wiki/orphaned-pages', `${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
   }
   // 清单路径与页面内部链接：generate 只写净化后的路径，但手工改清单/正文
-  // 可能引入跨 locale、路径穿越或指向已删除页面的死链。
+  // 可能引入跨 locale、路径穿越或指向已删除文件/页面的死链。
   const invalidPagePaths = []
   const pagePathMismatches = []
   for (const page of manifest.pages) {
@@ -585,34 +603,40 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   if (pagePathMismatches.length > 0) {
     addIssue('wiki/page-path-mismatch', `${pagePathMismatches.length} manifest page path(s) do not match the file location: ${pagePathMismatches.slice(0, 3).join(', ')}`)
   }
+  // 链接按 Markdown 语义相对页面所在目录解析，只拒绝越出**项目根**的目标
+  // （页面位于 `.dsh-repowiki/wiki/<locale>/`，`../../../src/x.ts` 是合法
+  // 项目内链接）；源码/文档链接与 `.md` 页面链接同样做存在性校验。
   const brokenLinks = []
   const unsafeLinks = []
   const seenLinks = new Set()
+  const rootDir = path.resolve(root)
   let linkProbes = 0
   let linkCapped = false
   for (const [slug, page] of diskPages) {
-    for (const rawTarget of extractMarkdownLinks(page.text)) {
+    const pageDir = path.dirname(path.join(rootDir, ASSET_DIR, page.rel))
+    for (const rawTarget of extractRelativeLinks(page.text)) {
       let target = rawTarget
       try {
         target = decodeURIComponent(rawTarget)
       } catch {
         // 非法转义保留原值，存在性探测会自然失败
       }
-      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page.rel), target))
-      const key = `${page.rel}\u0000${resolved}`
-      if (seenLinks.has(key)) continue
-      seenLinks.add(key)
-      if (resolved === '..' || resolved.startsWith('../')) {
+      const resolved = path.resolve(pageDir, target)
+      if (seenLinks.has(resolved)) continue
+      seenLinks.add(resolved)
+      const rel = path.relative(rootDir, resolved)
+      if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
         unsafeLinks.push(`${slug} → ${rawTarget}`)
         continue
       }
+      const display = rel.split(path.sep).join('/') || '.'
       if (linkProbes >= MAX_LINK_PROBES) {
         linkCapped = true
         break
       }
       linkProbes++
-      if (!(await isFile(path.join(root, ASSET_DIR, resolved)))) {
-        brokenLinks.push(`${slug} → ${resolved}`)
+      if (!(await pathExists(resolved))) {
+        brokenLinks.push(`${slug} → ${display}`)
       }
     }
     if (linkCapped) break
@@ -621,10 +645,10 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
     addIssue('wiki/unsafe-link', `${unsafeLinks.length} link(s) escape the project root: ${unsafeLinks.slice(0, 3).join(', ')}`)
   }
   if (brokenLinks.length > 0) {
-    addIssue('wiki/broken-link', `${brokenLinks.length} internal .md link(s) point to missing files: ${brokenLinks.slice(0, 3).join(', ')}`)
+    addIssue('wiki/broken-link', `${brokenLinks.length} relative link(s) point to missing files: ${brokenLinks.slice(0, 3).join(', ')}`)
   }
   if (linkCapped) {
-    const message = `internal link existence check stopped after ${MAX_LINK_PROBES} probes; unverified links are not reported as broken`
+    const message = `relative link existence check stopped after ${MAX_LINK_PROBES} probes; unverified links are not reported as broken`
     if (strict) addIssue('wiki/link-probe-capped', message)
     else addWarning('wiki/link-probe-capped', message)
   }

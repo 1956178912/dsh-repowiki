@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.155.0] - 2026-11-27
+
+### Fixed
+
+- **Relative link resolution in `verify:wiki`**: links are now resolved from
+  the page's real location under `.dsh-repowiki/wiki/<locale>/` against the
+  project root. A wiki page linking to `../../../src/indexer.js` (a normal
+  project file) is valid; only targets that escape the project root are
+  reported as `wiki/unsafe-link`. Previously every `..` escape of the asset
+  directory was rejected, so legitimate project links produced false errors.
+
+### Added
+
+- `verify:wiki` now checks **all** relative Markdown links, not just `.md`
+  links: source files, docs and directories must exist, and line fragments
+  such as `src/a.ts#L1-L2` are stripped before probing. Broken targets report
+  `wiki/broken-link` with a project-root-relative path.
+
+### Tests
+
+- 518 cases pass (LANG=en and LANG=zh); a new gate case links to
+  `src/a.ts`, `docs/guide.md` and the root `README.md` and asserts a pass,
+  then removes the source target and asserts the broken-link failure.
+
 ## [0.154.0] - 2026-11-27
 
 ### Docs

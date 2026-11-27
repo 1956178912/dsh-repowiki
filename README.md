@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/stale-card/memory notices, index-version/range-unverified strictness, internal-link/page-path integrity, status missing-page/invalid-path counts, missing-page health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.154.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/stale-card/memory notices, index-version/range-unverified strictness, relative-link/page-path integrity (wiki pages and project files), status missing-page/invalid-path counts, missing-page health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.155.0)
 
 | Capability | Description |
 |---|---|
@@ -215,11 +215,12 @@ npm run verify:host
 
 # Wiki freshness gate: fail on missing citations, out-of-range lines,
 # content drift, stale cards/accepted memory, manifest pages missing from
-# disk, invalid/mismatched page paths, broken or escaping internal .md links,
-# failed page writes from the last generation or empty manifests under
-# --strict/--require; untracked/unverifiable citations, pre-v6 indexes and
-# unverifiable ranges warn unless --strict. --require fails when no manifest
-# exists. --root / --locale / --json supported. v0.154.0.
+# disk, invalid/mismatched page paths, broken or escaping relative links
+# (wiki pages and project files), failed page writes from the last generation
+# or empty manifests under --strict/--require; untracked/unverifiable
+# citations, pre-v6 indexes and unverifiable ranges warn unless --strict.
+# --require fails when no manifest exists. --root / --locale / --json
+# supported. v0.155.0.
 npm run verify:wiki -- --root . --strict --require
 ```
 
@@ -264,7 +265,7 @@ stale-failure exit code.
 | `wiki/orphaned-pages` | warning | a page file is not listed in the manifest |
 | `wiki/generation-failed` | warning (`--strict`: error) | the last generation recorded failed page writes |
 | `wiki/invalid-page-path`, `wiki/page-path-mismatch` | error | bad manifest path or path does not match the file |
-| `wiki/unsafe-link`, `wiki/broken-link` | error | a relative `.md` link escapes the root or points to a missing file |
+| `wiki/unsafe-link`, `wiki/broken-link` | error | a relative link escapes the project root or points to a missing file (wiki pages and project files) |
 | `wiki/link-probe-capped` | warning (`--strict`: error) | link probing hit the 200-link cap |
 
 ## Upgrade operations (dsh is in rc; public seams change often)
@@ -333,7 +334,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (517 cases)
+test/                  Unit and integration tests (518 cases)
 ```
 
 ## License

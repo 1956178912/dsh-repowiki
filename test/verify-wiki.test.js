@@ -375,12 +375,47 @@ test('verify-wiki：页面内部死链与越界链接失败', async () => {
   assert.ok(broken.problems.some(problem => problem.code === 'wiki/broken-link'
     && problem.severity === 'error'))
   assert.ok(!broken.problems.some(problem => problem.code === 'wiki/unsafe-link'))
-  assert.match(formatReport(broken), /e\.g\. broken link overview → wiki\/zh\/missing\.md/)
+  assert.match(formatReport(broken), /e\.g\. broken link overview → \.dsh-repowiki\/wiki\/zh\/missing\.md/)
 
   writeText(pageFile, `${front}\n# Overview\n\n[outside](../../../../etc/passwd.md)\n`)
   const unsafe = await verifyWiki({ root })
   assert.equal(unsafe.ok, false)
   assert.ok(unsafe.problems.some(problem => problem.code === 'wiki/unsafe-link'))
+})
+
+test('verify-wiki：页面链接到项目内源码/文档时相对项目根解析', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'src/a.ts'), 'one\ntwo\n')
+  writeText(path.join(root, 'docs/guide.md'), '# Guide\n')
+  writeText(path.join(root, 'README.md'), '# Root\n')
+  writeIndex(root, [{ path: 'src/a.ts', lines: 2 }])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('src/a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+  const pageFile = path.join(root, '.dsh-repowiki/wiki/zh/overview.md')
+  const front = encodeFrontmatter({ slug: 'overview', title: 'Overview' })
+  writeText(pageFile, [
+    `${front}`,
+    '# Overview',
+    '',
+    '[source](../../../src/a.ts#L1-L2) [guide](../../../docs/guide.md)',
+    '[root](../../../README.md)',
+    '',
+  ].join('\n'))
+
+  const ok = await verifyWiki({ root })
+  assert.equal(ok.ok, true, ok.issues.join(' | '))
+  assert.ok(!ok.problems.some(problem => problem.code === 'wiki/broken-link'))
+  assert.ok(!ok.problems.some(problem => problem.code === 'wiki/unsafe-link'))
+
+  writeText(pageFile, `${front}\n# Overview\n\n[gone](../../../src/gone.ts)\n`)
+  const broken = await verifyWiki({ root })
+  assert.equal(broken.ok, false)
+  assert.ok(broken.problems.some(problem => problem.code === 'wiki/broken-link'))
+  assert.match(formatReport(broken), /e\.g\. broken link overview → src\/gone\.ts/)
 })
 
 test('verify-wiki：清单页面路径非法或与文件位置不符失败', async () => {
