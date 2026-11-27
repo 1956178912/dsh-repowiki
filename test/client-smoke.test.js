@@ -1136,6 +1136,26 @@ test('Wiki 页签：已采信记忆变化导致 Wiki 落后提示', async () => 
   assert.ok(texts.includes('wikiStaleMemory'), '记忆指纹与清单不一致时提示 Wiki 落后')
 })
 
+test('Wiki 页签：清单路径非法提示', async () => {
+  const manifest = JSON.stringify({
+    schemaVersion: 3,
+    pages: [{
+      slug: 'overview', path: '../secret.md', title: '概览', order: 0,
+      sources: [], sections: [],
+    }],
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/_index.json': manifest })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('wikiInvalidSummary'), '展示清单路径非法提示')
+  assert.ok(!texts.includes('wikiMissingSummary'), '非法路径不重复算作缺失页')
+})
+
 test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
   const legacy = JSON.stringify({
     schemaVersion: 2,

@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.153.0] - 2026-11-27
+
+### Added
+
+- **Panel invalid-path notice**: the Wiki tab now flags manifest pages whose
+  path escapes `wiki/<locale>/`, contains `..`/is absolute, is not `.md`, or
+  does not match the loaded file. Invalid paths are excluded from the panel's
+  missing-page count, so a bad path is reported once rather than twice.
+
+### Tests
+
+- 517 cases pass (LANG=en and LANG=zh); a panel case mounts a manifest path
+  of `../secret.md` and asserts the invalid notice while the missing notice
+  stays hidden.
+
 ## [0.152.0] - 2026-11-27
 
 ### Added

@@ -160,6 +160,8 @@ const DICTS = {
     wikiMissingHint: '缺失页：{pages}',
     wikiStaleCards: 'Wiki 落后于当前卡片：生成后卡片已变化，请重新生成',
     wikiStaleMemory: 'Wiki 落后于已采信记忆：生成后记忆已变化，请重新生成',
+    wikiInvalidSummary: '清单中 {n} 页路径非法或与文件位置不符',
+    wikiInvalidHint: '非法页：{pages}',
     wikiOnlyUntracked: '仅看未覆盖（{n}）',
     wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
@@ -280,6 +282,8 @@ const DICTS = {
     wikiMissingHint: 'Missing pages: {pages}',
     wikiStaleCards: 'Wiki is behind the current cards: cards changed after generation, run repowiki-generate',
     wikiStaleMemory: 'Wiki is behind the accepted memory: memory changed after generation, run repowiki-generate',
+    wikiInvalidSummary: '{n} manifest page path(s) are invalid or do not match their file',
+    wikiInvalidHint: 'Invalid pages: {pages}',
     wikiOnlyUntracked: 'Only untracked ({n})',
     wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
@@ -1451,12 +1455,14 @@ window.__ModuleLoader__.load({
 
     /**
      * 汇总清单级诊断：上次生成失败页与磁盘缺失页（面板不读源码）。
-     * @param {object[]} entries - 已加载的页面（file 为相对资产根路径）。
+     * @param {object[]} entries - 已加载的页面（file 为相对资产根路径，含 slug）。
      * @param {object|null} manifest - wiki/<locale>/_index.json。
+     * @param {string} locale - 当前 locale。
      * @returns {{failedTotal:number, failedPages:string[], missingTotal:number,
-     *   missingPages:string[]}} 失败页总数/示例（≤5）与缺失页总数/示例（≤5）。
+     *   missingPages:string[], invalidTotal:number, invalidPages:string[]}}
+     *   失败页/缺失页/非法路径的总数与示例（各 ≤5）。
      */
-    function wikiDiagnostics(entries, manifest) {
+    function wikiDiagnostics(entries, manifest, locale) {
       const failedPages = (Array.isArray(manifest?.failed) ? manifest.failed : [])
         .map(item => (typeof item?.slug === 'string' ? item.slug : ''))
         .filter(Boolean)
@@ -1464,14 +1470,35 @@ window.__ModuleLoader__.load({
         ? manifest.failedTotal
         : failedPages.length
       const present = new Set(entries.map(entry => entry.file))
+      const diskBySlug = new Map(entries.map(entry => [entry.slug, entry]))
+      const invalidPages = []
+      const invalidRels = new Set()
+      for (const page of Array.isArray(manifest?.pages) ? manifest.pages : []) {
+        const slug = typeof page?.slug === 'string' ? page.slug : ''
+        const rel = typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''
+        if (!slug || !rel) continue
+        if (rel.startsWith('/') || rel.split('/').includes('..')
+          || !locale || !rel.startsWith(`wiki/${locale}/`) || !rel.endsWith('.md')) {
+          invalidPages.push(slug)
+          invalidRels.add(rel)
+          continue
+        }
+        const disk = diskBySlug.get(slug)
+        if (disk && disk.file !== rel) {
+          invalidPages.push(slug)
+          invalidRels.add(rel)
+        }
+      }
       const missingPages = (Array.isArray(manifest?.pages) ? manifest.pages : [])
         .map(page => (typeof page?.path === 'string' ? page.path : ''))
-        .filter(path => path && !present.has(path))
+        .filter(path => path && !present.has(path) && !invalidRels.has(path))
       return {
         failedTotal,
         failedPages: failedPages.slice(0, 5),
         missingTotal: missingPages.length,
         missingPages: missingPages.slice(0, 5),
+        invalidTotal: invalidPages.length,
+        invalidPages: invalidPages.slice(0, 5),
       }
     }
 
@@ -1698,7 +1725,7 @@ window.__ModuleLoader__.load({
             memoriesInputDigest(memoryEntries),
           ])
           setWikiMeta({
-            ...wikiDiagnostics(wikiResult.entries, manifest),
+            ...wikiDiagnostics(wikiPages, manifest, wikiResult.locale),
             cardsStale: manifest && typeof manifest.inputDigest === 'string' && cardDigest
               ? cardDigest !== manifest.inputDigest
               : null,
@@ -3025,6 +3052,13 @@ window.__ModuleLoader__.load({
             : undefined,
           style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
         }, tt('wikiMissingSummary', { n: meta.missingTotal })),
+        meta && meta.invalidTotal > 0 && h('p', {
+          role: 'status',
+          title: meta.invalidPages.length > 0
+            ? tt('wikiInvalidHint', { pages: meta.invalidPages.join(', ') })
+            : undefined,
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, tt('wikiInvalidSummary', { n: meta.invalidTotal })),
       )
       if (entries.length === 0) {
         return h('div', null,
