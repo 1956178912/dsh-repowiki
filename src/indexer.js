@@ -11,7 +11,7 @@ import {
   INDEX_SCHEMA_VERSION, INDEX_PARSER_VERSION, EDGE_KIND_IMPORT, JS_PATH_CANDIDATES, PY_PATH_CANDIDATES,
 } from './schema.js'
 import { extractSymbols } from './symbols.js'
-import { extractImports } from './deps.js'
+import { extractImports, JS_DEFAULT_PREFIX } from './deps.js'
 import { detectStack } from './stack.js'
 import { moduleOf, buildModules } from './modules.js'
 import { loadIgnoreRules, isIgnored } from './ignore.js'
@@ -2814,6 +2814,40 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
 }
 
 /**
+ * 解析 JS/TS 默认导入的临时符号标记（`default:Local`）。
+ *
+ * 仅当目标文件存在**同名导出符号**时替换为真实名字，否则丢弃标记（文件级
+ * 边保留）。不猜测匿名默认导出、别名导入或"唯一导出"，避免把未经证实的
+ * 符号写成反向引用/使用点证据。
+ * @param {Array<{to:string, symbols?:string[]}>} edges - 依赖边（就地修改）。
+ * @param {Array<{path:string, symbols?:Array<{name:string, exported?:boolean}>}>} files - 索引文件。
+ * @returns {void}
+ */
+function resolveDefaultImportSymbols(edges, files) {
+  const hasMarker = edges.some(edge => Array.isArray(edge.symbols)
+    && edge.symbols.some(name => typeof name === 'string' && name.startsWith(JS_DEFAULT_PREFIX)))
+  if (!hasMarker) return
+  const byPath = new Map(files.map(file => [file.path, file]))
+  for (const edge of edges) {
+    if (!Array.isArray(edge.symbols)) continue
+    const target = byPath.get(edge.to)
+    const exported = (target?.symbols ?? []).filter(symbol =>
+      typeof symbol?.name === 'string' && symbol.exported !== false)
+    const resolved = []
+    for (const name of edge.symbols) {
+      if (typeof name !== 'string') continue
+      if (!name.startsWith(JS_DEFAULT_PREFIX)) {
+        resolved.push(name)
+        continue
+      }
+      const local = name.slice(JS_DEFAULT_PREFIX.length)
+      if (exported.some(symbol => symbol.name === local)) resolved.push(local)
+    }
+    edge.symbols = [...new Set(resolved)]
+  }
+}
+
+/**
  * 读取并解析单个源码文件（并行 worker 的最小工作单元）。
  * 读取失败或超过单文件上限时返回 skipped，不阻断整体索引。
  * @param {FsService} fs - ctx.fs 服务。
@@ -3158,6 +3192,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   edges.sort((a, b) => (a.from === b.from ? 0 : a.from < b.from ? -1 : 1)
     || (a.line ?? 0) - (b.line ?? 0)
     || (a.to === b.to ? 0 : a.to < b.to ? -1 : 1))
+  // JS 默认导入的临时标记需要目标文件符号表，统一在边排序后解析
+  resolveDefaultImportSymbols(edges, files)
 
   // 语言分布（面板与状态工具用；键排序保证 Git diff 稳定）
   const languageCounts = {}

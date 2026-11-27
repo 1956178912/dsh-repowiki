@@ -59,6 +59,22 @@ function jsImportedNames(line) {
   return [...names]
 }
 
+/** 默认导入的临时符号前缀；索引器解析为真实导出名后不会留在索引里。 */
+export const JS_DEFAULT_PREFIX = 'default:'
+
+/**
+ * 从 import 子句提取默认导入的本地绑定名。
+ * 支持 `Foo`、`Foo, { a }`、`Foo, * as ns` 与 `type Foo`；无默认导入返回空串。
+ * @param {string} clause - `import` 与 `from` 之间的文本。
+ * @returns {string} 本地绑定名；无默认导入时为空串。
+ */
+function jsDefaultLocalName(clause) {
+  const text = String(clause ?? '').trim().replace(/^type\s+/, '')
+  if (!text || text.startsWith('{') || text.startsWith('*')) return ''
+  const head = text.split(',')[0].trim()
+  return /^[A-Za-z_$][\w$]*$/.test(head) ? head : ''
+}
+
 /**
  * 提取 JS/TS 的 import / export-from / require 引用。
  * @param {string[]} lines - 代码行。
@@ -84,12 +100,15 @@ function extractJsImports(lines) {
     const im = /^\s*import\s+(?:type\s+)?(?<clause>[^;]*?)\s*from\s*['"](?<mod>[^'"]+)['"]/.exec(line)
     if (im) {
       const mod = im.groups.mod
+      const imported = jsImportedNames(im.groups.clause.startsWith('{') ? line : im.groups.clause)
+      const defaultLocal = jsDefaultLocalName(im.groups.clause)
+      if (defaultLocal) imported.unshift(`${JS_DEFAULT_PREFIX}${defaultLocal}`)
       result.push({
         specifier: mod,
         line: i + 1,
         kind: 'import',
         relative: isJsRelative(mod),
-        imported: jsImportedNames(im.groups.clause.startsWith('{') ? line : im.groups.clause),
+        imported,
       })
       i = statementEnd
       continue

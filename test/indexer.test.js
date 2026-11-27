@@ -2111,3 +2111,16 @@ test('podspec：根与嵌套清单聚合到 cocoapods 技术栈', async () => {
   assert.ok(techs.includes('cocoapods:SnapKit'))
   assert.ok(techs.includes('cocoapods:Firebase'))
 })
+
+test('JS 默认导入：同名导出解析为符号证据，别名/匿名默认不猜', async () => {
+  const dir = makeProject({
+    'src/a.ts': 'export default function parse() { return 1 }\nexport function other() {}\n',
+    'src/b.ts': "import parse from './a'\nexport const value = parse()\n",
+    'src/c.ts': "import thing from './a'\nexport const value = thing()\n",
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edgeB = doc.edges.find(edge => edge.from === 'src/b.ts')
+  assert.deepEqual(edgeB.symbols, ['parse'], '本地名与目标导出同名时解析为真实符号')
+  const edgeC = doc.edges.find(edge => edge.from === 'src/c.ts')
+  assert.deepEqual(edgeC.symbols, [], '别名默认导入不猜测，保留文件级边')
+})

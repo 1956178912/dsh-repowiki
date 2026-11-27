@@ -23,6 +23,7 @@ test('JS：各类 import 形态均可提取', () => {
   const bySpec = new Map(refs.map(r => [r.specifier, r]))
 
   assert.ok(bySpec.has('react') && !bySpec.get('react').relative, '裸包非相对')
+  assert.deepEqual(bySpec.get('react').imported, ['default:react'], '默认导入记为待解析标记')
   assert.ok(bySpec.get('./foo').relative, './foo 相对')
   assert.ok(bySpec.get('../pkg/mod').relative, '../pkg/mod 相对')
   assert.equal(bySpec.get('./foo').imported.length, 2, '具名导入两个符号')
@@ -59,7 +60,7 @@ test('JS：多行 import/export-from 保留起始行与具名符号', () => {
   const bySpec = new Map(refs.map(ref => [ref.specifier, ref]))
   assert.deepEqual(bySpec.get('./multi').imported, ['alpha', 'beta', 'Gamma'])
   assert.equal(bySpec.get('./multi').line, 1)
-  assert.deepEqual(bySpec.get('./mixed').imported, ['delta'])
+  assert.deepEqual(bySpec.get('./mixed').imported, ['default:main', 'delta'], '默认 + 具名混合')
   assert.equal(bySpec.get('./mixed').line, 7)
   assert.deepEqual(bySpec.get('./re-export').imported, ['epsilon', 'zeta'])
   assert.equal(bySpec.get('./re-export').kind, 'export-from')

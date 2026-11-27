@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.246.0] - 2026-11-28
+
+### Added
+
+- **Conservative default-import resolution**: JS/TS default imports now record
+  a temporary `default:Local` marker at extraction time. After the index has
+  every file's symbols, the marker is replaced with a real symbol name only
+  when the target file exports a symbol whose name equals the local binding;
+  otherwise the marker is dropped and the file-level edge remains. Aliases,
+  anonymous default exports and "single export" guesses are never treated as
+  symbol evidence.
+
+### Tests
+
+- 771 cases pass (LANG=en and LANG=zh); new coverage for default-import
+  markers (plain and mixed with named/namespace clauses), same-name resolution
+  through the indexer and the alias case that must stay file-level.
+
 ## [0.245.0] - 2026-11-28
 
 ### Added
