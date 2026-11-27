@@ -7,6 +7,7 @@
  * - 缺失引用路径（索引 + 文件系统探测，最多 200 个）
  * - 行号越界（索引 v6 起记录 `files[].lines`）
  * - 引用内容漂移（清单 v3 `citationDigests`）
+ * - 陈旧 Wiki（卡片 `inputDigest` 与清单不一致，说明生成后卡片又变了）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
  *
  * 用法：
@@ -14,7 +15,7 @@
  *
  * 退出码：
  *   0 = 通过（没有 Wiki 资产也算通过，除非显式指定了缺失的 locale）
- *   1 = 存在断链 / 行号越界 / 内容漂移（严格模式还包含未覆盖/未验证）
+ *   1 = 存在断链 / 行号越界 / 内容漂移 / 陈旧 Wiki（严格模式还包含未覆盖/未验证）
  *   2 = 参数或读取错误
  */
 
@@ -27,6 +28,8 @@ import {
 import {
   checkCitationDrift, summarizeCitationCoverage, citationCoveragePages,
 } from '../src/citation-drift.js'
+import { parseCard } from '../src/knowledge.js'
+import { digestText } from '../src/util.js'
 
 const ASSET_DIR = '.dsh-repowiki'
 const WIKI_DIR = 'wiki'
@@ -215,6 +218,50 @@ function lineCounts(files) {
 }
 
 /**
+ * 读取某 locale 的卡片元数据（按源路径去重，与 generate 的 inputDigest 口径一致）。
+ * @param {string} root - 项目根。
+ * @param {string} locale - 语言。
+ * @returns {Promise<Map<string, {sourceDigest?:string}>>} 源路径 → 卡片元数据。
+ */
+async function readCards(root, locale) {
+  const dir = path.join(root, ASSET_DIR, 'knowledge', locale)
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return new Map()
+  }
+  const cards = new Map()
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+    try {
+      const parsed = parseCard(await readFile(path.join(dir, entry.name), 'utf8'))
+      if (parsed && typeof parsed.meta.path === 'string') {
+        cards.set(parsed.meta.path, parsed.meta)
+      }
+    } catch {
+      // 单张坏卡不阻断门禁；缺失会让 inputDigest 不匹配而报 stale
+    }
+  }
+  return cards
+}
+
+/**
+ * 计算卡片集合的 inputDigest（与 repowiki-generate 相同）。
+ * @param {Map<string, {sourceDigest?:string}>} cards - 源路径 → 卡片元数据。
+ * @returns {string} sha256-16。
+ */
+function cardsDigest(cards) {
+  return digestText(
+    [...cards.entries()]
+      .map(([sourcePath, card]) => `${sourcePath}:${card.sourceDigest ?? ''}`)
+      .sort()
+      .join('\n'),
+    16,
+  )
+}
+
+/**
  * 校验单个 locale。
  * @param {string} root - 项目根。
  * @param {string} locale - 语言目录名。
@@ -246,6 +293,20 @@ async function verifyLocale(root, locale, index, strict) {
     }
   }
   const manifest = loaded.value
+  const issues = []
+  const warnings = []
+  // 陈旧检查：清单 inputDigest 与当前卡片集合不一致，说明卡片变了但 Wiki
+  // 未重新生成；即使引用路径都有效，内容也可能过期。
+  const cards = await readCards(root, locale)
+  const currentInputDigest = cardsDigest(cards)
+  const stale = typeof manifest.inputDigest === 'string' && manifest.inputDigest
+    ? currentInputDigest !== manifest.inputDigest
+    : null
+  if (stale === true) {
+    issues.push('wiki is stale: cards changed since generation (run repowiki-generate)')
+  } else if (stale === null) {
+    warnings.push('manifest has no inputDigest; stale check skipped')
+  }
   const { known, capped } = await resolveKnown(root, manifest, index.files)
   const broken = findBrokenWikiCitations(manifest, known)
   const ranges = findCitationRangeIssues(manifest, lineCounts(index.files), known)
@@ -258,8 +319,6 @@ async function verifyLocale(root, locale, index, strict) {
   })
   const coverage = summarizeCitationCoverage(manifest)
   const coveragePages = citationCoveragePages(manifest)
-  const issues = []
-  const warnings = []
   if (broken.total > 0) issues.push(`${broken.total} missing citation path(s)`)
   if (ranges.total > 0) issues.push(`${ranges.total} citation line range(s) out of bounds`)
   if (drift && drift.total > 0) issues.push(`${drift.total} citation(s) changed since generation`)
@@ -282,6 +341,7 @@ async function verifyLocale(root, locale, index, strict) {
     ok: issues.length === 0,
     issues,
     warnings,
+    stale,
     pages: manifest.pages.length,
     broken,
     ranges,
@@ -407,7 +467,7 @@ export function formatReport(result) {
     : 'missing'}`)
   if (result.locales.length === 0) lines.push('No wiki manifests found.')
   for (const locale of result.locales) {
-    lines.push(`${locale.locale}: ${locale.pages} page(s), ${locale.coverage?.total ?? 0} citation(s) (${locale.coverage?.tracked ?? 0} tracked, ${locale.coverage?.untracked ?? 0} untracked)`)
+    lines.push(`${locale.locale}: ${locale.pages} page(s), ${locale.coverage?.total ?? 0} citation(s) (${locale.coverage?.tracked ?? 0} tracked, ${locale.coverage?.untracked ?? 0} untracked)${locale.stale === true ? ' (stale)' : ''}`)
     lines.push(`  broken ${locale.broken?.total ?? 0} / out-of-range ${locale.ranges?.total ?? 0} / drift ${locale.drift?.total ?? 0}`)
     for (const issue of locale.issues) lines.push(`  - ${issue}`)
     for (const warning of locale.warnings) lines.push(`  ! ${warning}`)

@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { verifyWiki, parseArgs, formatReport, main } from '../scripts/verify-wiki.mjs'
 import { citationDigest } from '../src/citation-digest.js'
+import { digestText, encodeFrontmatter } from '../src/util.js'
 
 /** 建临时项目根。 */
 function makeRoot() {
@@ -112,6 +113,42 @@ test('verify-wiki：断链、越界与漂移均失败并给出示例', async () 
   assert.match(report, /e\.g\. out-of-range Overview: a\.ts#L99-L99/)
   assert.match(report, /e\.g\. drift Overview: a\.ts#L1/)
   assert.match(report, /e\.g\. untracked Overview: 1/)
+})
+
+test('verify-wiki：卡片变化导致 Wiki 陈旧', async () => {
+  const root = makeRoot()
+  const text = 'one\ntwo\n'
+  writeText(path.join(root, 'a.ts'), text)
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  const cardMeta = sourceDigest => ({
+    schemaVersion: 1,
+    path: 'a.ts',
+    lang: 'typescript',
+    locale: 'zh',
+    sourceDigest,
+    title: 'A',
+    tags: [],
+    manuallyEdited: false,
+    generatedAt: 'now',
+  })
+  const cardFile = path.join(root, '.dsh-repowiki/knowledge/zh/a.md')
+  writeText(cardFile, `${encodeFrontmatter(cardMeta('d1'))}\n# A\n`)
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('a.ts:d1', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))],
+  })
+
+  const fresh = await verifyWiki({ root })
+  assert.equal(fresh.ok, true)
+  assert.equal(fresh.locales[0].stale, false)
+
+  writeText(cardFile, `${encodeFrontmatter(cardMeta('d2'))}\n# A\n`)
+  const stale = await verifyWiki({ root })
+  assert.equal(stale.ok, false)
+  assert.equal(stale.locales[0].stale, true)
+  assert.match(stale.issues.join(' '), /wiki is stale: cards changed/)
+  assert.match(formatReport(stale), /\(stale\)/)
 })
 
 test('verify-wiki：未覆盖默认警告，严格模式失败', async () => {

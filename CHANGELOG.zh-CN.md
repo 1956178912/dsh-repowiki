@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.139.0] - 2026-11-27
+
+- **陈旧 Wiki 门禁**：`verify:wiki` 现在重算卡片 `inputDigest`（与
+  `repowiki-generate` 相同的 `path:sourceDigest` 排序），并与清单比较。
+  不一致时默认失败并提示
+  “wiki is stale: cards changed since generation (run repowiki-generate)”，
+  即使所有引用路径仍然有效。旧清单没有 `inputDigest` 时仅警告并跳过。
+- **测试**：500 例在 LANG=en 与 LANG=zh 下全通过；新增卡片写入、匹配清单
+  通过、修改卡片后 stale 失败与 `(stale)` 报告标记用例。
+
 ## [0.138.0] - 2026-11-27
 
 - **“仅看未覆盖”筛选**：只要存在未覆盖引用的页面，Wiki 页签就显示带页面

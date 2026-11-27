@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.139.0] - 2026-11-27
+
+### Added
+
+- **Stale-wiki gate**: `verify:wiki` now recomputes the card `inputDigest`
+  (same `path:sourceDigest` ordering as `repowiki-generate`) and compares it
+  with the manifest. A mismatch fails by default with
+  `wiki is stale: cards changed since generation (run repowiki-generate)`,
+  even when every citation path is still valid. Legacy manifests without
+  `inputDigest` warn and skip the check instead of failing.
+
+### Tests
+
+- 500 cases pass (LANG=en and LANG=zh); a new case writes a card, verifies a
+  matching manifest, changes the card digest and asserts the stale failure
+  plus the `(stale)` report marker.
+
 ## [0.138.0] - 2026-11-27
 
 ### Added
