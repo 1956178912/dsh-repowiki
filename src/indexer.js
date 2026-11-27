@@ -980,10 +980,11 @@ function resolveElixirSpecifier(specifier, modules) {
 }
 
 /**
- * 建立 OCaml 模块名 → 文件索引：OCaml 模块名由文件名决定（首字母大写），
- * 同名实现/接口取 `.ml` 优先，其余取字典序最小文件，保证确定性。
+ * 建立 OCaml 模块名 → 候选文件索引：OCaml 模块名由文件名决定（首字母
+ * 大写），同名实现/接口按 `.ml` 优先、再字典序排序，保证确定性；解析时
+ * 再按与引用文件的目录亲缘度选最近者。
  * @param {Array<{path:string, lang:string}>} files - 索引文件条目。
- * @returns {Map<string,string>} 模块名 → 文件相对路径。
+ * @returns {Map<string,string[]>} 模块名 → 候选文件列表。
  */
 function buildOcamlModules(files) {
   const modules = new Map()
@@ -993,28 +994,60 @@ function buildOcamlModules(files) {
     const stem = base.slice(0, base.lastIndexOf('.'))
     if (!/^[A-Za-z_][\w']*$/.test(stem) || stem === '') continue
     const name = stem[0].toUpperCase() + stem.slice(1)
-    const existing = modules.get(name)
-    if (existing === undefined
-      || (existing.endsWith('.mli') && file.path.endsWith('.ml'))
-      || (existing.endsWith('.mli') === file.path.endsWith('.mli') && file.path < existing)) {
-      modules.set(name, file.path)
-    }
+    const list = modules.get(name)
+    if (list) list.push(file.path)
+    else modules.set(name, [file.path])
+  }
+  for (const list of modules.values()) {
+    list.sort((a, b) => {
+      const aMli = a.endsWith('.mli')
+      const bMli = b.endsWith('.mli')
+      if (aMli !== bMli) return aMli ? 1 : -1
+      return a.localeCompare(b)
+    })
   }
   return modules
 }
 
 /**
- * 解析 OCaml `open`/`include`/模块别名：取点分名的首段模块名匹配文件名
- * 索引（子模块 `Foo.Bar` 归到 `foo.ml`）；外部库返回 null。
+ * 计算两个文件共享的目录深度（共同祖先目录层数）。
+ * @param {string} a - 文件相对路径。
+ * @param {string} b - 文件相对路径。
+ * @returns {number} 共享目录层数。
+ */
+function commonDirDepth(a, b) {
+  const as = a.split('/').slice(0, -1)
+  const bs = b.split('/').slice(0, -1)
+  let depth = 0
+  while (depth < as.length && depth < bs.length && as[depth] === bs[depth]) depth++
+  return depth
+}
+
+/**
+ * 解析 OCaml `open`/`include`/模块别名：取点分名的首段模块名，在候选
+ * 文件中选与引用文件共享目录最深者（同库优先），并列时保持 `.ml` 优先
+ * 与字典序；外部库返回 null。
  * @param {string} specifier - 模块名（如 Foo 或 Foo.Bar）。
- * @param {Map<string,string>} modules - 模块名索引。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {Map<string,string[]>} modules - 模块名 → 候选文件列表。
  * @returns {string|null} 命中文件；外部/无法解析返回 null。
  */
-function resolveOcamlSpecifier(specifier, modules) {
+function resolveOcamlSpecifier(specifier, fromRel, modules) {
   if (typeof specifier !== 'string') return null
   const head = specifier.split('.')[0]
   if (!/^[A-Z][\w']*$/.test(head)) return null
-  return modules.get(head) ?? null
+  const candidates = modules.get(head)
+  if (!candidates || candidates.length === 0) return null
+  let best = candidates[0]
+  let bestDepth = commonDirDepth(fromRel, best)
+  for (const candidate of candidates.slice(1)) {
+    const depth = commonDirDepth(fromRel, candidate)
+    if (depth > bestDepth) {
+      best = candidate
+      bestDepth = depth
+    }
+  }
+  return best
 }
 
 /**
@@ -2092,7 +2125,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
- *   ocamlModules:Map<string,string>,
+ *   ocamlModules:Map<string,string[]>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   luaRoots:string[],
@@ -2136,7 +2169,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
-  if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, ctx.ocamlModules)
+  if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)

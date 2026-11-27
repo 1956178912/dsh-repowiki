@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.212.0] - 2026-11-28
+
+- **OCaml 同名模块近邻解析**：`buildOcamlModules` 现在保留每个模块名的
+  全部候选（`.ml` 先于 `.mli`，再字典序），`resolveOcamlSpecifier`
+  选择与引用文件共享目录最深的候选。多库仓库中的同名模块，
+  `open`/`include`/`module M = Foo` 会落到同库文件，而不是全局字典序
+  的第一个；外部模块仍返回 null。
+- **测试**：620 例在 LANG=en 与 LANG=zh 下全通过；`lib/a/foo.ml` 与
+  `lib/b/foo.ml` 夹具验证各自引用方连到最近模块。
+
 ## [0.211.0] - 2026-11-28
 
 - **跨语言测试路径**：受影响测试路由新增 Erlang `*_SUITE.erl`

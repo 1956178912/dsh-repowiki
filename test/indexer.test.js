@@ -1524,6 +1524,20 @@ test('OCaml：模块名解析、.mli 优先 .ml 与 dune/opam 技术栈', async 
   assert.ok(!main.symbols.some(s => s.name === 'print_int'))
 })
 
+test('OCaml：同名模块按目录亲缘度选最近文件', async () => {
+  const dir = makeProject({
+    'lib/a/foo.ml': 'let x = 1\n',
+    'lib/b/foo.ml': 'let y = 2\n',
+    'lib/a/bar.ml': 'open Foo\n',
+    'lib/b/baz.ml': 'open Foo\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('lib/a/bar.ml', 'lib/a/foo.ml')?.line, 1, '同目录优先')
+  assert.equal(edge('lib/b/baz.ml', 'lib/b/foo.ml')?.line, 1, '同目录优先（另一库）')
+  assert.equal(doc.edges.filter(e => e.to === 'lib/b/foo.ml').length, 1)
+})
+
 test('Haskell：模块路径解析、src/app 源根与 cabal 技术栈', async () => {
   const dir = makeProject({
     'demo.cabal': 'name: demo\nversion: 0.3.0.0\nlibrary\n  build-depends: base, aeson\n',

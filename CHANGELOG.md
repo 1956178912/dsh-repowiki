@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.212.0] - 2026-11-28
+
+### Added
+
+- **OCaml nearest-module resolution**: `buildOcamlModules` now keeps every
+  candidate per module name (`.ml` before `.mli`, then lexicographic), and
+  `resolveOcamlSpecifier` picks the candidate sharing the deepest directory
+  prefix with the importing file. Multi-library repos with same-named
+  modules now resolve `open`/`include`/`module M = Foo` to the same
+  library instead of a global lexicographic pick; external modules still
+  return null.
+
+### Tests
+
+- 620 cases pass (LANG=en and LANG=zh); a fixture with `lib/a/foo.ml` and
+  `lib/b/foo.ml` proves each importer links to its nearest module.
+
 ## [0.211.0] - 2026-11-28
 
 ### Added
