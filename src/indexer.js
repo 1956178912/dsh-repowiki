@@ -51,6 +51,13 @@ const INDEX_READ_CONCURRENCY = 8
 const INDEX_READ_CONCURRENCY_MAX = 16
 
 /**
+ * 目录列举预取的并发上限。DFS 顺序不变，只把“即将访问的兄弟目录”
+ * 的 listDir 提前发出：远程 `ctx.fs` 每个目录一次 RTT，串行等待会按
+ * 目录数线性放大；有界预取把等待重叠起来，且不改变预算计数顺序。
+ */
+const WALK_PREFETCH_LIMIT = 8
+
+/**
  * 单次索引最多读取的嵌套 `CMakeLists.txt` 数（monorepo 子项目）。
  * 根清单不受此上限影响；配置只用于技术栈聚合。
  */
@@ -114,6 +121,41 @@ function normalizeRel(baseDir, rel) {
 }
 
 /**
+ * 创建目录列举预取器（有界、只读、结果按消费顺序返回）。
+ * - `start(dirPath)`：若在途请求未达上限则提前 resolve+listDir；
+ * - `list(dirPath)`：命中预取则等待该 Promise，否则现查；
+ * - 预取 Promise 挂一个空 catch，避免预算截断/取消后“预取了但没消费”
+ *   产生未处理拒绝；错误仍会通过 `list` 的 await 交给调用方。
+ * @param {FsService} fs - ctx.fs 服务。
+ * @param {number} limit - 在途列举请求上限。
+ * @returns {{start:(dirPath:string)=>void, list:(dirPath:string)=>Promise<Array<object>>}}
+ *   预取器。
+ */
+function createDirPrefetcher(fs, limit) {
+  /** @type {Map<string, Promise<Array<object>>>} */
+  const pending = new Map()
+  let inflight = 0
+  const start = (dirPath) => {
+    if (pending.has(dirPath) || inflight >= limit) return
+    inflight++
+    const promise = fs.resolve(dirPath).then(target => fs.listDir(target))
+    promise.then(() => { inflight-- }, () => { inflight-- })
+    promise.catch(() => undefined)
+    pending.set(dirPath, promise)
+  }
+  const list = async (dirPath) => {
+    const cached = pending.get(dirPath)
+    if (!cached) {
+      const target = await fs.resolve(dirPath)
+      return fs.listDir(target)
+    }
+    pending.delete(dirPath)
+    return cached
+  }
+  return { start, list }
+}
+
+/**
  * 按文件名字节序比较（不依赖 ICU/区域设置，跨后端与机器可复现）。
  * @param {{name:string}} a - 目录条目。
  * @param {{name:string}} b - 目录条目。
@@ -151,22 +193,30 @@ function comparePath(a, b) {
  * @param {{count:number, stopped?:boolean, aborted?:boolean, ignored?:number,
  *   ignoreWarnings?:string[]}} budget - 文件计数预算（引用传递，
  *   超限即停；stopped 置真表示遍历确因预算提前终止；aborted 表示调用方取消）。
+ * @param {{start:(dirPath:string)=>void, list:(dirPath:string)=>Promise<Array<object>>}} prefetcher
+ *   - 目录列举预取器（有界并发；不改变访问顺序与计数）。
  * @param {AbortSignal} [signal] - 协作式取消信号。
  * @returns {Promise<void>}
  */
-async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles, manifests, ignoreRules, budget, signal) {
+async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles, manifests, ignoreRules, budget, prefetcher, signal) {
   if (budget.aborted) return
   if (depth > MAX_DEPTH) return
   if (budget.count >= maxFiles) { budget.stopped = true; return }
   let entries
   try {
-    const dirTarget = await fs.resolve(dirPath)
-    entries = await fs.listDir(dirTarget)
+    entries = await prefetcher.list(dirPath)
   } catch {
     return // 不可读目录安静跳过（权限/IO 问题不阻断整体索引）
   }
   // 后端返回顺序不保证稳定：排序后再遍历，预算截断与产物顺序才可复现
   entries = [...entries].sort(compareEntryName)
+  // 预取窗口：进入某个子目录前，提前发起它之后 limit 个兄弟目录的
+  // listDir（DFS 顺序不变；只是把后续 RTT 重叠起来）。
+  const childDirs = entries
+    .filter(entry => entry.type === 'directory' && !exclude.has(entry.name))
+    .map(entry => entry.target.displayPath)
+  const childIndex = new Map(childDirs.map((dir, index) => [dir, index]))
+  let nextToStart = 0
   // 嵌套忽略：只在该目录确实包含规则文件时读取（不额外 stat），
   // 更深目录的规则后置，天然获得更高优先级。
   let rules = ignoreRules
@@ -194,7 +244,14 @@ async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles,
     }
     if (isDir) {
       if (exclude.has(entry.name)) continue
-      await walk(fs, rootAbs, path.posix.join(dirPath, entry.name), exclude, maxFiles, depth + 1, sourceFiles, manifests, rules, budget, signal)
+      const position = childIndex.get(entry.target.displayPath)
+      if (position !== undefined) {
+        while (nextToStart < childDirs.length && nextToStart <= position + WALK_PREFETCH_LIMIT) {
+          prefetcher.start(childDirs[nextToStart])
+          nextToStart++
+        }
+      }
+      await walk(fs, rootAbs, path.posix.join(dirPath, entry.name), exclude, maxFiles, depth + 1, sourceFiles, manifests, rules, budget, prefetcher, signal)
     } else if (entry.type === 'file') {
       budget.count++
       if (MANIFEST_FILES[rel] || isConfigManifest(rel, entry.name)) {
@@ -1523,7 +1580,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   const manifests = []
   const budget = { count: 0, stopped: false, aborted: false, ignored: 0, ignoreWarnings: [] }
   const ignore = await loadIgnoreRules(fs, rootAbs)
-  await walk(fs, rootAbs, rootAbs, exclude, maxFiles, 0, sourceFiles, manifests, ignore.rules, budget, opts.signal)
+  await walk(fs, rootAbs, rootAbs, exclude, maxFiles, 0, sourceFiles, manifests, ignore.rules, budget, createDirPrefetcher(fs, WALK_PREFETCH_LIMIT), opts.signal)
 
   // 第一遍只登记路径（依赖边解析需要全集）
   const indexed = new Set(sourceFiles.map(f => f.rel))

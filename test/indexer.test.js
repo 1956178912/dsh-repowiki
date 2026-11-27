@@ -1111,3 +1111,33 @@ test('索引确定性：目录枚举顺序不影响 files/edges 输出', async (
   ])
   assert.deepEqual(shuffled.modules, normal.modules, '模块树不受枚举顺序影响')
 })
+
+test('索引遍历：目录列举有界预取，结果与串行一致', async () => {
+  const files = {}
+  for (let i = 0; i < 12; i++) {
+    files[`d${String(i).padStart(2, '0')}/f.ts`] = `export const v${i} = ${i}\n`
+  }
+  const dir = makeProject(files)
+  const base = makeFakeFs(dir)
+  let active = 0
+  let peak = 0
+  const slow = {
+    ...base,
+    async listDir(target) {
+      active++
+      peak = Math.max(peak, active)
+      try {
+        await new Promise(resolve => setTimeout(resolve, 3))
+        return await base.listDir(target)
+      } finally {
+        active--
+      }
+    },
+  }
+  const serial = await buildIndex(base, dir)
+  const prefetched = await buildIndex(slow, dir)
+  assert.deepEqual(prefetched.files.map(f => f.path), serial.files.map(f => f.path), '预取不改变索引内容与顺序')
+  assert.deepEqual(prefetched.edges, serial.edges)
+  assert.ok(peak > 1, '兄弟目录应并发列举（预取生效）')
+  assert.ok(peak <= 8, '预取并发不超过上限')
+})

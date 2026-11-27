@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.173.0] - 2026-11-28
+
+### Performance
+
+- **Bounded directory-listing prefetch**: while the depth-first walk is
+  inside one directory, the indexer now starts `listDir` for the next siblings
+  in traversal order (up to 8 in flight). Entries are still consumed in the
+  same sorted DFS order and the budget is still charged in that order, so the
+  result is identical to the serial walk — remote `ctx.fs` backends just stop
+  paying one round trip per directory back to back. Prefetched promises carry
+  a no-op catch so budget truncation or cancellation cannot surface as an
+  unhandled rejection.
+
+### Tests
+
+- 549 cases pass (LANG=en and LANG=zh); a delayed `listDir` fixture proves
+  sibling listings overlap (peak > 1, peak <= 8) while files and edges stay
+  identical to a serial build.
+
 ## [0.172.0] - 2026-11-28
 
 ### Security
