@@ -25,6 +25,7 @@ import { checkCitationDrift, summarizeCitationCoverage, citationCoveragePages } 
 import { wikiGraphText } from './wiki-graph.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
+import { evaluateLayers } from './layers.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -142,7 +143,9 @@ const DESCRIPTION = [
   'plus bounded per-page coverage details, recomputed through bounded concurrent reads',
   '(untracked citations cannot be drift-checked); export candidates without named-import',
   'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
-  'Ca/Ce coupling and instability are reported for cross-module imports. Use it to diagnose',
+  'Ca/Ce coupling and instability are reported for cross-module imports; and architecture layers',
+  'declared in repowiki-plan.json are checked so cross-layer imports outside mayDependOn are listed',
+  'as violations. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. The weighted health score also counts',
   'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
@@ -642,6 +645,53 @@ export function repowikiStatusTool(ctx) {
             },
             required: ['total', 'exportedTotal', 'skippedFiles', 'files', 'truncated'],
           },
+          layers: {
+            type: 'object',
+            description: 'Architecture layer check from plan layers: cross-layer import edges not allowed by mayDependOn. Same-layer edges are always allowed; files outside every layer are ignored. Present only when the plan declares layers and a compatible index exists.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Cross-layer edges violating the rules (exact, even when detail is truncated).' },
+              truncated: { type: 'boolean' },
+              checkedEdges: { type: 'integer', description: 'Edges whose both ends belong to a declared layer.' },
+              unknownRefs: {
+                type: 'array',
+                description: 'mayDependOn entries naming a layer that is not declared.',
+                items: { type: 'string' },
+              },
+              violations: {
+                type: 'array',
+                description: 'Violating edges (up to 50 entries).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    from: { type: 'string' },
+                    fromLayer: { type: 'string' },
+                    to: { type: 'string' },
+                    toLayer: { type: 'string' },
+                    line: { type: 'integer', description: 'Import line (0 when the index predates line numbers).' },
+                  },
+                  required: ['from', 'fromLayer', 'to', 'toLayer', 'line'],
+                },
+              },
+              layers: {
+                type: 'array',
+                description: 'Declared layers with their path prefixes, allowed dependencies and indexed file counts.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: 'string' },
+                    paths: { type: 'array', items: { type: 'string' } },
+                    mayDependOn: { type: 'array', items: { type: 'string' } },
+                    files: { type: 'integer' },
+                  },
+                  required: ['name', 'paths', 'mayDependOn', 'files'],
+                },
+              },
+            },
+            required: ['total', 'truncated', 'checkedEdges', 'unknownRefs', 'violations', 'layers'],
+          },
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
@@ -693,6 +743,11 @@ export function repowikiStatusTool(ctx) {
           `Core files (PageRank): ${value.coreFiles.length > 0
             ? value.coreFiles.map(entry => `${entry.path} (${entry.score.toFixed(4)})`).join('; ')
             : '(none)'}`,
+          ...(value.layers
+            ? [`Layers: ${value.layers.total === 0
+              ? `(none, ${value.layers.checkedEdges} cross-layer edge(s) checked)`
+              : `${value.layers.total} violation(s)${value.layers.truncated ? ' (bounded)' : ''} — e.g. ${value.layers.violations[0].fromLayer} → ${value.layers.violations[0].toLayer}: ${value.layers.violations[0].from} → ${value.layers.violations[0].to}`}`]
+            : []),
           ...(value.unusedExports
             ? [`Unused export candidates: ${value.unusedExports.total === 0
               ? '(none)'
@@ -981,6 +1036,16 @@ export function repowikiStatusTool(ctx) {
 
       const { plan, source: planSource, error: planError } = await readPlan(fs, root)
       if (planError) warnings.push(`repowiki-plan.json: ${planError}`)
+      // 架构分层：plan 声明层且索引存在时按 import 边检查跨层依赖
+      const layerReport = plan.layers.length > 0 && index
+        ? evaluateLayers(plan.layers, index.edges ?? [], index.files ?? [])
+        : null
+      if (layerReport?.unknownRefs.length) {
+        warnings.push(`repowiki-plan.json layers: unknown layer reference(s): ${layerReport.unknownRefs.join(', ')}.`)
+      }
+      if (layerReport && layerReport.total > 0) {
+        warnings.push(`${layerReport.total} cross-layer import edge(s) violate the declared layers; see status.layers.`)
+      }
 
       const git = await readGitInfo(fs, root)
       const moduleDependencies = summarizeModuleRelations(
@@ -1059,6 +1124,7 @@ export function repowikiStatusTool(ctx) {
           orphaned: orphanedCards,
         },
         coverage,
+        ...(layerReport ? { layers: layerReport } : {}),
         ...(health ? { health } : {}),
         wiki: {
           count: wikiPages.length,

@@ -63,6 +63,25 @@ test('readPlan：字段类型错误回退默认（不抛异常）', async () => 
   assert.deepEqual(plan.locales, [])
 })
 
+test('readPlan：layers 归一化（非法条目丢弃）', async () => {
+  const dir = makeProject(JSON.stringify({
+    layers: [
+      { name: 'ui', paths: ['src/ui'], mayDependOn: ['core'] },
+      { name: 'core', paths: ['src/core'] },
+      { name: 'ui', paths: ['dup'] },
+      { paths: ['nope'] },
+    ],
+  }))
+  const { plan } = await readPlan(makeFakeFs(dir), dir)
+  assert.deepEqual(plan.layers, [
+    { name: 'ui', paths: ['src/ui'], mayDependOn: ['core'] },
+    { name: 'core', paths: ['src/core'], mayDependOn: [] },
+  ])
+
+  const missing = makeProject(JSON.stringify({ layers: 'not-array' }))
+  assert.deepEqual((await readPlan(makeFakeFs(missing), missing)).plan.layers, [])
+})
+
 test('readPlan：concurrency 归一与钳制（1–4）', async () => {
   const dir = makeProject(JSON.stringify({ concurrency: 3 }))
   const { plan } = await readPlan(makeFakeFs(dir), dir)

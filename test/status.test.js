@@ -42,6 +42,42 @@ test('repowiki-status：空目录降级（不抛错、index missing）', async (
   assert.match(rendered[0].text, /Fan-in hubs: \(none\)/)
 })
 
+test('repowiki-status：plan 分层规则报告跨层违规', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-layers-'))
+  nodefs.mkdirSync(path.join(dir, 'src/ui'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, 'src/core'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/core/b.ts'), 'export function b() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'src/ui/a.ts'), "import { b } from '../core/b'\nexport const a = b()\n")
+  nodefs.writeFileSync(path.join(dir, 'src/core/c.ts'), "import { a } from '../ui/a'\nexport const c = a\n")
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki/repowiki-plan.json'), JSON.stringify({
+    layers: [
+      { name: 'ui', paths: ['src/ui'], mayDependOn: ['core'] },
+      { name: 'core', paths: ['src/core'], mayDependOn: [] },
+    ],
+  }))
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+
+  assert.equal(out.layers.total, 1)
+  assert.equal(out.layers.checkedEdges, 2)
+  assert.deepEqual(out.layers.violations.map(v => [v.fromLayer, v.toLayer]), [['core', 'ui']])
+  assert.deepEqual(out.layers.layers.map(l => [l.name, l.files]), [['ui', 1], ['core', 2]])
+  assert.ok(out.warnings.some(w => /cross-layer import edge/.test(w)))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /Layers: 1 violation/)
+})
+
+test('repowiki-status：未声明 layers 时不输出分层区块', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-nolayers-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.layers, undefined)
+})
+
 test('repowiki-status：结构指纹不一致时提示 Wiki 落后', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-graph-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() {}\n')

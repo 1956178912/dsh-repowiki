@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.225.0] - 2026-11-28
+
+### Added
+
+- **Architecture layers**: `repowiki-plan.json` accepts
+  `layers: [{ name, paths, mayDependOn }]`. Indexed files are assigned to
+  the layer with the longest matching path prefix, same-layer edges are
+  always allowed, and every cross-layer import not listed in the source
+  layer's `mayDependOn` is a violation. Files outside every declared
+  layer are ignored instead of guessed.
+- **Layer reporting**: `repowiki-status` returns a `layers` block with
+  exact violation totals, bounded detail (50 entries, each carrying
+  `from`/`fromLayer`/`to`/`toLayer`/`line`), checked-edge counts,
+  per-layer file counts and unknown `mayDependOn` references; violating
+  totals and unknown references also raise warnings and the text report
+  gains a `Layers:` line.
+- **Plan validation**: layer entries without a name, with duplicate
+  names or without any path are dropped, paths are normalized (leading
+  `./`, trailing slashes, backslashes) and `mayDependOn` keeps only
+  non-empty strings.
+
+### Tests
+
+- 664 cases pass (LANG=en and LANG=zh); new coverage for layer
+  normalization, longest-prefix ownership, allowed/same-layer edges,
+  violation totals with bounded detail, unknown references, malformed
+  edges and status integration (report, warnings and text rendering).
+
 ## [0.224.0] - 2026-11-28
 
 ### Added

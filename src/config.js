@@ -18,6 +18,7 @@ import {
   EXTRACT_CONCURRENCY_DEFAULT, MAX_EXTRACT_CONCURRENCY,
   EXTRACT_ATTEMPTS_DEFAULT, MAX_EXTRACT_ATTEMPTS,
 } from './schema.js'
+import { normalizeLayers } from './layers.js'
 
 /**
  * 配置对象（全部可选，缺省即默认值）。
@@ -30,6 +31,8 @@ import {
  * @property {number} [maxResultLimit] - 检索结果上限。
  * @property {number} [concurrency] - 卡片提取并发子代理数（1–4）。
  * @property {number} [attempts] - 单文件提取最大尝试次数（1–3，含首次）。
+ * @property {Array<{name:string, paths:string[], mayDependOn:string[]}>} [layers]
+ *   - 架构分层规则：路径前缀归属与允许的跨层依赖。
  */
 
 /** 默认配置。 */
@@ -42,6 +45,7 @@ export const DEFAULT_PLAN = Object.freeze({
   maxResultLimit: DEFAULT_RESULT_LIMIT,
   concurrency: EXTRACT_CONCURRENCY_DEFAULT,
   attempts: EXTRACT_ATTEMPTS_DEFAULT,
+  layers: [],
 })
 
 /**
@@ -100,6 +104,7 @@ export async function readPlan(fs, root) {
       maxResultLimit: nonNegativeInt(parsed.maxResultLimit, DEFAULT_PLAN.maxResultLimit),
       concurrency: normalizeConcurrency(parsed.concurrency, DEFAULT_PLAN.concurrency),
       attempts: normalizeAttempts(parsed.attempts, DEFAULT_PLAN.attempts),
+      layers: normalizeLayers(parsed.layers),
     }
     return { plan, source: 'file' }
   } catch (err) {
