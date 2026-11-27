@@ -73,8 +73,10 @@ test('repowiki-status：索引中的越界路径被忽略并进入告警', async
   }))
   const out = await repowikiStatusTool(makeCtx(dir)).execute({ locale: 'zh' }, fakeExec)
   assert.ok(out.warnings.some(w => /outside the project/.test(w)), '越界路径应产生告警')
+  assert.deepEqual(out.index.untrusted, { files: 1, edges: 1 }, '丢弃计数结构化输出')
   const rendered = repowikiStatusTool(makeCtx(dir)).output.render({}, out)
   assert.match(rendered[0].text, /outside the project/)
+  assert.match(rendered[0].text, /1 untrusted path\(s\), 1 edge\(s\) dropped/)
 })
 
 test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Git）', async () => {

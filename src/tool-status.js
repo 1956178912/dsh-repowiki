@@ -192,6 +192,16 @@ export function repowikiStatusTool(ctx) {
               modules: { type: 'integer' },
               languages: { type: 'object', additionalProperties: { type: 'integer' } },
               skipped: { type: 'integer', description: 'Source files skipped during indexing (unreadable or above the per-file size limit).' },
+              untrusted: {
+                type: 'object',
+                additionalProperties: false,
+                description: 'Entries dropped from a tampered index: absolute/escaping file paths and the edges pointing at them.',
+                properties: {
+                  files: { type: 'integer' },
+                  edges: { type: 'integer' },
+                },
+                required: ['files', 'edges'],
+              },
               generatedAt: { type: 'string' },
             },
             required: ['exists', 'compatible', 'files', 'symbols', 'modules', 'generatedAt'],
@@ -635,7 +645,7 @@ export function repowikiStatusTool(ctx) {
         type: 'text',
         text: [
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
-          `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}` : 'missing'}`,
+          `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}${value.index.untrusted ? ` / ${value.index.untrusted.files} untrusted path(s), ${value.index.untrusted.edges} edge(s) dropped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
           `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, duplicate ${value.wiki.duplicate}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
@@ -1014,6 +1024,9 @@ export function repowikiStatusTool(ctx) {
           modules: Array.isArray(index?.modules) ? index.modules.length : 0,
           ...(index?.stats?.languages ? { languages: index.stats.languages } : {}),
           ...(index?.stats?.skipped ? { skipped: index.stats.skipped } : {}),
+          ...(index?.untrusted
+            ? { untrusted: { files: index.untrusted.files, edges: index.untrusted.edges } }
+            : {}),
           generatedAt: typeof index?.generatedAt === 'string' ? index.generatedAt : '',
         },
         ...(git ? { git } : {}),

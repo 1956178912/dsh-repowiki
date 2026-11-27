@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.184.0] - 2026-11-28
+
+### Changed
+
+- **Structured untrusted-index counts in status**: `repowiki-status` now
+  returns `index.untrusted` (`files`, `edges`) whenever a tampered index was
+  sanitized, and prints the dropped counts inline in the `Index:` line. The
+  existing warning stays, so text-only consumers lose nothing; JSON/CI
+  consumers no longer have to parse warning prose to detect sanitized
+  assets. `index.json` paths themselves are still never echoed.
+
+### Tests
+
+- 570 cases pass (LANG=en and LANG=zh); the untrusted-path status fixture
+  now pins both the structured counts and the rendered line.
+
 ## [0.183.0] - 2026-11-28
 
 ### Added

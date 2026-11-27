@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.183.0）；测试 570/570（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.12%、分支 86.79%、函数 95.37%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.184.0）；测试 570/570（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.14%、分支 86.95%、函数 95.37%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -236,3 +236,4 @@
 | Elixir 支持 | 16 语言：`defmodule`（嵌套完整名）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`，do/end 配平、`do:` 单行、多行函数头与私有可见性；`alias`/`import`/`require`/`use` 经模块名映射到声明文件（含分组/重命名 alias），外部模块不建边；根与 `apps/*/mix.exs` → mix 项目名（根）/依赖计数/技术映射（嵌套合并，来源可追溯）；`.exs` 测试/脚本进入索引（`mix.exs` 仍为清单），测试文件的 alias 边可供影响面路由 | v0.177.0 / v0.178.0 / v0.179.0 |
 | Lua 支持 | 17 语言：模块表变量、`function`/`local function`、`M.foo`/`M:foo` 方法（parent 归属）与 `M.foo = function` 赋值；块范围按 function/if/for/while/do/repeat…end/until 配平并屏蔽注释/长字符串；`require` 经 `lua/` 根与项目根解析 `<mod>.lua`/`<mod>/init.lua`，外部模块不建边 | v0.182.0 |
 | Zig 支持 | 18 语言：`struct`/`enum`/`union`/`opaque` 容器类型（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn`/`extern fn`/`export fn`（原型与块体）、具名 `test "…"`、顶层常量/变量；容器成员带 `parent` 且只识别一层；`@import`/`@cImport`/`@This` 别名跳过；注释与 `\\` 多行字符串屏蔽后配平；`@import("x.zig")` 相对引用文件解析并限制在项目内，`build.zig.zon` 提供项目名/版本/依赖计数 | v0.183.0 |
+| 不可信索引状态 | `readIndex` 净化被篡改索引（绝对/越界文件路径与指向它们的边）时，`repowiki-status` 结构化返回 `index.untrusted.files`/`edges` 并在 `Index:` 行展示，JSON/CI 无需解析告警文案；原始路径不回显，原告警保留 | v0.170.0 / v0.184.0 |
