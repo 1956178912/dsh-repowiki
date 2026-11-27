@@ -289,6 +289,26 @@ test('Rust：#[path] 显式模块路径解析到目标文件', async () => {
   assert.ok(!doc.edges.some(e => e.from === 'src/absolute.rs'), '绝对路径不建边')
 })
 
+test('Rust：include! 字面量路径建文件边，动态路径跳过', async () => {
+  const dir = makeProject({
+    'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\n',
+    'src/main.rs': [
+      'include!("common.rs");',
+      'include!(concat!(env!("OUT_DIR"), "/generated.rs"));',
+      'fn main() {}',
+    ].join('\n'),
+    'src/common.rs': 'pub fn helper() {}\n',
+    'src/escape.rs': 'include!("../../outside.rs");\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edges = doc.edges.filter(e => e.from === 'src/main.rs')
+
+  assert.equal(edges.length, 1, '动态 concat!/env! 路径不建边')
+  assert.deepEqual([edges[0].to, edges[0].kind, edges[0].line],
+    ['src/common.rs', 'require', 1], 'include! 字面量解析到同目录文件')
+  assert.ok(!doc.edges.some(e => e.from === 'src/escape.rs'), '越出项目根的 include! 不建边')
+})
+
 test('Rust：crate 入口再导出回退只对已导出名生效', async () => {
   const dir = makeProject({
     'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\n',
@@ -639,6 +659,24 @@ test('Swift：本地 target 导入解析到 Sources/<Target> 代表文件', asyn
   assert.equal(edge('Tests/AppTests/AppTests.swift', 'Sources/Core/Core.swift')?.line, 1, '测试 target 可导入被测模块')
   assert.equal(edge('Tests/AppTests/AppTests.swift', 'Sources/App/main.swift')?.line, 2, 'App target 解析到其代表文件')
   assert.equal(doc.edges.filter(e => e.from === 'Tests/AppTests/AppTests.swift').length, 2, 'XCTest 外部模块不建边')
+})
+
+test('Swift：@_exported import 记为再导出边', async () => {
+  const dir = makeProject({
+    'Package.swift': '// swift-tools-version:5.9\nimport PackageDescription\n',
+    'Sources/Core/Core.swift': 'public struct Core {}\n',
+    'Sources/Umbrella/Exports.swift': '@_exported import Core\n',
+    'Sources/App/main.swift': 'import Umbrella\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+
+  const reexport = doc.edges.find(e => e.from === 'Sources/Umbrella/Exports.swift'
+    && e.to === 'Sources/Core/Core.swift')
+  assert.equal(reexport?.kind, 'reexport', '@_exported 记为再导出形态')
+  assert.equal(reexport?.line, 1)
+  const appEdge = doc.edges.find(e => e.from === 'Sources/App/main.swift')
+  assert.deepEqual([appEdge?.to, appEdge?.kind], ['Sources/Umbrella/Exports.swift', 'import'],
+    '普通 import 不受影响')
 })
 
 test('Swift：Package.swift 自定义 path 目标优先于 Sources 约定，注释声明被忽略', async () => {

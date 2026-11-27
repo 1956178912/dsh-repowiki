@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.275.0] - 2026-11-28
+
+- **Swift `@_exported import`**：聚合模块转发另一模块 API 时记为 `reexport`
+  边（含 `@_exported import struct DemoKit.Model` 子模块形态），文件级
+  影响面与依赖方沿聚合模块链传递，不再停在聚合层。
+- **Rust `include!("path")`**：字面量文本包含建本地文件边（kind
+  `require`，相对包含文件解析，越出项目根拒绝）；`concat!`/`env!` 动态
+  路径不建边。
+- **Lua 跨行长括号 require**：`require([[
+ pkg.mod ]])` 跨行识别；
+  `--[=*[ … ]=*]` 任意等号数的块注释正确屏蔽。
+- 解析器 v28 重新解析缓存导入。
+- **测试**：835 例通过（LANG=en）；新增 Swift/Rust/Lua 的提取与索引边
+  断言。
+
 ## [0.274.0] - 2026-11-28
 
 - **Rust `#[path = "…"] mod foo;`**：显式模块文件路径（与 `mod` 同行或

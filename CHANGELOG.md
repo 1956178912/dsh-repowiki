@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.275.0] - 2026-11-28
+
+### Added
+
+- **Swift `@_exported import`**: aggregator modules that re-export another
+  module's API now produce a `reexport` edge (with submodule forms like
+  `@_exported import struct DemoKit.Model`), so file-level impact and
+  dependents follow the umbrella chain instead of stopping at the aggregator.
+- **Rust `include!("path")`**: literal textual includes now build a local
+  file edge (kind `require`, resolved relative to the including file, project
+  root escapes rejected); `concat!`/`env!` dynamic paths build no edge.
+- **Lua multi-line long-bracket requires**: `require([[
+  pkg.mod ]])` is now recognized across lines, and block comments with
+  arbitrary `--[=*[ … ]=*]` delimiters are masked correctly.
+- Parser v28 re-parses cached imports.
+
+### Tests
+
+- 835 cases pass (LANG=en); new Swift/Rust/Lua extraction and index-edge
+  assertions.
+
 ## [0.274.0] - 2026-11-28
 
 ### Fixed

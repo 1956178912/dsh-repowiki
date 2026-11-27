@@ -417,6 +417,18 @@ function extractRustImports(lines) {
       continue
     }
     pendingModPath = ''
+    // include!("path.rs")：文本包含本地文件；concat!/env! 等动态路径不建边
+    const im = /^include!\s*\(\s*"(?<path>[^"]+)"\s*\)/.exec(code)
+    if (im) {
+      result.push({
+        specifier: im.groups.path,
+        line: i + 1,
+        kind: 'require',
+        relative: true,
+        imported: [],
+      })
+      continue
+    }
     // use path::to::Item; / pub use path::{A, B};
     const um = /^(?<pub>pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(code)
     if (!um) continue
@@ -694,12 +706,15 @@ function extractRubyImports(lines) {
 function extractSwiftImports(lines) {
   const result = []
   for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*(?:@testable\s+)?import\s+(?:(?:typealias|struct|class|enum|protocol|func|var|let|operator)\s+)?(?<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/.exec(lines[i])
+    // 属性前缀：@testable 只影响可见性；@_exported 会把模块 API 再导出
+    const m = /^\s*(?<attrs>(?:@(?:testable|_exported)\s+)*)import\s+(?:(?:typealias|struct|class|enum|protocol|func|var|let|operator)\s+)?(?<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/.exec(lines[i])
     if (!m) continue
     result.push({
       specifier: m.groups.path,
       line: i + 1,
-      kind: 'import',
+      // `@_exported import` 让聚合模块转发被导入模块的 API，记为再导出形态，
+      // 影响面/依赖图可沿聚合模块传递（Swift import 不携带具名符号）
+      kind: /@_exported\b/.test(m.groups.attrs) ? 'reexport' : 'import',
       relative: true,
       imported: [],
     })
@@ -822,20 +837,29 @@ function extractCppImports(lines) {
  */
 function stripLuaComments(lines) {
   const out = []
-  let inBlock = false
+  /** 当前长括号块注释的等号串；null 表示不在块注释内。 */
+  let blockEq = null
   for (const raw of lines) {
     let line = ''
     let index = 0
     while (index < raw.length) {
-      if (inBlock) {
-        const close = raw.indexOf(']]', index)
+      if (blockEq !== null) {
+        const close = raw.indexOf(`]${blockEq}]`, index)
         if (close < 0) break
-        inBlock = false
-        index = close + 2
+        index = close + 3 + blockEq.length
+        blockEq = null
         continue
       }
-      if (raw.startsWith('--[[', index)) { inBlock = true; index += 4; continue }
-      if (raw.startsWith('--', index)) break
+      if (raw.startsWith('--', index)) {
+        // `--[[ … ]]` 与 `--[=*[ … ]=*]` 块注释（等号数必须配对）
+        const long = /^--\[(=*)\[/.exec(raw.slice(index))
+        if (long) {
+          blockEq = long[1]
+          index += long[0].length
+          continue
+        }
+        break
+      }
       line += raw[index]
       index++
     }
@@ -853,22 +877,28 @@ function stripLuaComments(lines) {
  */
 function extractLuaImports(lines) {
   const result = []
-  const codeLines = stripLuaComments(lines)
-  for (let i = 0; i < codeLines.length; i++) {
-    // 引号字符串与长括号字符串（`[[x]]`/`[=[x]=]`，单行形态）
-    const re = /require\s*\(?\s*(?:(['"])([^'"]+)\1|\[(=*)\[([^\]\n]+)\]\3\])/g
-    let match
-    while ((match = re.exec(codeLines[i])) !== null) {
-      const specifier = (match[2] ?? match[4] ?? '').trim()
-      if (!specifier) continue
-      result.push({
-        specifier,
-        line: i + 1,
-        kind: 'import',
-        relative: false,
-        imported: [],
-      })
-    }
+  const text = stripLuaComments(lines).join('\n')
+  // 行首偏移表：整文件扫描后按匹配位置回算行号（匹配按顺序出现）
+  const lineStarts = [0]
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') lineStarts.push(i + 1)
+  }
+  let cursor = 0
+  // 引号字符串（不跨行）与长括号字符串（可跨行，如 require([[\n a.b \n]])）
+  const re = /require\s*\(?\s*(?:(['"])([^'"\n]+)\1|\[(=*)\[([\s\S]*?)\]\3\])/g
+  let match
+  while ((match = re.exec(text)) !== null) {
+    const specifier = (match[2] ?? match[4] ?? '').trim()
+    // 长括号内部仍有换行的内容不是合法模块名（格式化换行已由 trim 去掉）
+    if (!specifier || specifier.includes('\n')) continue
+    while (cursor + 1 < lineStarts.length && lineStarts[cursor + 1] <= match.index) cursor++
+    result.push({
+      specifier,
+      line: cursor + 1,
+      kind: 'import',
+      relative: false,
+      imported: [],
+    })
   }
   return result
 }

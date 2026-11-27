@@ -196,6 +196,8 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
     '#[path = "expired.rs"]',
     'fn helper() {}',
     'mod later;',
+    'include!("generated/bindings.rs");',
+    'include!(concat!(env!("OUT_DIR"), "/dynamic.rs"));',
     '// use not::real;',
   ].join('\n')
   const refs = extractImports(code, 'rust')
@@ -227,6 +229,10 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   assert.ok(!bySpec.has('custom_tests'), '有显式路径时不按模块名建边')
   assert.equal(bySpec.get('later').kind, 'mod', '路径属性被其他代码行打断后过期')
   assert.ok(!bySpec.has('expired.rs'), '过期的路径属性不建边')
+  // include! 字面量路径（动态 concat!/env! 形态不建边）
+  assert.equal(bySpec.get('generated/bindings.rs').kind, 'require')
+  assert.equal(bySpec.get('generated/bindings.rs').line, 17)
+  assert.ok(!bySpec.has('dynamic.rs'), 'concat!/env! 动态路径不建边')
 })
 
 test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
@@ -410,21 +416,25 @@ test('Ruby：require / require_relative / load 的相对语义', () => {
   assert.ok(!bySpec.has('commented'), '注释不提取')
 })
 
-test('Swift：module import、@testable 与子模块导入', () => {
+test('Swift：module import、@testable、@_exported 与子模块导入', () => {
   const code = [
     'import Foundation',
     '@testable import DemoCore',
     'import struct SwiftUI.Text',
+    '@_exported import DemoExports',
+    '@_exported import struct DemoKit.Model',
     '// import Commented',
   ].join('\n')
   const refs = extractImports(code, 'swift')
-  const specs = refs.map(r => r.specifier)
+  const bySpec = new Map(refs.map(r => [r.specifier, r]))
 
-  assert.ok(specs.includes('Foundation'))
-  assert.ok(specs.includes('DemoCore'), '@testable 导入')
-  assert.ok(specs.includes('SwiftUI.Text'), '子模块导入保留点分路径')
+  assert.ok(bySpec.has('Foundation'))
+  assert.equal(bySpec.get('DemoCore').kind, 'import', '@testable 仍是普通导入')
+  assert.ok(bySpec.has('SwiftUI.Text'), '子模块导入保留点分路径')
+  assert.equal(bySpec.get('DemoExports').kind, 'reexport', '@_exported 记为再导出')
+  assert.equal(bySpec.get('DemoKit.Model').kind, 'reexport', '子模块 @_exported 同样再导出')
   assert.ok(refs.every(r => r.relative), 'Swift import 作为本地目标候选（indexer 按 Sources/<Target> 解析）')
-  assert.ok(!specs.includes('Commented'))
+  assert.ok(!bySpec.has('Commented'))
 })
 
 test('Scala：import 分组/重命名/通配与 as 别名', () => {
@@ -545,8 +555,10 @@ test('Lua：require 字符串与括号形式，注释不提取', () => {
     'local d = require([[pkg.long]])',
     'local e = require([=[pkg.eq]=])',
     'local f = require [[pkg.space]]',
+    'local g = require([[\n  pkg.multiline\n]])',
     '-- require("commented")',
     '--[[ require("block.commented") ]]',
+    '--[=[ require("eq.commented") ]=]',
     'return { a, b, c }',
   ].join('\n')
   const imports = extractImports(code, 'lua')
@@ -557,6 +569,7 @@ test('Lua：require 字符串与括号形式，注释不提取', () => {
     ['pkg.long', 4],
     ['pkg.eq', 5],
     ['pkg.space', 6],
+    ['pkg.multiline', 7],
   ])
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
 })
