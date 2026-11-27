@@ -21,7 +21,7 @@ const DESCRIPTION = [
 
 /**
  * 构造 repowiki-export 工具定义。
- * @param {object} ctx - 插件上下文（提供 ctx.fs）。
+ * @param {PluginContext} ctx - 插件上下文（提供 ctx.fs）。
  * @returns {object} ToolDefinition。
  */
 export function repowikiExportTool(ctx) {
@@ -54,6 +54,7 @@ export function repowikiExportTool(ctx) {
           dirs: { type: 'integer' },
           skipped: { type: 'integer' },
           failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] }, description: 'Bounded list (first 20) of items that could not be copied.' },
+          aborted: { type: 'boolean', description: 'True when the caller cancelled; the snapshot may be partial.' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
@@ -63,6 +64,7 @@ export function repowikiExportTool(ctx) {
         type: 'text',
         text: [
           `Exported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.assetDir} to ${value.target} in ${value.durationMs}ms.`,
+          ...(value.aborted ? ['Cancelled: the snapshot may be partial.'] : []),
           ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
         ].join('\n'),
       }],
@@ -94,7 +96,7 @@ export function repowikiExportTool(ctx) {
           hint: `Target ${targetAbs} already exists and is not empty. Pass overwrite=true to merge into it.`,
         }
       }
-      const counts = await copyTree(fs, assetDir, targetAbs)
+      const counts = await copyTree(fs, assetDir, targetAbs, { signal: exec.signal })
       return {
         root,
         assetDir,
@@ -103,6 +105,8 @@ export function repowikiExportTool(ctx) {
         dirs: counts.dirs,
         skipped: counts.skipped,
         failed: counts.failed,
+        aborted: counts.aborted,
+        ...(counts.aborted ? { hint: 'Cancelled: the snapshot may be partial. Re-run repowiki-export to complete it.' } : {}),
         durationMs: Date.now() - startedAt,
       }
     },

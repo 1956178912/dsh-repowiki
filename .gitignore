@@ -5,6 +5,11 @@ node_modules/
 # macOS
 .DS_Store
 
+# IDE / 本地工具
+.idea/
+.workbuddy/
+.trae/
+
 # 本地测试/运行时产生的资产目录（资产本体应在被索引的项目里，不进本仓库）
 .dsh-repowiki/
 

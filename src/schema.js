@@ -29,8 +29,23 @@ export const INDEX_REL_PATH = `${ASSET_DIR}/index.json`
 
 /** index.json 的数据版本。任何字段或折叠语义变化必须 +1，
  *  读取侧据做兼容校验与降级（方案 §10.3-4：资产数据版本化）。
- *  v2：文件条目新增 digest（内容指纹），支撑增量重建与卡片失效检测。 */
-export const INDEX_SCHEMA_VERSION = 2
+ *  v2：文件条目新增 digest（内容指纹），支撑增量重建与卡片失效检测。
+ *  v3：正式纳入 files[].module 与 modules[]（模块树），读取侧兼容 v2。
+ *  v4：新增 git 元数据与 stats.languages（语言分布），读取侧兼容 v2/v3。
+ *  v5：依赖边新增 line（import/use/require 所在行），支撑行号级反向引用；
+ *      读取侧兼容 v2–v4（旧边无 line，按文件级引用降级）。 */
+export const INDEX_SCHEMA_VERSION = 5
+
+/** 读取侧仍可兼容的旧索引版本（v2–v4 → 内存补齐派生字段，下次索引写 v5）。 */
+export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5])
+
+/** 符号/依赖提取规则版本。解析器修复或语义变化时 +1；与 schemaVersion
+ *  独立，用于在源码 digest 未变时也使旧的 files[].symbols/imports 缓存失效。
+ *  v1：支持 JS/TS 多行 import/export-from，并记录具名导入证据。 */
+export const INDEX_PARSER_VERSION = 1
+
+/** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
+export const SUPPORTED_LOCALES = ['zh', 'en']
 
 /**
  * 文件内容指纹的十六进制位数（sha256 前 12 位）。
@@ -96,6 +111,13 @@ export const MANIFEST_FILES = {
   'go.mod': 'go',
   'Cargo.toml': 'cargo',
   'composer.json': 'composer',
+  'pom.xml': 'maven',
+  'build.gradle': 'gradle',
+  'build.gradle.kts': 'gradle',
+  'Gemfile': 'bundler',
+  'Package.swift': 'swiftpm',
+  'build.sbt': 'sbt',
+  'CMakeLists.txt': 'cmake',
 }
 
 /**
@@ -111,8 +133,29 @@ export const EXTENSION_LANGS = {
   tsx: 'typescript',
   mts: 'typescript',
   cts: 'typescript',
+  vue: 'vue',
+  svelte: 'svelte',
   py: 'python',
   pyi: 'python',
+  go: 'go',
+  rs: 'rust',
+  java: 'java',
+  cs: 'csharp',
+  kt: 'kotlin',
+  php: 'php',
+  rb: 'ruby',
+  rake: 'ruby',
+  swift: 'swift',
+  scala: 'scala',
+  c: 'c',
+  h: 'c',
+  cc: 'cpp',
+  cpp: 'cpp',
+  cxx: 'cpp',
+  hpp: 'cpp',
+  hh: 'cpp',
+  hxx: 'cpp',
+  ipp: 'cpp',
 }
 
 /** 支持符号提取的语言集合（由 EXTENSION_LANGS 的值推导，避免重复维护）。 */
@@ -152,6 +195,22 @@ export const PLAN_FILE = 'repowiki-plan.json'
  */
 export const CARD_COMPLEXITY_THRESHOLD = 3
 export const MAX_CARDS_PER_RUN_DEFAULT = 40
+
+/**
+ * 单次提取的并发子代理数上限与默认值。
+ * 并发只影响模型派发；写卡片仍逐张经资产根锁串行化。默认 1 保持旧行为，
+ * 由 plan/工具参数显式提高（过高会放大限流与成本风险）。
+ */
+export const MAX_EXTRACT_CONCURRENCY = 4
+export const EXTRACT_CONCURRENCY_DEFAULT = 1
+
+/**
+ * 单文件提取的最大尝试次数（含首次）与默认值。
+ * 失败（抛错或模型返回不可用结构）时按指数退避重试；明确 skip 不重试。
+ * 默认 2 次可在网络抖动/偶发坏输出下补救一次，同时限制成本放大。
+ */
+export const MAX_EXTRACT_ATTEMPTS = 3
+export const EXTRACT_ATTEMPTS_DEFAULT = 2
 
 /** 嵌入提取 prompt 的源码截断上限（字符）。超限截断并在 prompt 中告知。 */
 export const MAX_SOURCE_CHARS = 20_000

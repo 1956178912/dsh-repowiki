@@ -13,8 +13,10 @@
 
 import * as path from 'node:path'
 import {
-  ASSET_DIR, INDEX_REL_PATH, INDEX_SCHEMA_VERSION, DEFAULT_RESULT_LIMIT,
+  ASSET_DIR, INDEX_REL_PATH, INDEX_SCHEMA_VERSION, INDEX_COMPATIBLE_VERSIONS, DEFAULT_RESULT_LIMIT,
 } from './schema.js'
+import { moduleOf, buildModules } from './modules.js'
+import { writeTextVerified } from './util.js'
 
 /**
  * 定位结果。
@@ -26,7 +28,7 @@ import {
 
 /**
  * 判断目录是否存在且为目录。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} dirPath - 绝对路径。
  * @returns {Promise<boolean>} 目录存在且为目录。
  */
@@ -44,7 +46,7 @@ async function isDirectory(fs, dirPath) {
  * 解析资产根：从 startDir 向上查找已存在的 .dsh-repowiki/；
  * 找不到则把 startDir 自身作为根（并不立即创建目录——写盘由
  * writeIndex 隐式完成，避免只读调用留下空目录）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} startDir - 起点（一般是会话当前目录）。
  * @returns {Promise<AssetRoot>} 资产根定位结果。
  */
@@ -74,18 +76,38 @@ export async function resolveAssetRoot(fs, startDir) {
 
 /**
  * 读取索引并做版本校验。
- * @param {object} fs - ctx.fs 服务。
+ * v2/v3 索引在内存中补齐 module/modules（模块树）与语言分布，下一次
+ * repowiki-index 写 v4；未知版本返回 null（调用方降级提示重建）。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根目录绝对路径（.dsh-repowiki 的父目录）。
- * @returns {Promise<object|null>} 索引文档；不存在返回 null，版本不兼容返回 null（调用方降级提示重建）。
+ * @returns {Promise<object|null>} 索引文档；不存在/版本不兼容返回 null。
  */
 export async function readIndex(fs, root) {
   try {
     const target = await fs.resolve(INDEX_REL_PATH, { cwd: root })
     const text = await fs.readText(target)
     const doc = JSON.parse(text)
-    // 版本校验：schemaVersion 缺失或不匹配即视为不可用（方案 §10.3-4）
-    if (typeof doc?.schemaVersion !== 'number' || doc.schemaVersion !== INDEX_SCHEMA_VERSION) {
+    // 版本校验：缺失/未知版本即视为不可用（方案 §10.3-4）
+    if (typeof doc?.schemaVersion !== 'number' || !INDEX_COMPATIBLE_VERSIONS.has(doc.schemaVersion)) {
       return null
+    }
+    // 旧版本 → v4 的内存兼容层：只补派生字段，不改变磁盘内容
+    const files = Array.isArray(doc.files) ? doc.files : []
+    if (doc.schemaVersion !== INDEX_SCHEMA_VERSION) {
+      for (const file of files) {
+        if (typeof file.module !== 'string' || !file.module) file.module = moduleOf(file.path)
+      }
+      doc.modules = buildModules(files)
+      if (doc.stats && typeof doc.stats === 'object') doc.stats.modules = doc.modules.length
+    } else if (!Array.isArray(doc.modules)) {
+      doc.modules = buildModules(files)
+    }
+    if (doc.stats && typeof doc.stats === 'object' && !doc.stats.languages) {
+      const counts = {}
+      for (const file of files) {
+        if (typeof file.lang === 'string') counts[file.lang] = (counts[file.lang] ?? 0) + 1
+      }
+      doc.stats.languages = Object.fromEntries(Object.keys(counts).sort().map(k => [k, counts[k]]))
     }
     return doc
   } catch {
@@ -95,24 +117,45 @@ export async function readIndex(fs, root) {
 
 /**
  * 写入索引（JSON、LF、2 空格缩进，便于 diff 与 Git 共享）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根目录绝对路径。
  * @param {object} doc - 索引文档。
  * @returns {Promise<string>} 写入文件的 displayPath。
  */
 export async function writeIndex(fs, root, doc) {
   const target = await fs.resolve(INDEX_REL_PATH, { cwd: root })
-  await fs.writeText(target, JSON.stringify(doc, null, 2) + '\n')
+  await writeTextVerified(fs, target, JSON.stringify(doc, null, 2) + '\n')
   return target.displayPath
 }
 
 /**
+ * 符号名与查询的匹配强度：精确 3 > 前缀 2 > 子串 1 > 不匹配 0。
+ * @param {string} name - 符号名。
+ * @param {string} query - 已小写化的查询。
+ * @returns {number} 匹配强度。
+ */
+function symbolMatchScore(name, query) {
+  const lower = name.toLowerCase()
+  if (lower === query) return 3
+  if (lower.startsWith(query)) return 2
+  return lower.includes(query) ? 1 : 0
+}
+
+/**
  * 从索引文档中按条件检索符号/文件。
+ *
+ * 有 query 时结果按匹配质量排序（精确 > 前缀 > 子串；同一强度内公开符号
+ * 优先，再按行号），文件按各自最佳符号排序、同分按路径；无 query 时保持
+ * 索引遍历顺序，避免无条件列举被重排。
  * @param {object} index - readIndex 返回的索引文档。
- * @param {{query?:string, kind?:string, pathPrefix?:string, limit?:number}} opts
+ * @param {{query?:string, kind?:string, pathPrefix?:string, module?:string,
+ *   lang?:string, exportedOnly?:boolean, limit?:number}} opts
  *   - query：符号名子串（大小写不敏感）；为空则不做名称过滤。
  *   - kind：符号种类过滤（function/class/method/variable/interface/type）。
  *   - pathPrefix：文件路径子串过滤。
+ *   - module：模块路径精确过滤（旧索引无 module 字段时按路径实时推导）。
+ *   - lang：语言标识过滤（如 typescript / python / go）。
+ *   - exportedOnly：仅返回公开/导出符号。
  *   - limit：结果上限（默认 DEFAULT_RESULT_LIMIT）。
  * @returns {{matches:Array, total:number, truncated:boolean}} 检索结果。
  */
@@ -121,19 +164,47 @@ export function searchIndex(index, opts = {}) {
   const query = opts.query?.trim().toLowerCase()
   const kind = opts.kind
   const prefix = opts.pathPrefix?.trim()
+  const wantedModule = opts.module?.trim()
+  const wantedLang = opts.lang?.trim()
+  const exportedOnly = opts.exportedOnly === true
+  const matchesModule = (file) => {
+    if (!wantedModule) return true
+    const actual = file.module ?? moduleOf(file.path)
+    return actual === wantedModule || actual.startsWith(`${wantedModule}/`)
+  }
   const matches = []
   for (const file of index.files ?? []) {
+    if (!matchesModule(file)) continue
     if (prefix && !file.path.includes(prefix)) continue
-    const symbols = (file.symbols ?? []).filter(sym => {
-      if (kind && sym.kind !== kind) return false
-      if (query && !sym.name.toLowerCase().includes(query)) return false
-      return true
-    })
-    if (symbols.length > 0 || (!query && !kind && !prefix)) {
-      matches.push({ path: file.path, lang: file.lang, symbols })
+    if (wantedLang && file.lang !== wantedLang) continue
+    /** @type {{sym:object, score:number}[]} */
+    const hits = []
+    for (const sym of file.symbols ?? []) {
+      if (kind && sym.kind !== kind) continue
+      if (exportedOnly && sym.exported !== true) continue
+      const score = query ? symbolMatchScore(sym.name, query) : 0
+      if (query && score === 0) continue
+      hits.push({ sym, score })
     }
+    const listAll = !query && !kind && !prefix && !wantedLang && !exportedOnly
+    if (hits.length === 0 && !listAll) continue
+    if (query) {
+      // 命中强度降序；同强度内导出符号优先，再按定义行号保持阅读顺序
+      hits.sort((a, b) => (b.score - a.score)
+        || (Number(b.sym.exported === true) - Number(a.sym.exported === true))
+        || ((a.sym.line ?? 0) - (b.sym.line ?? 0)))
+    }
+    const best = query ? hits.reduce((n, hit) => Math.max(n, hit.score), 0) : 0
+    matches.push({ path: file.path, lang: file.lang, symbols: hits.map(hit => hit.sym), best })
   }
+  // 文件按最佳命中排序；分数相同按路径，保证输出稳定
+  if (query) matches.sort((a, b) => (b.best - a.best) || a.path.localeCompare(b.path))
   const total = matches.length
   const truncated = total > limit
-  return { matches: truncated ? matches.slice(0, limit) : matches, total, truncated }
+  const page = truncated ? matches.slice(0, limit) : matches
+  return {
+    matches: page.map(({ path, lang, symbols }) => ({ path, lang, symbols })),
+    total,
+    truncated,
+  }
 }

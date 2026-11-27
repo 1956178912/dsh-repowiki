@@ -1,0 +1,46 @@
+# Runbook：Repo Wiki 故障排查
+
+先跑只读诊断（任意会话）：
+
+```
+repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
+```
+
+## 症状 → 检查 → 处理
+
+| 症状 | 检查 | 处理 |
+|---|---|---|
+| 面板显示“尚未生成知识库” | `status.index.exists=false` | 先 `repowiki-index`，再 `repowiki-extract` |
+| 面板一直“读取失败: workspace-file/not-found” | 该工作区没有会话，或 `.dsh-repowiki/` 不在工作区根 | 在该工作区打开一次会话；确认资产目录位置 |
+| 索引存在但工具提示不兼容 | `status.index.compatible=false` | `repowiki-index` 重建（v2 会自动升级到 v3） |
+| 卡片“待更新”很多 | `status.cards.stale` | 重新 `repowiki-extract`；人工卡受 `manuallyEdited` 保护 |
+| 卡片“孤儿” | `status.cards.orphaned` | 源文件已删除/重命名；确认后可人工删除对应卡片 |
+| Wiki 页顺序错乱/缺页 | `status.wiki.manifest=false` | `repowiki-generate` 重写 `wiki/<locale>/_index.json` |
+| Wiki 页“待更新” | `status.wiki.stale > 0` | 重新 `repowiki-generate` |
+| 生成动作长时间无响应 | `status.lock.pending > 0` | 同一资产根有写工具在跑；等待或取消该会话后重试 |
+| 生成报 “without pages/without a usable card” | 子代理输出未过 schema | 重试；持续失败时缩小 `paths`/`maxCards` 并查看会话错误 |
+| 子代理成本过高 | — | 设置 `repowiki-plan.json` 的 `exclude`/`maxCardsPerRun`/`cardComplexityThreshold` |
+| 面板点击无反应 | DevTools Console 红错 | 面板有 `ErrorBoundary` 与 `role=status` 失败行；把错误文本反馈 |
+| 升级 dsh 后样式/功能异常 | `npm run verify:host` | 令牌漂移按输出修正；跑 `npm test` 回归 |
+
+## 常用命令
+
+```sh
+npm run verify:host      # 主题令牌漂移
+npm test                 # 全量回归
+npm run coverage:check   # 覆盖率门禁
+npm run scan:secrets     # 密钥扫描
+```
+
+## 资产手工检查
+
+```sh
+cat .dsh-repowiki/index.json | head -40          # schemaVersion / stats / modules
+cat .dsh-repowiki/wiki/zh/_index.json            # Wiki 清单（顺序/模块/inputDigest）
+cat .dsh-repowiki/knowledge/zh/_index.json       # 模块 → 卡片清单
+```
+
+## 回滚
+
+- 插件版本回滚：重新安装上一版本目录，刷新 GUI。
+- 资产回滚：`repowiki-import` 从快照恢复；导入默认保护现有资产，需 `overwrite=true` 才合并。

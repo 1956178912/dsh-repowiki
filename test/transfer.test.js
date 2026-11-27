@@ -86,3 +86,15 @@ test('dirHasContent：存在且非空判定', async () => {
   assert.equal(await dirHasContent(fs, path.join(dir, 'empty')), false)
   assert.equal(await dirHasContent(fs, path.join(dir, 'nope')), false)
 })
+
+test('copyTree：预取消不复制任何文件并返回 aborted', async () => {
+  const dir = makeDir({ 'src/a.md': '# A\n' })
+  const ac = new AbortController()
+  ac.abort()
+  const counts = await copyTree(makeFakeFs(dir), path.join(dir, 'src'), path.join(dir, 'dst'), {
+    signal: ac.signal,
+  })
+  assert.equal(counts.aborted, true)
+  assert.equal(counts.files, 0)
+  assert.equal(nodefs.existsSync(path.join(dir, 'dst')), false)
+})

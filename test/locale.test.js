@@ -1,5 +1,5 @@
 // 门面一致性：locale 元数据（插件管理页展示的标题/描述/详情页）必须双语齐全、
-// 描述覆盖 8 个工具、detail 文档与特性图满足官方 plugin-details 约定。
+// 描述覆盖 11 个工具、detail 文档与特性图满足官方 plugin-details 约定。
 import fs from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
 
-test('locale 元数据：双语 locale 文件合法且描述覆盖 8 个工具', () => {
+test('locale 元数据：双语 locale 文件合法且描述覆盖 11 个工具', () => {
   const langs = ['en', 'zh']
   const metas = {}
   for (const lang of langs) {
@@ -19,7 +19,7 @@ test('locale 元数据：双语 locale 文件合法且描述覆盖 8 个工具',
       `${lang}.json 必须含 meta.title/description/detail`)
     metas[lang] = j.meta
   }
-  const tools = ['index', 'cards', 'extract', 'generate', 'edit', 'export', 'import', 'memory']
+  const tools = ['index', 'cards', 'context', 'extract', 'generate', 'impact', 'edit', 'export', 'import', 'memory', 'status']
   for (const lang of langs) {
     for (const t of tools) assert.ok(metas[lang].description.includes(`repowiki-${t}`),
       `${lang} 描述应提及 repowiki-${t}`)

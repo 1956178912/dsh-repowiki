@@ -75,7 +75,7 @@ export function entriesOf(files, dirs, rel) {
 export function makeCorpusWf() {
   const { files, dirs } = loadCorpusFixture()
   return {
-    async read(sessionId, rel, range, signal) {
+    async read(sessionId, rel, range, _signal) {
       const text = files[rel]
       if (text === undefined) {
         return { ok: false, error: { code: 'workspace-file/not-found', message: `not found: ${rel}`, details: { path: rel } } }
@@ -92,7 +92,7 @@ export function makeCorpusWf() {
         },
       }
     },
-    async list(sessionId, rel, signal) {
+    async list(sessionId, rel, _signal) {
       if (rel === '.dsh-repowiki' || dirs.has(rel)) {
         return { ok: true, value: { path: rel, entries: entriesOf(files, dirs, rel), truncated: false } }
       }

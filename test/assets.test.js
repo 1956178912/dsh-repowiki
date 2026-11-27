@@ -96,9 +96,78 @@ test('searchIndex：query/kind/path 过滤与 limit 截断', () => {
   assert.equal(exact.truncated, false)
 })
 
+test('searchIndex：查询按精确>前缀>子串排序，导出符号优先', () => {
+  const index = { files: [
+    { path: 'b.ts', lang: 'typescript', symbols: [
+      { name: 'parseInput', kind: 'function', line: 9, endLine: 9, exported: true },
+      { name: 'Parser', kind: 'class', line: 1, endLine: 3, exported: false },
+    ] },
+    { path: 'a.ts', lang: 'typescript', symbols: [
+      { name: 'parse', kind: 'function', line: 5, endLine: 5, exported: false },
+      { name: 'PreParse', kind: 'function', line: 2, endLine: 2, exported: true },
+    ] },
+  ] }
+  const res = searchIndex(index, { query: 'parse' })
+  // a.ts 的最佳命中是精确 parse（3），b.ts 是前缀（2）
+  assert.deepEqual(res.matches.map(m => m.path), ['a.ts', 'b.ts'])
+  assert.deepEqual(res.matches[0].symbols.map(s => s.name), ['parse', 'PreParse'], '精确优先于前缀')
+  assert.deepEqual(res.matches[1].symbols.map(s => s.name), ['parseInput', 'Parser'], '同强度内导出符号优先')
+})
+
+test('searchIndex：lang 与 exportedOnly 过滤', () => {
+  const index = { files: [
+    { path: 'a.py', lang: 'python', symbols: [
+      { name: 'run', kind: 'function', line: 1, endLine: 1, exported: false },
+      { name: 'Public', kind: 'class', line: 3, endLine: 3, exported: true },
+    ] },
+    { path: 'b.ts', lang: 'typescript', symbols: [
+      { name: 'runAll', kind: 'function', line: 1, endLine: 1, exported: true },
+    ] },
+  ] }
+  const py = searchIndex(index, { lang: 'python' })
+  assert.deepEqual(py.matches.map(m => m.path), ['a.py'])
+  assert.equal(py.matches[0].symbols.length, 2, '无 query 时列出该语言全部符号')
+
+  const exported = searchIndex(index, { lang: 'python', exportedOnly: true })
+  assert.deepEqual(exported.matches[0].symbols.map(s => s.name), ['Public'])
+  const none = searchIndex(index, { lang: 'python', exportedOnly: true, kind: 'function' })
+  assert.equal(none.total, 0, '过滤后无符号的文件不返回')
+})
+
 test('searchIndex：大小写不敏感与无过滤条件返回全部', () => {
   const index = { files: [{ path: 'a.ts', lang: 'typescript', symbols: [
     { name: 'Foo', kind: 'class', line: 1, endLine: 1, exported: true }] }] }
   assert.equal(searchIndex(index, { query: 'foo' }).total, 1)
   assert.equal(searchIndex(index, {}).total, 1)
+})
+
+test('readIndex：v2 索引在内存补齐模块树（兼容升级路径）', async () => {
+  const dir = makeProject(d => {
+    nodefs.mkdirSync(path.join(d, '.dsh-repowiki'), { recursive: true })
+    nodefs.writeFileSync(path.join(d, '.dsh-repowiki', 'index.json'), JSON.stringify({
+      schemaVersion: 2,
+      stats: { files: 1, symbols: 0 },
+      files: [{ path: 'src/a.ts', lang: 'typescript', symbols: [] }],
+      edges: [],
+    }))
+  })
+  const doc = await readIndex(makeFakeFs(dir), dir)
+  assert.equal(doc.schemaVersion, 2, '保持原版本号，磁盘内容不变')
+  assert.equal(doc.files[0].module, 'src', '文件补 module')
+  assert.ok(doc.modules.some(m => m.path === 'src'), '补 modules')
+  assert.equal(doc.stats.modules, doc.modules.length)
+})
+
+test('readIndex：v3 缺 modules 时按 files 派生；未知版本仍拒绝', async () => {
+  const dir = makeProject(d => {
+    nodefs.mkdirSync(path.join(d, '.dsh-repowiki'), { recursive: true })
+    nodefs.writeFileSync(path.join(d, '.dsh-repowiki', 'index.json'), JSON.stringify({
+      schemaVersion: 3,
+      stats: { files: 1 },
+      files: [{ path: 'README.md', module: '.', symbols: [] }],
+    }))
+  })
+  const doc = await readIndex(makeFakeFs(dir), dir)
+  assert.ok(Array.isArray(doc.modules))
+  assert.equal(doc.modules[0].path, '.')
 })

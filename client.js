@@ -52,8 +52,14 @@ const ASSET_DIR = '.dsh-repowiki'
 /** 单页行数上限（Host 配置 maxLines 的默认值，超过会被拒）。 */
 const READ_PAGE_LINES = 5000
 
-/** 单文件最多读取页数（防巨型文件无限翻页；超出按截断处理）。 */
+/** 单文件最多读取页数（Markdown 等：超出按截断处理）。 */
 const READ_MAX_PAGES = 12
+
+/**
+ * JSON 资产（index/清单）的页数上限。索引随仓库规模增长，5000 文件上限下
+ * index.json 可达数十万行；12 页（6 万行）会在大型仓库上截断成坏 JSON。
+ */
+const READ_MAX_PAGES_JSON = 120
 
 /** 并发读取卡片的最大请求数（避免一次性打出大量 Remote 调用）。 */
 const CARD_CONCURRENCY = 6
@@ -90,13 +96,33 @@ const DICTS = {
     filterAll: '全部',
     filterGenerated: '已生成',
     filterPending: '未生成',
-    searchPlaceholder: '搜索标题 / 路径 / 标签 …',
+    searchPlaceholder: '搜索标题 / 路径 / 标签 / 符号 / 正文 …',
     viewGrid: '网格视图',
     viewList: '列表视图',
+    groupBy: '按模块分组',
+    groupRoot: '根目录',
     statFiles: '文件 {n}',
     statSymbols: '符号 {n}',
     statCards: '卡片 {n}',
     statDocs: '文档 {n}',
+    statLangs: '语言 {n}',
+    statSkipped: '跳过文件 {n}',
+    statSkippedHint: '索引时跳过的源文件（不可读或超过单文件上限）',
+    statWarnings: '索引告警 {n}',
+    statWarningsHint: '索引阶段发现的告警（如 Go internal 越界导入、跳过文件）',
+    warningsDetails: '索引告警明细',
+    warningsToggleHint: '点击展开全部告警',
+    hubLabel: '高风险入口',
+    hubHint: '被最多文件依赖（改动影响面最大）',
+    cycleBadgeHint: '参与 {n} 个文件的循环依赖',
+    cycleBadgeRoute: '（如 {route}）',
+    openFile: '打开 {path}',
+    filterLang: '语言筛选',
+    allLangs: '全部语言',
+    langDistribution: '语言分布',
+    langsMore: '另有 {n} 种',
+    gitBranch: '分支 {name}',
+    lastExtract: '上次抽取 {n} 张 · 失败 {failed} · 重试 {retried}',
     updated: '最近更新：{when}',
     never: '尚未生成卡片',
     pending: '未生成',
@@ -108,6 +134,20 @@ const DICTS = {
     emptyStale: '没有需要更新的卡片。',
     staleFilter: '待更新',
     staleHint: '{n} 张卡片待更新（源文件已变化）',
+    sortBy: '排序',
+    sortPath: '按路径',
+    sortTitle: '按标题',
+    sortUpdated: '按更新时间',
+    tagsLabel: '标签',
+    clearTag: '清除标签',
+    loadMore: '加载更多（剩余 {n}）',
+    showing: '已显示 {shown} / {total}',
+    wikiSearch: '搜索 Wiki 页面 …',
+    wikiGeneral: '页面',
+    wikiOrphan: '未入清单',
+    copyPath: '复制路径',
+    copied: '已复制',
+    copyFailed: '复制失败（剪贴板不可用）',
     viewCards: '卡片',
     viewWiki: 'Wiki',
     viewMemory: '记忆',
@@ -118,6 +158,14 @@ const DICTS = {
     detailSymbols: '符号数 {n}',
     detailGeneratedAt: '生成于 {when}',
     detailSummary: '摘要',
+    detailReferences: '被引用（import 级）',
+    detailImports: '依赖文件（import 级）',
+    detailDependents: '依赖本文件（import 级）',
+    detailImportsMore: '另有 {n} 个',
+    importDepthLabel: '依赖展开深度',
+    importDepthOption: '{n} 跳',
+    detailWikiCitations: '被 Wiki 引用',
+    detailRefsMore: '另有 {n} 条',
     detailTags: '标签',
   },
   en: {
@@ -147,13 +195,33 @@ const DICTS = {
     filterAll: 'All',
     filterGenerated: 'Generated',
     filterPending: 'Pending',
-    searchPlaceholder: 'Search title / path / tags …',
+    searchPlaceholder: 'Search title / path / tags / symbols / content …',
     viewGrid: 'Grid view',
     viewList: 'List view',
+    groupBy: 'Group by module',
+    groupRoot: 'Root',
     statFiles: 'Files {n}',
     statSymbols: 'Symbols {n}',
     statCards: 'Cards {n}',
     statDocs: 'Docs {n}',
+    statLangs: 'Languages {n}',
+    statSkipped: 'Skipped {n}',
+    statSkippedHint: 'Source files skipped during indexing (unreadable or above the per-file size limit).',
+    statWarnings: 'Index warnings {n}',
+    statWarningsHint: 'Warnings raised while indexing (e.g. Go internal visibility violations, skipped files)',
+    warningsDetails: 'Index warnings',
+    warningsToggleHint: 'Click to expand all warnings',
+    hubLabel: 'High-fan-in files',
+    hubHint: 'Most imported files (largest change impact)',
+    cycleBadgeHint: 'Part of a {n}-file import cycle',
+    cycleBadgeRoute: ' (e.g. {route})',
+    openFile: 'Open {path}',
+    filterLang: 'Filter by language',
+    allLangs: 'All languages',
+    langDistribution: 'Languages',
+    langsMore: '+{n} more',
+    gitBranch: 'Branch {name}',
+    lastExtract: 'Last extract: {n} card(s) · {failed} failed · {retried} retried',
     updated: 'Last updated: {when}',
     never: 'No cards generated yet',
     pending: 'Pending',
@@ -165,6 +233,20 @@ const DICTS = {
     emptyStale: 'No cards need updating.',
     staleFilter: 'Stale',
     staleHint: '{n} card(s) need an update (source changed)',
+    sortBy: 'Sort',
+    sortPath: 'By path',
+    sortTitle: 'By title',
+    sortUpdated: 'By update time',
+    tagsLabel: 'Tags',
+    clearTag: 'Clear tag',
+    loadMore: 'Load more ({n} left)',
+    showing: 'Showing {shown} / {total}',
+    wikiSearch: 'Search wiki pages …',
+    wikiGeneral: 'Pages',
+    wikiOrphan: 'Not in manifest',
+    copyPath: 'Copy path',
+    copied: 'Copied',
+    copyFailed: 'Copy failed (clipboard unavailable)',
     viewCards: 'Cards',
     viewWiki: 'Wiki',
     viewMemory: 'Memory',
@@ -175,8 +257,45 @@ const DICTS = {
     detailSymbols: 'Symbols {n}',
     detailGeneratedAt: 'Generated {when}',
     detailSummary: 'Summary',
+    detailReferences: 'Referenced by (import-level)',
+    detailImports: 'Imports (import-level)',
+    detailDependents: 'Dependents (import-level)',
+    detailImportsMore: '+{n} more',
+    importDepthLabel: 'Import depth',
+    importDepthOption: '{n} hop(s)',
+    detailWikiCitations: 'Cited by wiki',
+    detailRefsMore: '+{n} more',
     detailTags: 'Tags',
   },
+}
+
+/** 索引语言 id → 面板展示名（id 保持英文小写用于筛选值）。 */
+const LANGUAGE_LABELS = {
+  javascript: 'JavaScript',
+  typescript: 'TypeScript',
+  vue: 'Vue',
+  svelte: 'Svelte',
+  python: 'Python',
+  go: 'Go',
+  rust: 'Rust',
+  java: 'Java',
+  csharp: 'C#',
+  kotlin: 'Kotlin',
+  php: 'PHP',
+  ruby: 'Ruby',
+  swift: 'Swift',
+  scala: 'Scala',
+  c: 'C',
+  cpp: 'C++',
+}
+
+/**
+ * 取语言的展示名；未知语言原样返回（不隐藏新语言）。
+ * @param {string} lang - 索引语言 id。
+ * @returns {string} 展示名。
+ */
+function languageLabel(lang) {
+  return LANGUAGE_LABELS[lang] ?? lang
 }
 
 window.__ModuleLoader__.load({
@@ -184,7 +303,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useState, useEffect, useMemo, useCallback, useRef } = React
+    const { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } = React
 
     /**
      * 侧栏入口图标（装饰性占据者：点击导航由框架按 PANEL_KEY 关联）。
@@ -231,28 +350,35 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 读取一个文本文件，翻页拼接至 eof（或达页数上限按截断返回）。
+     * 读取一个文本文件，翻页拼接至 eof（或达页数上限）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id（工作区成员会话）。
      * @param {string} rel - 相对工作区根的路径。
      * @param {AbortSignal} signal - 取消信号。
+     * @param {{maxPages?:number, failOnTruncate?:boolean}} [opts] - 页数上限与
+     *   截断处理（JSON 资产要求完整，截断即报 too-large 而非产出坏 JSON）。
      * @returns {Promise<string>} 文件文本。
      */
-    async function readFileText(wf, sessionId, rel, signal) {
+    async function readFileText(wf, sessionId, rel, signal, opts = {}) {
+      const maxPages = opts.maxPages ?? READ_MAX_PAGES
       const parts = []
       let offset = 1
-      for (let page = 0; page < READ_MAX_PAGES; page++) {
+      let eof = false
+      for (let page = 0; page < maxPages; page++) {
         const res = unwrapRemote(await wf.read(sessionId, rel, { offset, limit: READ_PAGE_LINES }, signal), 'workspace-file/bad-read')
         if (!res || typeof res.text !== 'string') throw { code: 'workspace-file/bad-read', message: 'bad read result' }
         parts.push(res.text)
-        if (res.eof || !res.lines) break
+        if (res.eof || !res.lines) { eof = true; break }
         offset += res.lines
+      }
+      if (!eof && opts.failOnTruncate) {
+        throw { code: 'workspace-file/too-large', message: `file exceeds ${maxPages} pages` }
       }
       return parts.join('\n')
     }
 
     /**
-     * 读取并解析 JSON 文件。
+     * 读取并解析 JSON 文件（使用更大的页数预算；截断时明确报 too-large）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id。
      * @param {string} rel - 相对路径。
@@ -260,7 +386,11 @@ window.__ModuleLoader__.load({
      * @returns {Promise<object>} 解析后的对象。
      */
     async function readJson(wf, sessionId, rel, signal) {
-      return JSON.parse(await readFileText(wf, sessionId, rel, signal))
+      const text = await readFileText(wf, sessionId, rel, signal, {
+        maxPages: READ_MAX_PAGES_JSON,
+        failOnTruncate: true,
+      })
+      return JSON.parse(text)
     }
 
     /**
@@ -316,18 +446,23 @@ window.__ModuleLoader__.load({
         if (code !== 'workspace-file/not-found') throw err
       }
       if (!idx || !Array.isArray(idx.files)) {
-        return { status: 'no-asset', files: 0, symbols: 0, cards: 0, docs: 0, updatedAt: '' }
+        return { status: 'no-asset', files: 0, symbols: 0, cards: 0, docs: 0, languages: 0, branch: '', updatedAt: '' }
       }
       const [cards, docs] = await Promise.all([
         countDirMd(wf, sessionId, `${ASSET_DIR}/knowledge`, signal),
         countDirMd(wf, sessionId, `${ASSET_DIR}/wiki`, signal),
       ])
+      const languageCount = idx.stats?.languages && typeof idx.stats.languages === 'object'
+        ? Object.keys(idx.stats.languages).length
+        : new Set(idx.files.map(f => f.lang).filter(Boolean)).size
       return {
         status: 'ready',
         files: idx.stats?.files ?? idx.files.length,
         symbols: idx.stats?.symbols ?? idx.files.reduce((a, f) => a + (Array.isArray(f.symbols) ? f.symbols.length : 0), 0),
         cards,
         docs,
+        languages: languageCount,
+        branch: typeof idx.git?.branch === 'string' ? idx.git.branch : '',
         updatedAt: typeof idx.generatedAt === 'string' ? idx.generatedAt : '',
       }
     }
@@ -347,6 +482,423 @@ window.__ModuleLoader__.load({
       } catch {
         return null
       }
+    }
+
+    /**
+     * 从文件路径推导模块路径（与 src/modules.js moduleOf 同构，深度上限 2）。
+     * 旧索引（无 module 字段）与测试语料也据此分组。
+     * @param {string} relPath - 相对仓库根的路径。
+     * @returns {string} 模块路径（根目录文件为 '.'）。
+     */
+    function moduleFromPath(relPath) {
+      const dirs = String(relPath).split('/').slice(0, -1).filter(Boolean).slice(0, 2)
+      return dirs.length > 0 ? dirs.join('/') : '.'
+    }
+
+    /**
+     * 为详情行收集 import 级反向引用（目标文件 → 符号 → 引用方）。
+     * 与 src/references.js 同语义：跳过自引用与无符号的副作用导入。
+     * @param {object|null} index - 工作区 index.json。
+     * @param {string} path - 当前文件的相对路径。
+     * @returns {Array<{symbol:string, froms:Array<{path:string, line?:number}>}>}
+     *   按符号名排序的引用列表（v5 索引带 import 行号）。
+     */
+    function referencesForPath(index, path) {
+      const bySymbol = new Map()
+      for (const edge of index?.edges ?? []) {
+        if (!edge || edge.to !== path || edge.from === path) continue
+        const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
+        const siteKey = `${edge.from}\u0000${line ?? 0}`
+        for (const name of Array.isArray(edge.symbols) ? edge.symbols : []) {
+          if (typeof name !== 'string' || name.length === 0) continue
+          if (!bySymbol.has(name)) bySymbol.set(name, new Map())
+          bySymbol.get(name).set(siteKey, { path: edge.from, ...(line ? { line } : {}) })
+        }
+      }
+      return [...bySymbol.entries()]
+        .map(([symbol, sites]) => ({
+          symbol,
+          froms: [...sites.values()].sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0)),
+        }))
+        .sort((a, b) => a.symbol.localeCompare(b.symbol))
+    }
+
+    /**
+     * 引用位置格式化：`path:L12`，旧索引只有路径。
+     * @param {{path:string, line?:number}} site - 引用位置。
+     * @returns {string} 可读位置。
+     */
+    function formatReferenceSite(site) {
+      return typeof site?.line === 'number' && site.line > 0 ? `${site.path}:L${site.line}` : site?.path ?? ''
+    }
+
+    /**
+     * 为详情行收集 import 级出边（本文件依赖谁），支持传递深度。
+     * 与 src/references.js 的 importsFor 同语义：跳过自引用，副作用导入
+     * 保留（符号为空）；depth 2-3 按 BFS 展开，最小跳数优先、去重、
+     * 起点不作为自身依赖。`mutual` 标记目标文件也直接引用本文件。
+     * @param {object|null} index - 工作区 index.json。
+     * @param {string} path - 当前文件的相对路径。
+     * @param {number} [depth] - 展开跳数（1-3，默认 1）。
+     * @returns {Array<{path:string, line?:number, symbols:string[], depth:number, mutual:boolean}>}
+     *   按 BFS 到达顺序排列的出边列表（旧索引无 edges 时为空）。
+     */
+    function importsForPath(index, path, depth = 1) {
+      const maxDepth = Math.min(3, Math.max(1, Number.isFinite(depth) ? Math.floor(depth) : 1))
+      const edges = Array.isArray(index?.edges) ? index.edges : []
+      const reverse = new Set()
+      /** @type {Map<string, object[]>} */
+      const byFrom = new Map()
+      for (const edge of edges) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to) continue // 自引用不是依赖
+        if (edge.to === path) reverse.add(edge.from)
+        const list = byFrom.get(edge.from)
+        if (list) list.push(edge)
+        else byFrom.set(edge.from, [edge])
+      }
+      const out = []
+      const seen = new Set([path])
+      const queue = [{ path, depth: 0 }]
+      let head = 0
+      while (head < queue.length) {
+        const { path: current, depth: currentDepth } = queue[head++]
+        if (currentDepth >= maxDepth) continue
+        for (const edge of byFrom.get(current) ?? []) {
+          if (seen.has(edge.to)) continue
+          seen.add(edge.to)
+          const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
+          out.push({
+            path: edge.to,
+            ...(line ? { line } : {}),
+            symbols: (Array.isArray(edge.symbols) ? edge.symbols : [])
+              .filter(name => typeof name === 'string' && name.length > 0),
+            depth: currentDepth + 1,
+            mutual: reverse.has(edge.to),
+          })
+          queue.push({ path: edge.to, depth: currentDepth + 1 })
+        }
+      }
+      return out
+    }
+
+    /**
+     * 为详情行收集 import 级依赖方（谁依赖本文件），支持传递深度。
+     * 与 src/references.js 的 dependentsFor 同语义：跳过自引用，副作用
+     * 导入保留；depth 2-3 按反向 BFS 展开，最小跳数优先、去重、起点不
+     * 作为自身依赖方。`mutual` 标记该依赖方也被本文件直接依赖。
+     * @param {object|null} index - 工作区 index.json。
+     * @param {string} path - 当前文件的相对路径。
+     * @param {number} [depth] - 展开跳数（1-3，默认 1）。
+     * @returns {Array<{path:string, line?:number, symbols:string[], depth:number, mutual:boolean}>}
+     *   按 BFS 到达顺序排列的依赖方列表（旧索引无 edges 时为空）。
+     */
+    function dependentsForPath(index, path, depth = 1) {
+      const maxDepth = Math.min(3, Math.max(1, Number.isFinite(depth) ? Math.floor(depth) : 1))
+      const edges = Array.isArray(index?.edges) ? index.edges : []
+      const forward = new Set()
+      /** @type {Map<string, object[]>} */
+      const byTo = new Map()
+      for (const edge of edges) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to) continue // 自引用不是依赖
+        if (edge.from === path) forward.add(edge.to)
+        const list = byTo.get(edge.to)
+        if (list) list.push(edge)
+        else byTo.set(edge.to, [edge])
+      }
+      const out = []
+      const seen = new Set([path])
+      const queue = [{ path, depth: 0 }]
+      let head = 0
+      while (head < queue.length) {
+        const { path: current, depth: currentDepth } = queue[head++]
+        if (currentDepth >= maxDepth) continue
+        for (const edge of byTo.get(current) ?? []) {
+          if (seen.has(edge.from)) continue
+          seen.add(edge.from)
+          const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
+          out.push({
+            path: edge.from,
+            ...(line ? { line } : {}),
+            symbols: (Array.isArray(edge.symbols) ? edge.symbols : [])
+              .filter(name => typeof name === 'string' && name.length > 0),
+            depth: currentDepth + 1,
+            mutual: forward.has(edge.from),
+          })
+          queue.push({ path: edge.from, depth: currentDepth + 1 })
+        }
+      }
+      return out
+    }
+
+    /**
+     * 单库视图的高风险入口：被最多不同文件 import 的目标（fan-in 前三）。
+     * 与 src/references.js 的 topDependents 同口径：同一文件重复 import
+     * 只计一次，自引用忽略，并列按路径升序。
+     * @param {object|null} index - 工作区 index.json。
+     * @param {number} [limit] - 返回条目上限（默认 3）。
+     * @returns {Array<{path:string, dependents:number}>} 按依赖方数量降序。
+     */
+    function topDependentsFor(index, limit = 3) {
+      /** @type {Map<string, Set<string>>} */
+      const byTo = new Map()
+      for (const edge of Array.isArray(index?.edges) ? index.edges : []) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to) continue
+        let set = byTo.get(edge.to)
+        if (!set) {
+          set = new Set()
+          byTo.set(edge.to, set)
+        }
+        set.add(edge.from)
+      }
+      return [...byTo.entries()]
+        .map(([path, froms]) => ({ path, dependents: froms.size }))
+        .sort((a, b) => b.dependents - a.dependents || a.path.localeCompare(b.path))
+        .slice(0, Math.max(1, Math.floor(limit)))
+    }
+
+    /**
+     * 在强连通分量内找一条从 start 出发回到 start 的最短环（与
+     * src/cycles.js 同语义：BFS 后枚举回边、取最短、并列按路径字典序）。
+     * 环长超过 12 个节点时返回空数组（徽章 tooltip 保持简洁）。
+     * @param {string} start - 组内字典序最小的文件。
+     * @param {Map<string, string[]>} graph - 全图邻接表。
+     * @param {Set<string>} members - 当前分量成员。
+     * @returns {string[]} 环路径（首尾均为 start）；无短环时为空。
+     */
+    function shortestCycleFrom(start, graph, members) {
+      /** @type {Map<string, string|null>} */
+      const parent = new Map([[start, null]])
+      const queue = [start]
+      for (let head = 0; head < queue.length; head++) {
+        const current = queue[head]
+        for (const next of graph.get(current) ?? []) {
+          if (next === start || !members.has(next) || parent.has(next)) continue
+          parent.set(next, current)
+          queue.push(next)
+        }
+      }
+      /** @type {string[]|null} */
+      let best = null
+      for (const member of members) {
+        if (member === start || !parent.has(member)) continue
+        if (!(graph.get(member) ?? []).includes(start)) continue
+        const path = []
+        let cursor = member
+        while (cursor !== null) {
+          path.push(cursor)
+          cursor = parent.get(cursor) ?? null
+        }
+        path.reverse()
+        const candidate = [...path, start]
+        if (!best
+          || candidate.length < best.length
+          || (candidate.length === best.length && candidate.join('\u0000') < best.join('\u0000'))) {
+          best = candidate
+        }
+      }
+      if (!best || best.length > 13) return []
+      return best
+    }
+
+    /**
+     * 文件级循环依赖成员（与 src/cycles.js 同口径的强连通分量）。
+     * 前端无法 import src 模块（浏览器 bundle 自包含），故本地实现：
+     * 返回文件 → 所在循环组大小与代表性最短环路径（仅 size ≥ 2 的组）。
+     * @param {object|null} index - 工作区 index.json。
+     * @returns {Map<string, {size:number, sample:string[]}>} 文件 → 循环组信息。
+     */
+    function cycleInfoFor(index) {
+      /** @type {Map<string, Set<string>>} */
+      const edgesByFrom = new Map()
+      for (const edge of Array.isArray(index?.edges) ? index.edges : []) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to) continue // 自引用不是跨文件循环
+        if (!edgesByFrom.has(edge.from)) edgesByFrom.set(edge.from, new Set())
+        if (!edgesByFrom.has(edge.to)) edgesByFrom.set(edge.to, new Set())
+        edgesByFrom.get(edge.from).add(edge.to)
+      }
+      /** @type {Map<string, string[]>} */
+      const graph = new Map()
+      for (const [node, targets] of edgesByFrom) graph.set(node, [...targets].sort())
+
+      const discovery = new Map()
+      const lowLink = new Map()
+      const onStack = new Set()
+      const stack = []
+      const infos = new Map()
+      let nextDiscovery = 0
+      for (const start of [...graph.keys()].sort()) {
+        if (discovery.has(start)) continue
+        discovery.set(start, nextDiscovery)
+        lowLink.set(start, nextDiscovery)
+        nextDiscovery++
+        stack.push(start)
+        onStack.add(start)
+        const frames = [{ node: start, index: 0 }]
+        while (frames.length > 0) {
+          const frame = frames[frames.length - 1]
+          const children = graph.get(frame.node) ?? []
+          if (frame.index < children.length) {
+            const child = children[frame.index++]
+            if (!discovery.has(child)) {
+              discovery.set(child, nextDiscovery)
+              lowLink.set(child, nextDiscovery)
+              nextDiscovery++
+              stack.push(child)
+              onStack.add(child)
+              frames.push({ node: child, index: 0 })
+            } else if (onStack.has(child)) {
+              lowLink.set(frame.node, Math.min(lowLink.get(frame.node) ?? 0, discovery.get(child) ?? 0))
+            }
+            continue
+          }
+          frames.pop()
+          if (frames.length > 0) {
+            const parent = frames[frames.length - 1].node
+            lowLink.set(parent, Math.min(lowLink.get(parent) ?? 0, lowLink.get(frame.node) ?? 0))
+          }
+          if (lowLink.get(frame.node) === discovery.get(frame.node)) {
+            const group = []
+            for (;;) {
+              const member = stack.pop()
+              if (member === undefined) break // 防御性退出
+              onStack.delete(member)
+              group.push(member)
+              if (member === frame.node) break
+            }
+            if (group.length > 1) {
+              group.sort()
+              const sample = shortestCycleFrom(group[0], graph, new Set(group))
+              for (const member of group) infos.set(member, { size: group.length, sample })
+            }
+          }
+        }
+      }
+      return infos
+    }
+
+    /**
+     * 描述循环成员徽章（可访问名与悬停提示）。
+     * 短环（≤3 个文件）附具体路径，便于定位断链位置；长环只给组大小。
+     * @param {number} size - 所在循环组大小。
+     * @param {string[]} [sample] - 代表性最短环路径（首尾同文件）。
+     * @param {Function} tt - 插值文案函数。
+     * @returns {string} 文案。
+     */
+    function cycleBadgeHint(size, sample, tt) {
+      const base = tt('cycleBadgeHint', { n: size })
+      return Array.isArray(sample) && sample.length > 2 && sample.length <= 4
+        ? `${base}${tt('cycleBadgeRoute', { route: sample.join(' → ') })}`
+        : base
+    }
+
+    /**
+     * 归一 Wiki 引用值（剥离 `#Lx-Ly` 片段）。
+     * @param {unknown} source - 清单中的引用值。
+     * @returns {string} 源文件相对路径。
+     */
+    function normalizeWikiSource(source) {
+      return typeof source === 'string' ? source.trim().split('#')[0].trim() : ''
+    }
+
+    /**
+     * 查某源文件被哪些 Wiki 页面/章节引用。
+     * @param {object[]} entries - 已应用清单的 Wiki 页面。
+     * @param {string} path - 当前源文件相对路径。
+     * @returns {Array<{slug:string,title:string,sections:string[]}>} 页面与引用章节。
+     */
+    function wikiCitationsForPath(entries, path) {
+      const out = []
+      for (const wiki of entries ?? []) {
+        const sections = []
+        for (const section of Array.isArray(wiki.sections) ? wiki.sections : []) {
+          const cited = (Array.isArray(section?.sources) ? section.sources : [])
+            .some(source => normalizeWikiSource(source) === path)
+          if (cited && typeof section.heading === 'string' && section.heading) sections.push(section.heading)
+        }
+        const pageLevel = (Array.isArray(wiki.sources) ? wiki.sources : [])
+          .some(source => normalizeWikiSource(source) === path)
+        if (pageLevel || sections.length > 0) {
+          out.push({
+            slug: typeof wiki.slug === 'string' ? wiki.slug : '',
+            title: wiki.title,
+            sections: [...new Set(sections)].sort(),
+          })
+        }
+      }
+      return out.sort((a, b) => a.title.localeCompare(b.title) || a.slug.localeCompare(b.slug))
+    }
+
+    /**
+     * 章节锚点（与 src/render.js anchorOf 同构，供目录链接跳转）。
+     * @param {string} heading - 章节标题。
+     * @param {Map<string, number>} seen - 已用锚点计数。
+     * @returns {string} 锚点。
+     */
+    function anchorOf(heading, seen) {
+      const base = String(heading)
+        .trim()
+        .toLowerCase()
+        .replace(/[`*_~[\]()#]/g, '')
+        .replace(/[^\p{L}\p{N}\s-]/gu, '')
+        .replace(/\s+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'section'
+      const count = seen.get(base) ?? 0
+      seen.set(base, count + 1)
+      return count === 0 ? base : `${base}-${count}`
+    }
+
+    /**
+     * 客户端检索切词（与 src/search.js tokenize 同规则：拉丁词 + CJK 单字/二元组）。
+     * @param {string} text - 文本。
+     * @returns {string[]} token。
+     */
+    function tokenizeClient(text) {
+      const out = []
+      const re = /[a-z0-9_]+|[\u3400-\u9fff]+/g
+      let match
+      while ((match = re.exec(String(text ?? '').toLowerCase())) !== null) {
+        const piece = match[0]
+        if (/^[a-z0-9_]+$/.test(piece)) {
+          out.push(piece)
+          continue
+        }
+        for (let i = 0; i < piece.length; i++) {
+          out.push(piece[i])
+          if (i + 1 < piece.length) out.push(piece.slice(i, i + 2))
+        }
+      }
+      return out
+    }
+
+    /**
+     * 卡片行相关性打分（标题 3 / 符号名 2 / 标签 2 / 摘要 1 / 正文 1 / 路径 1）。
+     * 符号名来自索引，未生成卡片的文件也能被符号检索命中；正文覆盖"职责/
+     * 关键符号/陷阱"等卡片详细内容。
+     * @param {object} row - 卡片行。
+     * @param {string[]} tokens - 查询 token。
+     * @returns {number} 分数（0 表示不匹配）。
+     */
+    function scoreCard(row, tokens) {
+      // 短字段在构建时统一小写；symbolText/bodyText 已在 rows 中预算小写
+      const fields = [
+        [String(row.card?.title ?? '').toLowerCase(), 3],
+        [row.symbolText ?? '', 2],
+        [String((row.card?.tags ?? []).join(' ')).toLowerCase(), 2],
+        [String(row.card?.summary ?? '').toLowerCase(), 1],
+        [row.bodyText ?? '', 1],
+        [String(row.path ?? '').toLowerCase(), 1],
+      ]
+      let score = 0
+      for (const token of tokens) {
+        for (const [text, weight] of fields) {
+          if (text.includes(token)) score += weight
+        }
+      }
+      return score
     }
 
     /**
@@ -380,6 +932,60 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 判断资产目录内是否存在 Markdown（可含有限深度子目录）。
+     * 面板选 locale 时以"有内容"为准：空 `knowledge/en/` 不应压过有卡片的
+     * `knowledge/zh/`，否则面板会显示空集。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} rel - 资产目录。
+     * @param {number} depth - 当前深度。
+     * @param {number} maxDepth - 允许的子目录深度。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<boolean>} 是否至少有一个 .md。
+     */
+    async function hasMarkdownAsset(wf, sessionId, rel, depth, maxDepth, signal) {
+      let entries
+      try {
+        entries = await listChildren(wf, sessionId, rel, signal)
+      } catch {
+        return false
+      }
+      for (const entry of entries) {
+        if (entry.type === 'file' && entry.name.endsWith('.md')) return true
+        if (entry.type === 'directory' && depth < maxDepth
+          && await hasMarkdownAsset(wf, sessionId, `${rel}/${entry.name}`, depth + 1, maxDepth, signal)) {
+          return true
+        }
+      }
+      return false
+    }
+
+    /**
+     * 在候选 locale 中选实际有资产的一个：优先 UI locale，其次按名称排序；
+     * 全为空时退回首选（渲染层据此显示空态而非错误）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} baseDir - 资产根（knowledge/wiki/memory）。
+     * @param {string[]} locales - 已排序的候选子目录。
+     * @param {string} locale - 面板 locale。
+     * @param {number} maxDepth - 允许的子目录深度（Wiki 的 modules/ 为 1）。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<string>} 选中的 locale（无候选时为空串）。
+     */
+    async function chooseAssetLocale(wf, sessionId, baseDir, locales, locale, maxDepth, signal) {
+      if (!locales.length) return ''
+      const ordered = locales.includes(locale)
+        ? [locale, ...locales.filter((name) => name !== locale)]
+        : locales
+      for (const candidate of ordered) {
+        if (await hasMarkdownAsset(wf, sessionId, `${baseDir}/${candidate}`, 0, maxDepth, signal)) {
+          return candidate
+        }
+      }
+      return ordered[0]
+    }
+
+    /**
      * 装载某 locale 的卡片清单（优先匹配 UI locale，否则取第一个子目录）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id。
@@ -389,11 +995,23 @@ window.__ModuleLoader__.load({
      */
     async function loadCards(wf, sessionId, locale, signal) {
       const knowledgeDir = `${ASSET_DIR}/knowledge`
-      const subs = await listChildren(wf, sessionId, knowledgeDir, signal)
+      let subs
+      try {
+        subs = await listChildren(wf, sessionId, knowledgeDir, signal)
+      } catch {
+        // 只生成了索引（还没有 knowledge/）属于正常空集，不是读取失败
+        return { locale: '', cards: [] }
+      }
       const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
-      const chosen = locales.includes(locale) ? locale : locales[0]
+      const chosen = await chooseAssetLocale(wf, sessionId, knowledgeDir, locales, locale, 0, signal)
       if (!chosen) return { locale: '', cards: [] }
-      const entries = await listChildren(wf, sessionId, `${knowledgeDir}/${chosen}`, signal)
+      let entries
+      try {
+        entries = await listChildren(wf, sessionId, `${knowledgeDir}/${chosen}`, signal)
+      } catch {
+        // 目录在两次调用之间被删除/移走：按空集呈现，避免整页失败
+        return { locale: '', cards: [] }
+      }
       const cardFiles = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
       const cards = await mapLimit(cardFiles, CARD_CONCURRENCY, async (entry) => {
         try {
@@ -425,7 +1043,8 @@ window.__ModuleLoader__.load({
      * @param {string} sessionId - 授权会话 id。
      * @param {string} locale - 面板 locale。
      * @param {AbortSignal} signal - 取消信号。
-     * @returns {Promise<object[]>} 页面对象（file/title/generatedAt/text）。
+     * @returns {Promise<{locale:string, entries:object[]}>} 选定 locale 与页面对象
+     *   （file/title/generatedAt/text；嵌套 modules/ 目录也会递归枚举）。
      */
     async function loadWikiEntries(wf, sessionId, locale, signal) {
       const wikiDir = `${ASSET_DIR}/wiki`
@@ -433,39 +1052,122 @@ window.__ModuleLoader__.load({
       try {
         subs = await listChildren(wf, sessionId, wikiDir, signal)
       } catch {
-        return []
+        return { locale: '', entries: [] }
       }
       const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
-      const chosen = locales.includes(locale) ? locale : locales[0]
-      if (!chosen) return []
-      let entries
-      try {
-        entries = await listChildren(wf, sessionId, `${wikiDir}/${chosen}`, signal)
-      } catch {
-        return []
-      }
-      const pages = entries.filter(e => e.type === 'file' && e.name.endsWith('.md'))
-      const list = await mapLimit(pages, CARD_CONCURRENCY, async (entry) => {
+      const chosen = await chooseAssetLocale(wf, sessionId, wikiDir, locales, locale, 1, signal)
+      if (!chosen) return { locale: '', entries: [] }
+
+      /**
+       * 递归枚举某目录下的 Markdown 页面（深度上限 3，支持 modules/）。
+       * @param {string} rel - 相对工作区的目录。
+       * @param {number} depth - 当前深度。
+       * @returns {Promise<object[]>} 页面对象。
+       */
+      const collect = async (rel, depth) => {
+        if (depth > 3) return []
+        let entries
         try {
-          const text = await readFileText(wf, sessionId, `${wikiDir}/${chosen}/${entry.name}`, signal)
-          let title = entry.name.replace(/\.md$/, '')
-          let generatedAt = ''
-          const m = /^---\n([\s\S]*?)\n---\n/.exec(text)
-          if (m) {
-            try {
-              const meta = JSON.parse(m[1])
-              if (typeof meta.title === 'string') title = meta.title
-              if (typeof meta.generatedAt === 'string') generatedAt = meta.generatedAt
-            } catch {
-              // 坏 frontmatter 时退化为文件名作标题
+          entries = await listChildren(wf, sessionId, rel, signal)
+        } catch {
+          return []
+        }
+        const out = []
+        for (const entry of entries) {
+          const childRel = `${rel}/${entry.name}`
+          if (entry.type === 'directory') {
+            out.push(...await collect(childRel, depth + 1))
+            continue
+          }
+          if (!entry.name.endsWith('.md')) continue
+          try {
+            const text = await readFileText(wf, sessionId, childRel, signal)
+            let title = entry.name.replace(/\.md$/, '')
+            let generatedAt = ''
+            const m = /^---\n([\s\S]*?)\n---\n/.exec(text)
+            if (m) {
+              try {
+                const meta = JSON.parse(m[1])
+                if (typeof meta.title === 'string') title = meta.title
+                if (typeof meta.generatedAt === 'string') generatedAt = meta.generatedAt
+              } catch {
+                // 坏 frontmatter 时退化为文件名作标题
+              }
+            }
+            out.push({ file: childRel.replace(`${ASSET_DIR}/`, ''), title, generatedAt, text })
+          } catch {
+            // 单页不可读不阻断整批
+          }
+        }
+        return out
+      }
+
+      const list = await collect(`${wikiDir}/${chosen}`, 0)
+      return { locale: chosen, entries: list }
+    }
+
+    /**
+     * 读取 Wiki 清单（缺失/损坏返回 null，面板降级为文件枚举）。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} locale - 选定 locale。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<object|null>} 清单文档。
+     */
+    async function readWikiManifest(wf, sessionId, locale, signal) {
+      if (!locale) return null
+      try {
+        return await readJson(wf, sessionId, `${ASSET_DIR}/wiki/${locale}/_index.json`, signal)
+      } catch {
+        return null
+      }
+    }
+
+    /**
+     * 读取知识清单（`knowledge/<locale>/_index.json`），取最近一次抽取快照。
+     * @param {object} wf - remote.workspaceFiles 命名空间。
+     * @param {string} sessionId - 授权会话 id。
+     * @param {string} locale - 选定 locale。
+     * @param {AbortSignal} signal - 取消信号。
+     * @returns {Promise<object|null>} 清单文档。
+     */
+    async function readKnowledgeManifest(wf, sessionId, locale, signal) {
+      if (!locale) return null
+      try {
+        return await readJson(wf, sessionId, `${ASSET_DIR}/knowledge/${locale}/_index.json`, signal)
+      } catch {
+        return null
+      }
+    }
+
+    /**
+     * 读取 Wiki 清单并把 order/module 附加到页面对象；缺失时按标题排序。
+     * @param {object[]} entries - loadWikiEntries 的页面。
+     * @param {object|null} manifest - wiki/<locale>/_index.json。
+     * @returns {object[]} 排序后的页面。
+     */
+    function applyWikiManifest(entries, manifest) {
+      const byPath = new Map((manifest?.pages ?? []).map(page => [page.path, page]))
+      return entries
+        .map((entry) => {
+          const meta = byPath.get(entry.file)
+          if (!meta) {
+            return {
+              ...entry, order: Number.MAX_SAFE_INTEGER, module: '', sources: [], sections: [], orphan: Boolean(manifest),
             }
           }
-          return { file: `wiki/${chosen}/${entry.name}`, title, generatedAt, text }
-        } catch {
-          return null
-        }
-      })
-      return list.filter(Boolean)
+          return {
+            ...entry,
+            order: typeof meta.order === 'number' ? meta.order : Number.MAX_SAFE_INTEGER,
+            module: typeof meta.module === 'string' ? meta.module : '',
+            slug: typeof meta.slug === 'string' ? meta.slug : '',
+            // 清单 v1 只有页面级 sources；v2 起带章节级 sections（反查用）
+            sources: Array.isArray(meta.sources) ? meta.sources : [],
+            sections: Array.isArray(meta.sections) ? meta.sections : [],
+            orphan: false,
+          }
+        })
+        .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title))
     }
 
     /**
@@ -485,7 +1187,7 @@ window.__ModuleLoader__.load({
         return []
       }
       const locales = subs.filter(e => e.type === 'directory').map(e => e.name).sort()
-      const chosen = locales.includes(locale) ? locale : locales[0]
+      const chosen = await chooseAssetLocale(wf, sessionId, memoryDir, locales, locale, 0, signal)
       if (!chosen) return []
       let entries
       try {
@@ -535,13 +1237,28 @@ window.__ModuleLoader__.load({
       const [docs, setDocs] = useState(0)
       const [wikis, setWikis] = useState([])
       const [memories, setMemories] = useState([])
+      const [lastExtract, setLastExtract] = useState(null)
       const [tab, setTab] = useState('cards')
       const [wikiSelected, setWikiSelected] = useState(null)
+      // 深链目标章节（来自详情引用）；空串表示页面顶部
+      const [wikiTargetSection, setWikiTargetSection] = useState('')
       const [memorySelected, setMemorySelected] = useState(null)
       const [filter, setFilter] = useState('all')
       const [query, setQuery] = useState('')
       const [view, setView] = useState('grid')
+      const [group, setGroup] = useState(false)
+      const [sortBy, setSortBy] = useState('path')
+      const [tagFilter, setTagFilter] = useState('')
+      const [langFilter, setLangFilter] = useState('')
+      const [wikiQuery, setWikiQuery] = useState('')
+      const [visibleCount, setVisibleCount] = useState(120)
+      const searchRef = useRef(null)
+      const deferredQuery = useDeferredValue(query)
       const [detail, setDetail] = useState(null)
+      // 详情"依赖文件"区块的展开深度（1 = 直接依赖；2-3 = 传递依赖）
+      const [importDepth, setImportDepth] = useState(1)
+      /** 索引告警明细是否展开（统计行计数按钮切换）。 */
+      const [warningsOpen, setWarningsOpen] = useState(false)
       // 焦点管理（详情类视图通用，无障碍）：打开前记录当前焦点，关闭时归还。
       // 注意：卡片详情为内联面板（列表不卸载，直接归还触发瓦片）；记忆/Wiki
       // 详情是整面板切换（触发条目被卸载），归还前须检查节点是否仍挂载，
@@ -563,11 +1280,24 @@ window.__ModuleLoader__.load({
         else fallbackRef?.current?.focus?.()
       }
       // 卡片详情 / 记忆详情 / Wiki 页面详情共用同一焦点归还通道
-      const openDetail = openWithFocus(setDetail)
+      const openDetail = (value) => {
+        setImportDepth(1) // 新详情从直接依赖开始，避免沿用上一条的深度
+        openWithFocus(setDetail)(value)
+      }
       const closeDetail = closeWithFocus(setDetail)
       const openMemory = openWithFocus(setMemorySelected)
       const closeMemory = closeWithFocus(setMemorySelected, memoryTabRef)
       const openWiki = openWithFocus(setWikiSelected)
+      /**
+       * 打开 Wiki 页面并可携带目标章节（空串=页面顶部）。
+       * @param {object} entry - Wiki 页面。
+       * @param {string} [section] - 目标章节标题。
+       * @returns {void}
+       */
+      const openWikiEntry = (entry, section = '') => {
+        setWikiTargetSection(section)
+        openWiki(entry)
+      }
       const closeWiki = closeWithFocus(setWikiSelected, wikiTabRef)
       const [overview, setOverview] = useState(true)
       const [overviewRows, setOverviewRows] = useState([])
@@ -606,6 +1336,7 @@ window.__ModuleLoader__.load({
           setDocs(0)
           setWikis([])
           setMemories([])
+          setLastExtract(null)
           return
         }
         const requestId = ++latestRequest.current
@@ -632,15 +1363,24 @@ window.__ModuleLoader__.load({
             setDocs(0)
             setWikis([])
             setMemories([])
+            setLastExtract(null)
             return
           }
-          const { cards: loaded } = await loadCards(wf, sessionId, localeName(t), signal)
-          const wikiPages = await loadWikiEntries(wf, sessionId, localeName(t), signal)
+          const { cards: loaded, locale: cardLocale } = await loadCards(wf, sessionId, localeName(t), signal)
+          const wikiResult = await loadWikiEntries(wf, sessionId, localeName(t), signal)
+          const manifest = await readWikiManifest(wf, sessionId, wikiResult.locale, signal)
+          const wikiPages = applyWikiManifest(wikiResult.entries, manifest)
+          // 知识清单与卡片同目录：用卡片实际落地的 locale 读，避免面板 locale
+          // 与产物 locale 不一致时漏读快照
+          const knowledgeManifest = await readKnowledgeManifest(wf, sessionId, cardLocale, signal)
           if (signal.aborted || requestId !== latestRequest.current) return
           setIndex(parsedIndex)
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
+          setLastExtract(knowledgeManifest?.lastRun && typeof knowledgeManifest.lastRun === 'object'
+            ? knowledgeManifest.lastRun
+            : null)
           setMemories(await loadMemoryEntries(wf, sessionId, localeName(t), signal))
           setStatus('ready')
         } catch (err) {
@@ -659,6 +1399,7 @@ window.__ModuleLoader__.load({
           setDocs(0)
           setWikis([])
           setMemories([])
+          setLastExtract(null)
           return
         }
         const ac = new AbortController()
@@ -729,6 +1470,20 @@ window.__ModuleLoader__.load({
         return () => document.removeEventListener('keydown', onKey)
       }, [detail, memorySelected])
 
+      // 快捷键：卡片页按 `/` 聚焦搜索框（输入控件内不拦截）
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+          if (tab !== 'cards') return
+          const tag = String(e.target?.tagName ?? '').toLowerCase()
+          if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable) return
+          e.preventDefault()
+          searchRef.current?.focus?.()
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+      }, [tab])
+
       /**
        * 在所选工作区开新会话发起生成任务。
        * @param {'index'|'extract'|'generate'|'all'} kind - 动作种类。
@@ -770,12 +1525,28 @@ window.__ModuleLoader__.load({
 
       /* 派生视图数据 */
       const cardByPath = useMemo(() => new Map(cards.map(c => [c.path, c])), [cards])
-      const rows = useMemo(() => (index?.files ?? []).map((f) => ({
-        path: f.path,
-        lang: f.lang,
-        symbols: Array.isArray(f.symbols) ? f.symbols.length : 0,
-        card: cardByPath.get(f.path) || null,
-      })), [index, cardByPath])
+      const rows = useMemo(() => {
+        // 文件级循环成员（SCC）：卡片行显示 ⟲ 徽章，点开详情可看双向边
+        const cycleInfos = cycleInfoFor(index)
+        return (index?.files ?? []).map((f) => ({
+          path: f.path,
+          // 模块归属：新索引带 module 字段，旧索引按路径推导（深度 2）
+          module: typeof f.module === 'string' && f.module ? f.module : moduleFromPath(f.path),
+          lang: f.lang,
+          symbols: Array.isArray(f.symbols) ? f.symbols.length : 0,
+          // 符号名拼成可检索文本：面板可按符号名定位文件（无需先有卡片）
+          symbolText: (Array.isArray(f.symbols) ? f.symbols : [])
+            .map(s => (typeof s?.name === 'string' ? s.name : ''))
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase(),
+          // 卡片正文预算小写副本：全文检索不重复 toLowerCase（正文可达数 KB）
+          bodyText: String(cardByPath.get(f.path)?.body ?? '').toLowerCase(),
+          cycleSize: cycleInfos.get(f.path)?.size ?? 0,
+          cycleSample: cycleInfos.get(f.path)?.sample ?? [],
+          card: cardByPath.get(f.path) || null,
+        }))
+      }, [index, cardByPath])
       /** 待更新卡片：卡片记录的 sourceDigest 与索引 digest 不一致（切片 3 更新检测） */
       const staleSet = useMemo(() => {
         const digestByPath = new Map((index?.files ?? []).map(f => [f.path, f.digest]))
@@ -787,23 +1558,148 @@ window.__ModuleLoader__.load({
         return stale
       }, [index, cards])
       const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase()
-        return rows.filter((r) => {
-          if (filter === 'generated' && !r.card) return false
-          if (filter === 'pending' && r.card) return false
-          if (filter === 'stale' && !(r.card && staleSet.has(r.path))) return false
-          if (!q) return true
-          const hay = [r.path, r.card?.title, r.card?.summary, ...(r.card?.tags ?? [])]
-            .join('\u0001').toLowerCase()
-          return hay.includes(q)
+        const q = deferredQuery.trim()
+        const tokens = tokenizeClient(q)
+        const matched = []
+        for (const row of rows) {
+          if (filter === 'generated' && !row.card) continue
+          if (filter === 'pending' && row.card) continue
+          if (filter === 'stale' && !(row.card && staleSet.has(row.path))) continue
+          if (langFilter && row.lang !== langFilter) continue
+          if (tagFilter && !(row.card?.tags ?? []).includes(tagFilter)) continue
+          if (tokens.length > 0) {
+            const score = scoreCard(row, tokens)
+            if (score <= 0) continue
+            matched.push([row, score])
+          } else {
+            matched.push([row, 0])
+          }
+        }
+        matched.sort((a, b) => {
+          if (tokens.length > 0 && b[1] !== a[1]) return b[1] - a[1]
+          if (sortBy === 'title') {
+            return (a[0].card?.title ?? a[0].path).localeCompare(b[0].card?.title ?? b[0].path)
+          }
+          if (sortBy === 'updated') {
+            return (b[0].card?.generatedAt ?? '').localeCompare(a[0].card?.generatedAt ?? '')
+          }
+          return a[0].path.localeCompare(b[0].path)
         })
-      }, [rows, filter, query])
+        return matched.map(([row]) => row)
+      }, [rows, filter, deferredQuery, tagFilter, langFilter, sortBy, staleSet])
+      const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
+      const topTags = useMemo(() => {
+        const counts = new Map()
+        for (const card of cards) {
+          for (const tag of card.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+        }
+        return [...counts.entries()]
+          .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+          .slice(0, 12)
+          .map(([tag]) => tag)
+      }, [cards])
+      /** 索引中出现过的语言（按文件数降序），驱动语言筛选下拉。 */
+      const langOptions = useMemo(() => {
+        const counts = new Map()
+        for (const row of rows) {
+          if (typeof row.lang !== 'string' || row.lang === '') continue
+          counts.set(row.lang, (counts.get(row.lang) ?? 0) + 1)
+        }
+        return [...counts.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+      }, [rows])
+      // 切换工作区后语言可能不存在：清掉失效筛选，避免列表空转
+      useEffect(() => {
+        if (langFilter && !langOptions.some(([lang]) => lang === langFilter)) setLangFilter('')
+      }, [langOptions, langFilter])
+      // 筛选/排序/搜索变化时回到第一页，避免“加载更多”状态错位
+      useEffect(() => {
+        setVisibleCount(120)
+      }, [filter, deferredQuery, tagFilter, langFilter, sortBy, group, tab])
       const pendingCount = useMemo(() => rows.filter(r => !r.card).length, [rows])
+      /** 按模块分组的过滤结果（分组开关开启时使用；根目录最前）。 */
+      const grouped = useMemo(() => {
+        if (!group) return null
+        const byModule = new Map()
+        for (const row of visible) {
+          const key = row.module || '.'
+          if (!byModule.has(key)) byModule.set(key, [])
+          byModule.get(key).push(row)
+        }
+        return [...byModule.entries()].sort((a, b) => {
+          if (a[0] === '.') return -1
+          if (b[0] === '.') return 1
+          return a[0].localeCompare(b[0])
+        })
+      }, [visible, group])
       const latestUpdate = useMemo(() => cards
         .map(c => c.generatedAt)
         .filter(Boolean)
         .sort()
         .pop() || '', [cards])
+      /** 语言数：优先索引的语言分布，旧索引回退到文件行推导。 */
+      const languageCount = useMemo(() => {
+        const counts = index?.stats?.languages
+        if (counts && typeof counts === 'object') return Object.keys(counts).length
+        return new Set(rows.map(r => r.lang).filter(Boolean)).size
+      }, [index, rows])
+      /** 语言分布（按文件数降序）：优先索引 stats，旧索引回退到文件行。 */
+      const languageDistribution = useMemo(() => {
+        const counts = index?.stats?.languages
+        let entries
+        if (counts && typeof counts === 'object') {
+          entries = Object.entries(counts).filter(([, n]) => typeof n === 'number' && n > 0)
+        } else {
+          const fallback = new Map()
+          for (const row of rows) {
+            if (typeof row.lang !== 'string' || row.lang === '') continue
+            fallback.set(row.lang, (fallback.get(row.lang) ?? 0) + 1)
+          }
+          entries = [...fallback.entries()]
+        }
+        return entries.sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+      }, [index, rows])
+      /** 行索引：hub chip 点击时定位到对应卡片行（rows 每文件唯一）。 */
+      const rowByPath = useMemo(() => new Map(rows.map(r => [r.path, r])), [rows])
+      /** 单库视图的高风险入口（fan-in 前三，与状态工具同口径）。 */
+      const hubs = useMemo(() => topDependentsFor(index, 3), [index])
+      /** 索引期告警（Go internal 越界、跳过文件等），统计行计数 + 悬停明细。 */
+      const indexWarnings = useMemo(
+        () => (Array.isArray(index?.warnings) ? index.warnings.filter(w => typeof w === 'string' && w) : []),
+        [index],
+      )
+      /** Git 分支标识（detached 或非仓库为空；旧索引无 git 字段）。 */
+      const gitBranch = typeof index?.git?.branch === 'string' ? index.git.branch : ''
+      /** 详情行的 import 级反向引用（旧索引无 edges 时为空）。 */
+      const detailReferences = useMemo(
+        () => (detail ? referencesForPath(index, detail.path) : []),
+        [detail, index],
+      )
+      /** 详情行的 import 级出边（本文件依赖谁；depth 可展开传递依赖）。 */
+      const detailImports = useMemo(
+        () => (detail ? importsForPath(index, detail.path, importDepth) : []),
+        [detail, index, importDepth],
+      )
+      /** 详情行的依赖方（文件级，反向影响面），与出边共用同一展开深度。 */
+      const detailDependents = useMemo(
+        () => (detail ? dependentsForPath(index, detail.path, importDepth) : []),
+        [detail, index, importDepth],
+      )
+      /** 详情行的 Wiki 引用反查（清单 v1 页面级 / v2 章节级）。 */
+      const detailWikiCitations = useMemo(
+        () => (detail ? wikiCitationsForPath(wikis, detail.path) : []),
+        [detail, wikis],
+      )
+      /**
+       * 从详情跳转到被引用的 Wiki 页面：按 slug/标题匹配当前工作区的页面。
+       * @param {{slug?:string, title:string}} citation - 反查结果。
+       * @returns {void}
+       */
+      const openWikiCitation = (citation) => {
+        const entry = wikis.find(w => (citation.slug && w.slug === citation.slug) || w.title === citation.title)
+        if (!entry) return
+        setTab('wiki')
+        openWikiEntry(entry, citation.sections?.[0] ?? '')
+      }
 
       /* 样式（主题令牌 + 字面量回退） */
       const buttonStyle = {
@@ -828,11 +1724,6 @@ window.__ModuleLoader__.load({
         color: 'var(--dsw-alias-label-primary, #111827)',
       }
       const muted = { color: 'var(--dsw-alias-label-secondary, #6b7280)' }
-      const cardChip = {
-        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
-        borderRadius: 'var(--dsw-radius-md, 12px)', padding: 14, cursor: 'pointer',
-        background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
-      }
 
       /** 筛选切换按钮（带计数与 aria-pressed）。 */
       const filterButton = (value, label, count) => h('button', {
@@ -841,6 +1732,24 @@ window.__ModuleLoader__.load({
         onClick: guard('filter', () => setFilter(value)),
         style: filter === value ? primaryStyle : buttonStyle,
       }, `${label}${count > 0 ? ` ${count}` : ''}`)
+
+      /** 卡片列表（网格/列表两种视图；分组与非分组共用）。 */
+      const renderCards = (list) => (view === 'grid'
+        ? h('div', {
+            style: {
+              display: 'grid', gap: 12,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            },
+          },
+          ...list.map(r => h(CardTile, {
+            key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
+          })),
+        )
+        : h('div', null,
+          ...list.map(r => h(CardRow, {
+            key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
+          })),
+        ))
 
       return h(ErrorBoundary, null, h('div', {
         // 外层（滚动器）：宿主 mainPanel 为 overflow:hidden 的 flex 列——
@@ -931,6 +1840,40 @@ window.__ModuleLoader__.load({
           h('span', null, tt('statSymbols', { n: index.stats?.symbols ?? rows.reduce((a, r) => a + r.symbols, 0) })),
           h('span', null, tt('statCards', { n: cards.length })),
           h('span', null, tt('statDocs', { n: docs })),
+          languageCount > 0 ? h('span', null, tt('statLangs', { n: languageCount })) : null,
+          (index.stats?.skipped ?? 0) > 0
+            ? h('span', {
+              title: t('statSkippedHint'),
+            }, tt('statSkipped', { n: index.stats.skipped }))
+            : null,
+          indexWarnings.length > 0
+            ? h('button', {
+              type: 'button',
+              'aria-expanded': warningsOpen,
+              'aria-controls': 'repowiki-index-warnings',
+              title: `${indexWarnings.slice(0, 3).join('\n')}${indexWarnings.length > 3 ? `\n… +${indexWarnings.length - 3}` : ''}\n${t('warningsToggleHint')}`,
+              onClick: guard('toggle-warnings', () => setWarningsOpen(v => !v)),
+              style: {
+                background: 'transparent', border: 'none', padding: 0, margin: 0,
+                font: 'inherit', color: 'inherit', cursor: 'pointer',
+                textDecoration: 'underline', textUnderlineOffset: 2,
+              },
+            }, tt('statWarnings', { n: indexWarnings.length }))
+            : null,
+          gitBranch ? h('span', null, tt('gitBranch', { name: gitBranch })) : null,
+          // 最近一次抽取快照（knowledge/<locale>/_index.json 的 lastRun）：
+          // 失败数 > 0 用错误色提示，便于不打开会话就发现问题
+          lastExtract && h('span', {
+            title: typeof lastExtract.generatedAt === 'string' ? lastExtract.generatedAt : undefined,
+            role: lastExtract.failed > 0 ? 'status' : undefined,
+            style: lastExtract.failed > 0
+              ? { color: 'var(--dsw-alias-state-error-primary, #dc2626)' }
+              : undefined,
+          }, tt('lastExtract', {
+            n: lastExtract.extracted ?? 0,
+            failed: lastExtract.failed ?? 0,
+            retried: lastExtract.retried ?? 0,
+          })),
           h('span', null, latestUpdate
             ? tt('updated', { when: latestUpdate.slice(0, 10) })
             : t('never')),
@@ -938,6 +1881,59 @@ window.__ModuleLoader__.load({
             style: { color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
             role: 'status',
           }, tt('staleHint', { n: staleSet.size })),
+        ),
+
+        // 索引告警明细：点击计数展开全部（tooltip 只列前三条）
+        !overview && status === 'ready' && index && warningsOpen && indexWarnings.length > 0 && h('ul', {
+          id: 'repowiki-index-warnings',
+          'aria-label': t('warningsDetails'),
+          style: { margin: '0 0 12px', paddingLeft: 20, fontSize: 12, lineHeight: 1.7, ...muted },
+        },
+          ...indexWarnings.map((warning, index) => h('li', { key: `${index}-${warning}` }, warning))),
+
+        // 语言分布：多语言时按文件数展示（可读语言名，最多 8 个 + 溢出计数）
+        !overview && status === 'ready' && index && languageDistribution.length > 1 && h('div', {
+          'aria-label': t('langDistribution'),
+          style: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 12 },
+        },
+          h('span', { style: { fontSize: 12, ...muted } }, t('langDistribution')),
+          ...languageDistribution.slice(0, 8).map(([lang, count]) => h('span', {
+            key: lang,
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              color: 'var(--dsw-alias-label-secondary, #6b7280)',
+            },
+          }, `${languageLabel(lang)} ${count}`)),
+          languageDistribution.length > 8 && h('span', { style: { fontSize: 11.5, ...muted } },
+            tt('langsMore', { n: languageDistribution.length - 8 })),
+        ),
+
+        // 高风险入口：被最多文件依赖的文件（改动影响面最大，与状态工具同口径）
+        !overview && status === 'ready' && index && hubs.length > 0 && h('div', {
+          'aria-label': t('hubLabel'),
+          title: t('hubHint'),
+          style: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 12 },
+        },
+          h('span', { style: { fontSize: 12, ...muted } }, t('hubLabel')),
+          ...hubs.map(hub => h('button', {
+            key: hub.path,
+            type: 'button',
+            onClick: guard('open-hub', () => {
+              const row = rowByPath.get(hub.path)
+              if (row) openDetail(row)
+            }),
+            'aria-label': `${hub.path} (${hub.dependents})`,
+            title: hub.path,
+            style: {
+              fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+              borderRadius: 'var(--dsw-radius-sm, 6px)',
+              border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+              background: 'transparent', fontFamily: 'inherit', cursor: 'pointer',
+              color: 'var(--dsw-alias-label-secondary, #6b7280)',
+            },
+          }, `${hub.path} (${hub.dependents})`)),
         ),
 
         // 状态分支（单库模式）
@@ -960,21 +1956,21 @@ window.__ModuleLoader__.load({
 
         // 主区：卡片/Wiki 双页签 + 筛选 + 搜索 + 视图切换 + 列表（单库模式）
         !overview && status === 'ready' && h('div', null,
-          h('div', { style: { display: 'flex', gap: 8, marginBottom: 12 } },
+          h('div', { role: 'tablist', 'aria-label': t('title'), style: { display: 'flex', gap: 8, marginBottom: 12 } },
             h('button', {
-              type: 'button', 'aria-pressed': tab === 'cards',
+              type: 'button', role: 'tab', 'aria-selected': tab === 'cards', 'aria-pressed': tab === 'cards',
               style: tab === 'cards' ? primaryStyle : buttonStyle,
               onClick: guard('tab-cards', () => setTab('cards')),
             }, t('viewCards')),
             h('button', {
               ref: wikiTabRef,
-              type: 'button', 'aria-pressed': tab === 'wiki',
+              type: 'button', role: 'tab', 'aria-selected': tab === 'wiki', 'aria-pressed': tab === 'wiki',
               style: tab === 'wiki' ? primaryStyle : buttonStyle,
               onClick: guard('tab-wiki', () => setTab('wiki')),
             }, `${t('viewWiki')} ${wikis.length}`),
             h('button', {
               ref: memoryTabRef,
-              type: 'button', 'aria-pressed': tab === 'memory',
+              type: 'button', role: 'tab', 'aria-selected': tab === 'memory', 'aria-pressed': tab === 'memory',
               style: tab === 'memory' ? primaryStyle : buttonStyle,
               onClick: guard('tab-memory', () => setTab('memory')),
             }, `${t('viewMemory')} ${memories.length}`),
@@ -988,6 +1984,7 @@ window.__ModuleLoader__.load({
               filterButton('pending', t('filterPending'), pendingCount),
               filterButton('stale', t('staleFilter'), staleSet.size),
             h('input', {
+              ref: searchRef,
               type: 'search', style: { ...inputStyle, maxWidth: 280 },
               placeholder: t('searchPlaceholder'),
               value: query,
@@ -1004,6 +2001,47 @@ window.__ModuleLoader__.load({
               onClick: guard('view-list', () => setView('list')), 'aria-pressed': view === 'list',
               'aria-label': t('viewList'),
             }, t('viewList')),
+            h('button', {
+              type: 'button', style: group ? primaryStyle : buttonStyle,
+              onClick: guard('group-cards', () => setGroup(v => !v)), 'aria-pressed': group,
+            }, t('groupBy')),
+            h('select', {
+              value: sortBy,
+              onChange: guard('sort-cards', (e) => setSortBy(e.target.value)),
+              style: { ...inputStyle, maxWidth: 170 },
+              'aria-label': t('sortBy'),
+            },
+              h('option', { value: 'path' }, t('sortPath')),
+              h('option', { value: 'title' }, t('sortTitle')),
+              h('option', { value: 'updated' }, t('sortUpdated')),
+            ),
+            // 语言筛选：索引里只有一种语言时不占位
+            langOptions.length > 1 && h('select', {
+              value: langFilter,
+              onChange: guard('filter-lang', (e) => setLangFilter(e.target.value)),
+              style: { ...inputStyle, maxWidth: 170 },
+              'aria-label': t('filterLang'),
+            },
+              h('option', { value: '' }, t('allLangs')),
+              ...langOptions.map(([lang, count]) => h('option', { key: lang, value: lang }, `${languageLabel(lang)} (${count})`)),
+            ),
+          ),
+          topTags.length > 0 && h('div', {
+            style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 },
+          },
+            h('span', { style: { fontSize: 12, ...muted } }, t('tagsLabel')),
+            ...topTags.map(tag => h('button', {
+              key: tag,
+              type: 'button',
+              'aria-pressed': tagFilter === tag,
+              onClick: guard('filter-tag', () => setTagFilter(tagFilter === tag ? '' : tag)),
+              style: tagChipStyle(tagFilter === tag),
+            }, tag)),
+            tagFilter && h('button', {
+              type: 'button',
+              onClick: guard('clear-tag', () => setTagFilter('')),
+              style: tagChipStyle(false),
+            }, t('clearTag')),
           ),
           filtered.length === 0
             ? h('p', { style: { ...muted }, role: 'status' },
@@ -1015,33 +2053,51 @@ window.__ModuleLoader__.load({
                       pending: 'emptyDone',
                       stale: 'emptyStale',
                     }[filter]))
-            : (view === 'grid'
-                ? h('div', {
-                    style: {
-                      display: 'grid', gap: 12,
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                    },
+            : (grouped
+                ? h('div', null,
+                  ...grouped.map(([modulePath, list]) => h('section', {
+                    key: modulePath, style: { marginBottom: 16 },
                   },
-                  ...filtered.map((r) => h(CardTile, {
-                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
-                  })),
-                )
-                : h('div', null,
-                  ...filtered.map((r) => h(CardRow, {
-                    key: r.path, row: r, t, tt, onOpen: guard('open-card', () => openDetail(r)),
-                  })),
-                )),
+                    h('h3', {
+                      style: {
+                        margin: '0 0 8px', fontSize: 14, fontWeight: 600,
+                        color: 'var(--dsw-alias-label-primary, #111827)',
+                      },
+                    }, modulePath === '.' ? t('groupRoot') : modulePath),
+                    renderCards(list))))
+                : renderCards(visible)),
+          filtered.length > 0 && h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, fontSize: 12, ...muted },
+          },
+            h('span', null, tt('showing', { shown: visible.length, total: filtered.length })),
+            filtered.length > visible.length && h('button', {
+              type: 'button', style: buttonStyle,
+              onClick: guard('load-more', () => setVisibleCount(n => n + 120)),
+            }, tt('loadMore', { n: filtered.length - visible.length })),
+          ),
           // 内联详情列（切片 1 不开新页面；Escape 或按钮关闭）
           detail && h(DetailPane, {
-            row: detail, t, tt, onClose: guard('close-detail', () => closeDetail()),
+            row: detail, references: detailReferences, imports: detailImports,
+            dependents: detailDependents,
+            importDepth, onImportDepth: setImportDepth,
+            wikiCitations: detailWikiCitations,
+            onOpenWiki: guard('open-wiki-citation', openWikiCitation),
+            onOpenFile: guard('open-file', (path) => {
+              const row = rowByPath.get(path)
+              if (row) openDetail(row)
+            }),
+            t, tt, onClose: guard('close-detail', () => closeDetail()),
           }),
           ),
           // Wiki 页签：页面列表与单页原文浏览（切片 3）
           tab === 'wiki' && h(WikiPanel, {
             entries: wikis,
             selected: wikiSelected,
-            onSelect: guard('open-wiki', (entry) => openWiki(entry)),
-            onClose: guard('close-wiki', () => closeWiki()),
+            query: wikiQuery,
+            targetSection: wikiTargetSection,
+            onQuery: setWikiQuery,
+            onSelect: guard('open-wiki', (entry) => openWikiEntry(entry)),
+            onClose: guard('close-wiki', () => { setWikiTargetSection(''); closeWiki() }),
             t, tt,
           }),
           // 记忆页签：条目列表（状态徽章）与单条原文浏览（Phase 4）
@@ -1063,7 +2119,7 @@ window.__ModuleLoader__.load({
         }),
 
         message && h('p', {
-          role: 'status',
+          role: 'status', 'aria-live': 'polite',
           style: { margin: '12px 0 0', fontSize: 14, color: 'var(--dsw-alias-label-primary, #111827)' },
         }, message),
         notice,
@@ -1136,6 +2192,8 @@ window.__ModuleLoader__.load({
               h('span', null, tt('statSymbols', { n: row.symbols })),
               h('span', null, tt('statCards', { n: row.cards })),
               h('span', null, tt('statDocs', { n: row.docs })),
+              row.languages > 0 ? h('span', null, tt('statLangs', { n: row.languages })) : null,
+              row.branch ? h('span', null, tt('gitBranch', { name: row.branch })) : null,
               row.updatedAt
                 ? h('span', null, tt('updated', { when: row.updatedAt.slice(0, 10) }))
                 : h('span', null, t('never')),
@@ -1225,6 +2283,13 @@ window.__ModuleLoader__.load({
               textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               color: 'var(--dsw-alias-label-primary, #111827)' },
           }, card ? card.title : row.path),
+          row.cycleSize > 0 && h('span', {
+            role: 'img',
+            'aria-label': cycleBadgeHint(row.cycleSize, row.cycleSample, tt),
+            title: cycleBadgeHint(row.cycleSize, row.cycleSample, tt),
+            style: { flex: 'none', fontSize: 12, lineHeight: '16px',
+              color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+          }, '⟲'),
         ),
         h('div', {
           style: { fontSize: 12, marginBottom: 8, overflow: 'hidden',
@@ -1236,7 +2301,7 @@ window.__ModuleLoader__.load({
           card && card.tags.length > 0
             ? card.tags.map((tag) => h('span', { key: tag, style: tagStyle() }, tag))
             : h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' } },
-                `${row.lang || ''} · ${tt('detailSymbols', { n: row.symbols })}`),
+                `${languageLabel(row.lang || '')} · ${tt('detailSymbols', { n: row.symbols })}`),
         ),
       )
     }
@@ -1261,6 +2326,13 @@ window.__ModuleLoader__.load({
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             color: 'var(--dsw-alias-label-primary, #111827)' },
         }, card ? `${card.title} · ${row.path}` : row.path),
+        row.cycleSize > 0 && h('span', {
+          role: 'img',
+          'aria-label': cycleBadgeHint(row.cycleSize, row.cycleSample, tt),
+          title: cycleBadgeHint(row.cycleSize, row.cycleSample, tt),
+          style: { flex: 'none', fontSize: 12, lineHeight: '16px',
+            color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, '⟲'),
         h('span', { style: { fontSize: 11.5, lineHeight: 16, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' } },
           tt('detailSymbols', { n: row.symbols })),
         h('span', {
@@ -1269,12 +2341,27 @@ window.__ModuleLoader__.load({
       )
     }
 
-    /** 详情列（选中条目的元数据与摘要）。打开时聚焦关闭按钮，便于键盘用户直接操作。 */
-    function DetailPane({ row, t, tt, onClose }) {
+    /** 详情列（选中条目的元数据、摘要、出边与反向引用）。打开时聚焦关闭按钮，便于键盘用户直接操作。 */
+    function DetailPane({ row, references = [], imports = [], dependents = [], importDepth = 1, onImportDepth, wikiCitations = [], onOpenWiki, onOpenFile, t, tt, onClose }) {
       const { card } = row
       const closeRef = useRef(null)
       const detailRef = useRef(null)
+      const [copyState, setCopyState] = useState('')
       useEffect(() => { closeRef.current?.focus?.() }, [])
+      /**
+       * 复制源文件相对路径；剪贴板不可用时显示可读失败行。
+       */
+      const copyPath = async () => {
+        try {
+          if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+            throw new Error('clipboard unavailable')
+          }
+          await navigator.clipboard.writeText(row.path)
+          setCopyState('copied')
+        } catch {
+          setCopyState('failed')
+        }
+      }
       // 当新卡片打开时，自动滚动到详情面板，让用户能看到完整内容
       useEffect(() => {
         const el = detailRef.current
@@ -1282,6 +2369,31 @@ window.__ModuleLoader__.load({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
       }, [row])
+      /**
+       * 依赖方向条目的文件链接（点击打开该文件详情）。
+       * @param {{path:string, line?:number}} entry - 出边/依赖方条目。
+       * @returns {object} 按钮元素（内含等宽路径文本）。
+       */
+      const fileLink = (entry) => h('button', {
+        type: 'button',
+        onClick: () => onOpenFile?.(entry.path),
+        'aria-label': tt('openFile', { path: entry.path }),
+        style: {
+          background: 'transparent', border: 'none', padding: 0, margin: 0,
+          font: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'left',
+        },
+      }, h('code', {
+        style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          color: 'var(--dsw-alias-label-primary, #111827)' },
+      }, formatReferenceSite(entry)))
+      /**
+       * 依赖方向条目的后缀（符号与跳数）：直接边只列符号，传递边标注 hops。
+       * @param {{symbols:string[], depth:number}} entry - 出边/依赖方条目。
+       * @returns {string} 形如 ` (sym, 2 hops)`，无信息时为空串。
+       */
+      const edgeDetail = (entry) => entry.depth > 1
+        ? ` (${entry.symbols.length > 0 ? `${entry.symbols.join(', ')}, ` : ''}${entry.depth} hops)`
+        : (entry.symbols.length > 0 ? ` (${entry.symbols.join(', ')})` : '')
       return h('div', {
         ref: detailRef,
         role: 'region', 'aria-label': card ? card.title : row.path,
@@ -1302,11 +2414,19 @@ window.__ModuleLoader__.load({
             }, row.path),
           ),
           h('button', {
+            type: 'button', onClick: copyPath,
+            style: { ...chipButtonStyle(), width: 'auto', padding: '0 10px', fontSize: 12 },
+            'aria-label': t('copyPath'),
+          }, copyState === 'copied' ? t('copied') : t('copyPath')),
+          h('button', {
             ref: closeRef,
             type: 'button', onClick: onClose, style: chipButtonStyle(),
             'aria-label': t('detailClose'),
           }, '×'),
         ),
+        copyState === 'failed' && h('p', {
+          role: 'status', style: { fontSize: 12, margin: '0 0 8px', ...mutedStyle() },
+        }, t('copyFailed')),
         card
           ? h('div', null,
               h('div', {
@@ -1332,14 +2452,178 @@ window.__ModuleLoader__.load({
                   }, card.summary || t('never'))]),
             )
           : h('p', { style: { fontSize: 13, ...mutedStyle() } }, t('pendingHint')),
+        // 循环依赖摘要：组大小 + 代表性环路径（短环）；其他文件可点击跳转
+        row.cycleSize > 0 && h('div', {
+          style: { marginTop: 12, fontSize: 12.5, lineHeight: 1.7,
+            color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        },
+          `⟲ ${tt('cycleBadgeHint', { n: row.cycleSize })}`,
+          ...(Array.isArray(row.cycleSample) && row.cycleSample.length > 2 && row.cycleSample.length <= 4
+            ? [
+              h('span', { key: 'cycle-sep' }, ' · '),
+              ...row.cycleSample.flatMap((member, index) => {
+                const nodes = []
+                if (index > 0) nodes.push(h('span', { key: `arrow${index}` }, ' → '))
+                nodes.push(member === row.path
+                  ? h('span', { key: `self${index}` }, member)
+                  : h('button', {
+                    key: `member${index}`,
+                    type: 'button',
+                    onClick: () => onOpenFile?.(member),
+                    'aria-label': tt('openFile', { path: member }),
+                    style: {
+                      background: 'transparent', border: 'none', padding: 0, margin: 0,
+                      font: 'inherit', color: 'inherit', cursor: 'pointer',
+                      textDecoration: 'underline', textUnderlineOffset: 2,
+                    },
+                  }, member))
+                return nodes
+              }),
+            ]
+            : [])),
+        // 依赖方向深度：同时控制出边（依赖谁）与依赖方（谁依赖我）的展开
+        (imports.length > 0 || dependents.length > 0) && h('div', {
+          style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 },
+        },
+          h('div', {
+            style: { fontSize: 12.5, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          }, t('importDepthLabel')),
+          h('div', {
+            role: 'group',
+            'aria-label': t('importDepthLabel'),
+            style: { display: 'flex', gap: 4 },
+          },
+            ...[1, 2, 3].map(level => h('button', {
+              key: level,
+              type: 'button',
+              'aria-pressed': importDepth === level,
+              'aria-label': tt('importDepthOption', { n: level }),
+              onClick: () => onImportDepth?.(level),
+              style: {
+                ...chipButtonStyle(), padding: '0 7px', fontSize: 11,
+                ...(importDepth === level
+                  ? {
+                    borderColor: 'var(--dsw-alias-state-business-primary, #2563eb)',
+                    color: 'var(--dsw-alias-state-business-primary, #2563eb)',
+                  }
+                  : {}),
+              },
+            }, String(level)))),
+        ),
+        imports.length > 0 && h('div', { style: { marginTop: 10 } },
+          h('div', {
+            style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
+              color: 'var(--dsw-alias-label-primary, #111827)' },
+          }, t('detailImports')),
+          ...imports.slice(0, 8).map((entry, i) => h('div', {
+            key: `${entry.path}\u0000${entry.line ?? 0}\u0000${i}`,
+            style: { fontSize: 12.5, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          },
+            `${entry.depth > 1 ? '⇢' : (entry.mutual ? '↔' : '→')} `,
+            fileLink(entry),
+            edgeDetail(entry),
+          )),
+          imports.length > 8 && h('div', {
+            style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+          }, tt('detailImportsMore', { n: imports.length - 8 })),
+        ),
+        // 依赖方（文件级反向影响面）：谁 import 了本文件，可展开间接依赖方
+        dependents.length > 0 && h('div', { style: { marginTop: 14 } },
+          h('div', {
+            style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
+              color: 'var(--dsw-alias-label-primary, #111827)' },
+          }, t('detailDependents')),
+          ...dependents.slice(0, 8).map((entry, i) => h('div', {
+            key: `${entry.path}\u0000${entry.line ?? 0}\u0000${i}`,
+            style: { fontSize: 12.5, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          },
+            `${entry.depth > 1 ? '⇠' : (entry.mutual ? '↔' : '←')} `,
+            fileLink(entry),
+            edgeDetail(entry),
+          )),
+          dependents.length > 8 && h('div', {
+            style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+          }, tt('detailImportsMore', { n: dependents.length - 8 })),
+        ),
+        references.length > 0 && h('div', { style: { marginTop: 14 } },
+          h('div', {
+            style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
+              color: 'var(--dsw-alias-label-primary, #111827)' },
+          }, t('detailReferences')),
+          ...references.slice(0, 8).map(ref => h('div', {
+            key: ref.symbol,
+            style: { fontSize: 12.5, lineHeight: 1.7, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          },
+            h('code', {
+              style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                color: 'var(--dsw-alias-label-primary, #111827)' },
+            }, ref.symbol),
+            ` ← ${ref.froms.map(formatReferenceSite).join(', ')}`,
+          )),
+          references.length > 8 && h('div', {
+            style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+          }, tt('detailRefsMore', { n: references.length - 8 })),
+        ),
+        wikiCitations.length > 0 && h('div', { style: { marginTop: 14 } },
+          h('div', {
+            style: { fontSize: 13, fontWeight: 600, marginBottom: 6,
+              color: 'var(--dsw-alias-label-primary, #111827)' },
+          }, t('detailWikiCitations')),
+          ...wikiCitations.slice(0, 6).map(citation => h('div', {
+            key: `${citation.slug}\u0000${citation.title}`,
+            style: {
+              display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6,
+              fontSize: 12.5, lineHeight: 1.7,
+            },
+          },
+            h('button', {
+              type: 'button',
+              onClick: () => onOpenWiki?.(citation),
+              'aria-label': citation.title,
+              style: {
+                background: 'transparent', border: 'none', padding: 0, font: 'inherit',
+                cursor: 'pointer', textAlign: 'left', textDecoration: 'underline',
+                color: 'var(--dsw-alias-state-business-primary, #2563eb)',
+              },
+            }, citation.title),
+            // 章节 chips：多章节引用可逐节跳转（页面标题按钮仍跳到首节）
+            ...citation.sections.slice(0, 4).map(section => h('button', {
+              key: section,
+              type: 'button',
+              title: section,
+              onClick: () => onOpenWiki?.({ ...citation, sections: [section] }),
+              'aria-label': `${citation.title} · ${section}`,
+              style: {
+                font: 'inherit', fontSize: 12, padding: '1px 8px', borderRadius: 999,
+                border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+                background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+                color: 'var(--dsw-alias-label-secondary, #6b7280)', cursor: 'pointer',
+              },
+            }, section)),
+            citation.sections.length > 4 && h('span', {
+              style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+            }, tt('detailRefsMore', { n: citation.sections.length - 4 })),
+          )),
+          wikiCitations.length > 6 && h('div', {
+            style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+          }, tt('detailRefsMore', { n: wikiCitations.length - 6 })),
+        ),
       )
     }
 
-    /** Wiki 面板：页面列表与单页原文浏览（切片 3，无 Markdown 渲染器，暂以原文呈现）。 */
     /** Wiki 面板：页面列表与单页原文浏览；打开页面时聚焦返回按钮。 */
-    function WikiPanel({ entries, selected, onSelect, onClose, t }) {
+    function WikiPanel({ entries, selected, query, targetSection = '', onQuery, onSelect, onClose, t }) {
       const backRef = useRef(null)
       useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
+      // 深链：页面渲染后滚动到目标章节（锚点 id 与 renderMarkdown 的标题锚一致）
+      useEffect(() => {
+        if (!selected || !targetSection) return
+        const id = anchorOf(targetSection, new Map())
+        const el = typeof document !== 'undefined' ? document.getElementById?.(id) : null
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, [selected, targetSection])
       if (selected) {
         return h('div', null,
           h('div', {
@@ -1361,27 +2645,65 @@ window.__ModuleLoader__.load({
       if (entries.length === 0) {
         return h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('wikiEmpty'))
       }
+      const q = query.trim().toLowerCase()
+      const filtered = q
+        ? entries.filter(entry => `${entry.title}\n${entry.file}`.toLowerCase().includes(q))
+        : entries
+      const groups = new Map()
+      for (const entry of filtered) {
+        const key = entry.module || t('wikiGeneral')
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(entry)
+      }
+      const showModule = entries.some(entry => entry.module)
       return h('div', null,
-        ...entries.map((entry) => h('button', {
-          key: entry.file,
-          type: 'button',
-          onClick: () => onSelect(entry),
+        h('input', {
+          type: 'search',
+          value: query,
+          onChange: (e) => onQuery(e.target.value),
+          placeholder: t('wikiSearch'),
+          'aria-label': t('wikiSearch'),
           style: {
-            ...cardChipStyle(),
-            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-            marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+            width: '100%', boxSizing: 'border-box', marginBottom: 12, padding: '8px 10px',
+            borderRadius: 'var(--dsw-radius-sm, 8px)', fontSize: 13,
+            border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+            background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+            color: 'var(--dsw-alias-label-primary, #111827)',
           },
-          'aria-label': entry.title,
-        },
-          h('span', {
-            style: { flex: 1, fontSize: 13, overflow: 'hidden',
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              color: 'var(--dsw-alias-label-primary, #111827)' },
-          }, entry.title),
-          h('span', {
-            style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
-          }, entry.generatedAt.slice(0, 10) || '—'),
-        )),
+        }),
+        filtered.length === 0
+          ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiEmpty'))
+          : [...groups.entries()].map(([module, list]) => h('div', { key: module, style: { marginBottom: 12 } },
+            showModule && h('h3', {
+              style: {
+                margin: '0 0 8px', fontSize: 13, fontWeight: 600,
+                color: 'var(--dsw-alias-label-secondary, #6b7280)',
+              },
+            }, module),
+            ...list.map(entry => h('button', {
+              key: entry.file,
+              type: 'button',
+              onClick: () => onSelect(entry),
+              style: {
+                ...cardChipStyle(),
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                marginBottom: 8, padding: '8px 14px', textAlign: 'left',
+              },
+              'aria-label': entry.title,
+            },
+              h('span', {
+                style: { flex: 1, fontSize: 13, overflow: 'hidden',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  color: 'var(--dsw-alias-label-primary, #111827)' },
+              }, entry.title),
+              entry.orphan && h('span', {
+                style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+              }, t('wikiOrphan')),
+              h('span', {
+                style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+              }, entry.generatedAt.slice(0, 10) || '—'),
+            )),
+          )),
       )
     }
 
@@ -1454,6 +2776,309 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 极简 mermaid flowchart 渲染（零依赖，纯 SVG）。
+     * 只支持生成 prompt 约定出的常见子集：`flowchart|graph TD|TB|LR`、
+     * 节点 `id[label]` / `id(label)` / `id{label}` / `id((label))`（含
+     * `[[..]]`、`{{..}}`）、边 `-->` / `---` / `==>` / `-.->`（可带
+     * `|label|`），以及 `subgraph 名称` … `end` 分组（渲染为虚线框 +
+     * 组名）。`%%` 注释与 classDef/style 等指令行跳过；其他图类型
+     * （sequenceDiagram 等）返回 null，由调用方降级为代码块。
+     * 布局为确定性分层：TD 按最长路径分层、层内按出现顺序排列；LR 交换
+     * 轴。环回边反向连接，环不会无限展开（迭代上限 12 层）。
+     * @param {string} source - mermaid 源码（围栏内文本）。
+     * @param {number} key - React key。
+     * @returns {object|null} SVG 元素；无法识别时 null。
+     */
+    function renderMermaidDiagram(source, key) {
+      const ARROWS = ['-.->', '==>', '-->', '---']
+      const lines = String(source ?? '').split('\n').map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('%%'))
+      const header = lines.length > 0 ? /^(?:flowchart|graph)\s+(TD|TB|BT|LR|RL)?/i.exec(lines[0]) : null
+      if (!header) return null
+      const dir = /^(?:LR|RL)$/i.test(header[1] ?? '') ? 'LR' : 'TD'
+      const DIRECTIVE = /^(?:subgraph|end\b|classDef\b|class\s|style\s|linkStyle\b|click\s|direction\s)/
+      /** @type {Map<string, {label:string, shape:string}>} */
+      const nodes = new Map()
+      /**
+       * 解析一个节点引用（id + 可选形状/标签）。
+       * @param {string} raw - 原文片段。
+       * @returns {{id:string, label:string, shape:string}|null} 节点；无法识别时 null。
+       */
+      const parseNode = (raw) => {
+        const text = String(raw ?? '').trim()
+        const m = /^([A-Za-z0-9_]+)\s*(.*)$/.exec(text)
+        if (!m) return null
+        const id = m[1]
+        const rest = (m[2] ?? '').trim()
+        let shape = 'rect'
+        let label = id
+        /**
+         * 尝试剥离一层形状括号。
+         * @param {string} open - 起始标记。
+         * @param {string} close - 结束标记。
+         * @param {string} name - 形状名。
+         * @returns {boolean} 是否匹配。
+         */
+        const wrap = (open, close, name) => {
+          if (!rest.startsWith(open) || !rest.endsWith(close) || rest.length <= open.length + close.length - 1) return false
+          shape = name
+          label = rest.slice(open.length, rest.length - close.length).trim()
+          return true
+        }
+        wrap('((', '))', 'circle') || wrap('[(', ')]', 'round') || wrap('[[', ']]', 'rect')
+          || wrap('{{', '}}', 'diamond') || wrap('[', ']', 'rect')
+          || wrap('(', ')', 'round') || wrap('{', '}', 'diamond')
+        label = label.replace(/^["']+|["']+$/g, '')
+        return { id, label: label || id, shape }
+      }
+      /** @type {Array<{from:string, to:string, label:string}>} */
+      const edges = []
+      /** @type {Map<string, string[]>} subgraph 组名 → 成员节点（按出现顺序）。 */
+      const groups = new Map()
+      let currentGroup = null
+      /**
+       * 把新声明的节点登记到当前 subgraph（已在别的组时保持原归属）。
+       * @param {string} id - 节点 id。
+       * @returns {void}
+       */
+      const joinGroup = (id) => {
+        if (!currentGroup) return
+        const members = groups.get(currentGroup)
+        if (members && !members.includes(id)) members.push(id)
+      }
+      for (const line of lines.slice(1)) {
+        const sub = /^subgraph\s+(.+)$/i.exec(line)
+        if (sub) {
+          const raw = sub[1].trim()
+          const bracket = /\[(.*)\]$/.exec(raw)
+          const name = (bracket ? bracket[1] : raw).replace(/^["']+|["']+$/g, '').trim() || 'group'
+          currentGroup = name
+          if (!groups.has(name)) groups.set(name, [])
+          continue
+        }
+        if (/^end$/i.test(line)) {
+          currentGroup = null
+          continue
+        }
+        if (DIRECTIVE.test(line)) continue
+        // 找最早的箭头（多字符箭头优先于其前缀 ---）
+        let arrowAt = -1
+        let arrow = ''
+        for (const candidate of ARROWS) {
+          const at = line.indexOf(candidate)
+          if (at >= 0 && (arrowAt < 0 || at < arrowAt)) {
+            arrowAt = at
+            arrow = candidate
+          }
+        }
+        if (arrowAt < 0) {
+          const node = parseNode(line)
+          if (node) {
+            const known = nodes.has(node.id)
+            if (!known) nodes.set(node.id, { label: node.label, shape: node.shape })
+            if (!known) joinGroup(node.id)
+          }
+          continue
+        }
+        const left = parseNode(line.slice(0, arrowAt))
+        let rightText = line.slice(arrowAt + arrow.length).trim()
+        let edgeLabel = ''
+        if (rightText.startsWith('|')) {
+          const close = rightText.indexOf('|', 1)
+          if (close > 0) {
+            edgeLabel = rightText.slice(1, close).trim()
+            rightText = rightText.slice(close + 1).trim()
+          }
+        }
+        const right = parseNode(rightText)
+        if (!left || !right) continue
+        for (const node of [left, right]) {
+          const known = nodes.get(node.id)
+          // 后出现的显式标签覆盖默认 id 标签；纯引用不覆盖已有形状
+          if (!known || node.label !== node.id) nodes.set(node.id, { label: node.label, shape: node.shape })
+          if (!known) joinGroup(node.id)
+        }
+        edges.push({ from: left.id, to: right.id, label: edgeLabel })
+      }
+      if (nodes.size === 0) return null
+
+      // 分层：迭代松弛求最长路径（环在 12 次内收敛/截断）
+      const ids = [...nodes.keys()]
+      const layer = new Map(ids.map(id => [id, 0]))
+      const maxIter = Math.min(ids.length + 1, 12)
+      for (let iter = 0; iter < maxIter; iter++) {
+        let changed = false
+        for (const edge of edges) {
+          const want = (layer.get(edge.from) ?? 0) + 1
+          if (want > (layer.get(edge.to) ?? 0)) {
+            layer.set(edge.to, want)
+            changed = true
+          }
+        }
+        if (!changed) break
+      }
+
+      const NODE_H = 30
+      /**
+       * 估算节点宽度（中文按 12px、其余按 7px 计）。
+       * @param {string} label - 节点标签。
+       * @returns {number} 像素宽度（58–240）。
+       */
+      const measure = (label) => Math.min(240, Math.max(58, Math.round(24
+        + [...label].reduce((sum, ch) => sum + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 12 : 7), 0))))
+      /** @type {Map<string, {x:number, y:number, w:number, h:number}>} */
+      const positions = new Map()
+      /** @type {Map<number, string[]>} */
+      const layers = new Map()
+      for (const id of ids) {
+        const level = layer.get(id) ?? 0
+        if (!layers.has(level)) layers.set(level, [])
+        layers.get(level).push(id)
+      }
+      const ordered = [...layers.entries()].sort((a, b) => a[0] - b[0])
+      let width = 40
+      let height = 40
+      if (dir === 'TD') {
+        let y = 32
+        for (const [, members] of ordered) {
+          let x = 18
+          for (const id of members) {
+            const w = measure(nodes.get(id).label)
+            positions.set(id, { x, y, w, h: NODE_H })
+            x += w + 26
+          }
+          width = Math.max(width, x - 26 + 18)
+          y += NODE_H + 44
+        }
+        height = Math.max(height, y - 44 + 18)
+      } else {
+        let x = 32
+        for (const [, members] of ordered) {
+          const colW = Math.max(...members.map(id => measure(nodes.get(id).label)))
+          let y = 18
+          for (const id of members) {
+            positions.set(id, { x, y, w: colW, h: NODE_H })
+            y += NODE_H + 18
+          }
+          width = Math.max(width, x + colW + 18)
+          height = Math.max(height, y - 18 + 18)
+          x += colW + 56
+        }
+      }
+
+      const EDGE_COLOR = 'var(--dsw-alias-border-l2, #9ca3af)'
+      const TEXT_COLOR = 'var(--dsw-alias-label-primary, #111827)'
+      const MUTED = 'var(--dsw-alias-label-secondary, #6b7280)'
+      const BORDER = 'var(--dsw-alias-border-l2, #d1d5db)'
+      const BG = 'var(--dsw-alias-bg-layer-1, #ffffff)'
+      const BG2 = 'var(--dsw-alias-bg-layer-2, #f9fafb)'
+      // subgraph 分组框：包围组内节点（虚线底框 + 组名），先于边/节点绘制
+      const groupElements = [...groups.entries()]
+        .filter(([, members]) => members.some(id => positions.has(id)))
+        .map(([name, members], index) => {
+          const rects = members.map(id => positions.get(id)).filter(Boolean)
+          const minX = Math.min(...rects.map(r => r.x)) - 12
+          const minY = Math.min(...rects.map(r => r.y)) - 24
+          const maxX = Math.max(...rects.map(r => r.x + r.w)) + 12
+          const maxY = Math.max(...rects.map(r => r.y + r.h)) + 12
+          return h('g', { key: `g${index}` },
+            h('rect', {
+              x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+              rx: 8, fill: BG2, stroke: BORDER, strokeWidth: 1, strokeDasharray: '4 3',
+            }),
+            h('text', {
+              x: minX + 8, y: minY + 14, fontSize: 10, fill: MUTED,
+            }, name))
+        })
+      const edgeElements = edges.map((edge, index) => {
+        const from = positions.get(edge.from)
+        const to = positions.get(edge.to)
+        if (!from || !to) return null
+        let x1
+        let y1
+        let x2
+        let y2
+        if (dir === 'TD') {
+          x1 = from.x + from.w / 2
+          y1 = from.y + from.h
+          x2 = to.x + to.w / 2
+          y2 = to.y
+          // 目标在源上方（环回）：改从顶边连到底边，避免线穿过节点
+          if (y2 < y1) {
+            y1 = from.y
+            y2 = to.y + to.h
+          }
+        } else {
+          x1 = from.x + from.w
+          y1 = from.y + from.h / 2
+          x2 = to.x
+          y2 = to.y + to.h / 2
+          if (x2 < x1) {
+            x1 = from.x
+            x2 = to.x + to.w
+          }
+        }
+        const children = [h('line', {
+          key: 'l', x1, y1, x2, y2,
+          stroke: EDGE_COLOR, strokeWidth: 1.2,
+          markerEnd: 'url(#repowiki-mermaid-arrow)',
+        })]
+        if (edge.label) {
+          children.push(h('text', {
+            key: 't',
+            x: (x1 + x2) / 2 + 4, y: (y1 + y2) / 2 - 4,
+            fontSize: 10, fill: MUTED, textAnchor: 'middle',
+          }, edge.label))
+        }
+        return h('g', { key: `e${index}` }, ...children)
+      }).filter(Boolean)
+      const nodeElements = ids.map((id) => {
+        const pos = positions.get(id)
+        const node = nodes.get(id)
+        const cx = pos.x + pos.w / 2
+        const cy = pos.y + pos.h / 2
+        let shape
+        if (node.shape === 'diamond') {
+          shape = h('polygon', {
+            points: `${cx},${pos.y} ${pos.x + pos.w},${cy} ${cx},${pos.y + pos.h} ${pos.x},${cy}`,
+            fill: BG, stroke: BORDER, strokeWidth: 1.2,
+          })
+        } else if (node.shape === 'circle') {
+          shape = h('ellipse', {
+            cx, cy, rx: pos.w / 2, ry: pos.h / 2,
+            fill: BG, stroke: BORDER, strokeWidth: 1.2,
+          })
+        } else {
+          shape = h('rect', {
+            x: pos.x, y: pos.y, width: pos.w, height: pos.h,
+            rx: node.shape === 'round' ? pos.h / 2 : 6,
+            fill: BG, stroke: BORDER, strokeWidth: 1.2,
+          })
+        }
+        return h('g', { key: `n${id}` }, shape, h('text', {
+          x: cx, y: cy + 4, fontSize: 12, fill: TEXT_COLOR, textAnchor: 'middle',
+        }, node.label))
+      })
+      return h('svg', {
+        key,
+        viewBox: `0 0 ${Math.round(width)} ${Math.round(height)}`,
+        width: '100%',
+        role: 'img',
+        'aria-label': 'Mermaid diagram',
+        style: { display: 'block', maxWidth: '100%', height: 'auto', margin: '0 0 10px' },
+      },
+        h('defs', { key: 'defs' }, h('marker', {
+          id: 'repowiki-mermaid-arrow',
+          viewBox: '0 0 10 10', refX: 9, refY: 5,
+          markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse',
+        }, h('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: EDGE_COLOR }))),
+        ...groupElements,
+        ...edgeElements,
+        ...nodeElements,
+      )
+    }
+
+    /**
      * 极简 Markdown 渲染器（零依赖：practices 禁止引入第三方前端包，
      * 手写解析器复用宿主 React）。支持：frontmatter 跳过、#~/##~/### 标题、
      * 代码围栏、无序/有序列表、引用、分隔线、加粗、行内代码、链接。
@@ -1464,6 +3089,8 @@ window.__ModuleLoader__.load({
     function renderMarkdown(md) {
       const lines = md.split('\n')
       const blocks = []
+      // 标题锚点计数：与目录链接（#锚点）一致，重名标题追加序号
+      const headingAnchors = new Map()
       let i = 0
       let key = 0
       const headingStyle = (level) => ({
@@ -1480,14 +3107,23 @@ window.__ModuleLoader__.load({
           const end = lines.indexOf('---', 1)
           if (end > 0) { i = end + 1; continue }
         }
-        // 代码围栏
+        // 代码围栏：mermaid 尝试画成 SVG，其余（或无法识别）保持原文
         if (line.startsWith('```')) {
+          const fenceLang = line.slice(3).trim().toLowerCase()
           const codeLines = []
           i++
           while (i < lines.length && !lines[i].startsWith('```')) {
             codeLines.push(lines[i]); i++
           }
           i++ // 闭合围栏
+          if (fenceLang === 'mermaid') {
+            const diagram = renderMermaidDiagram(codeLines.join('\n'), key)
+            if (diagram) {
+              key++
+              blocks.push(diagram)
+              continue
+            }
+          }
           blocks.push(h('pre', {
             key: key++,
             style: {
@@ -1499,11 +3135,12 @@ window.__ModuleLoader__.load({
           }, codeLines.join('\n')))
           continue
         }
-        // 标题（# ~ ###）
+        // 标题（# ~ ###）：带锚点 id，供自动目录链接页内跳转
         const heading = /^(#{1,3})\s+(.*)$/.exec(line)
         if (heading) {
           const level = heading[1].length
-          blocks.push(h(`h${level + 1}`, { key: key++, style: headingStyle(level) },
+          const id = anchorOf(heading[2], headingAnchors)
+          blocks.push(h(`h${level + 1}`, { key: key++, id, style: headingStyle(level) },
             ...inlineText(heading[2])))
           i++
           continue
@@ -1570,6 +3207,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 安全链接白名单（防 Markdown 链接协议注入）。
+     * 仅允许页内锚点、http(s) 与 mailto；javascript:/data:/vbscript:/file:
+     * 与协议相对 URL 一律拒绝（渲染为普通文本）。
+     * @param {string} raw - 原始 href。
+     * @returns {string|null} 可安全渲染的 href；危险返回 null。
+     */
+    function safeHref(raw) {
+      const href = String(raw).trim()
+      // 控制字符检测是安全白名单的一部分（URL 走私/换行注入）
+      // eslint-disable-next-line no-control-regex
+      if (!href || /[\u0000-\u001f\u007f]/.test(href)) return null
+      if (href.startsWith('#')) return href
+      if (/^https?:\/\//i.test(href)) return href
+      if (/^mailto:/i.test(href)) return href
+      return null
+    }
+
+    /**
      * 行内 Markdown：**加粗**、`代码`、[文本](链接) → h 数组。
      * @param {string} text - 行内文本。
      * @returns {Array} 字符串与元素混合数组。
@@ -1582,11 +3237,14 @@ window.__ModuleLoader__.load({
         const link = /\[([^\]]+)\]\(([^)\s]+)\)/.exec(rest)
         const bold = /\*\*([^*]+)\*\*/.exec(rest)
         const code = /`([^`]+)`/.exec(rest)
+        const href = link ? safeHref(link[2]) : null
         const candidates = [
-          link ? {
+          link && href ? {
             index: link.index, end: link.index + link[0].length,
             node: h('a', {
-              key: key++, href: link[2], target: '_blank', rel: 'noreferrer noopener',
+              key: key++, href,
+              // 页内目录锚点不开新标签；外部链接保持 noopener
+              ...(href.startsWith('#') ? {} : { target: '_blank', rel: 'noreferrer noopener' }),
               style: { color: 'var(--dsw-alias-state-business-primary, #2563eb)' },
             }, link[1]),
           } : null,
@@ -1633,6 +3291,24 @@ window.__ModuleLoader__.load({
         fontSize: 11, padding: '2px 8px', borderRadius: 999, flex: 'none',
         border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
         color: 'var(--dsw-alias-label-secondary, #6b7280)',
+      }
+    }
+
+    /**
+     * 可点击标签筛选 chip 样式。
+     * @param {boolean} active - 是否选中。
+     * @returns {object} 样式。
+     */
+    function tagChipStyle(active) {
+      return {
+        fontSize: 12, padding: '2px 10px', borderRadius: 999, cursor: 'pointer',
+        border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+        background: active
+          ? 'var(--dsw-alias-state-business-primary, #2563eb)'
+          : 'var(--dsw-alias-bg-layer-1, #ffffff)',
+        color: active
+          ? 'var(--dsw-alias-label-on-color, #ffffff)'
+          : 'var(--dsw-alias-label-secondary, #6b7280)',
       }
     }
 

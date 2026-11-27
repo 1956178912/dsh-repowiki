@@ -37,12 +37,23 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
   const index = {
     schemaVersion: 2,
     generatedAt: '2026-11-26T08:00:00.000Z',
-    stats: { files: 3, symbols: 3, edges: 0, durationMs: 1, capped: false, reused: 0 },
+    stats: { files: 5, symbols: 3, edges: 5, durationMs: 1, capped: false, reused: 0 },
     stack: { technologies: [], projectName: 'demo', projectVersion: '1.0.0' },
     files: [
       { path: 'a.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-a', symbols: [{ name: 'x' }, { name: 'y' }], imports: [] },
       { path: 'b.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-b', symbols: [], imports: [] },
       { path: 'c.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-c', symbols: [{ name: 'z' }], imports: [] },
+      { path: 'd.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-d', symbols: [], imports: [] },
+      { path: 'e.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-e', symbols: [], imports: [] },
+    ],
+    // v5 边：详情应显示行号级反向引用与出边（a.js ↔ c.js 构成双向依赖；
+    // c.js → d.js 提供正向 2 跳链；e.js → c.js 提供反向 2 跳影响面）
+    edges: [
+      { from: 'b.js', to: 'a.js', kind: 'import', line: 7, symbols: ['x'] },
+      { from: 'a.js', to: 'c.js', kind: 'import', line: 3, symbols: ['z'] },
+      { from: 'c.js', to: 'a.js', kind: 'import', line: 9, symbols: ['y'] },
+      { from: 'c.js', to: 'd.js', kind: 'import', line: 12, symbols: [] },
+      { from: 'e.js', to: 'c.js', kind: 'import', line: 2, symbols: [] },
     ],
   }
   const cardA = [
@@ -64,6 +75,8 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     '## 职责 / Purpose',
     '',
     '职责正文',
+    '',
+    'BodyMarkerOnly 仅出现在卡片正文，用于验证全文检索',
     '',
     '## 关键符号 / Key symbols',
     '',
@@ -110,8 +123,42 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     '.dsh-repowiki/index.json': JSON.stringify(index),
     '.dsh-repowiki/knowledge/zh/a.md': cardA,
     '.dsh-repowiki/knowledge/zh/c.md': cardC,
+    // 知识清单：面板读 lastRun 展示"最近一次抽取"快照
+    '.dsh-repowiki/knowledge/zh/_index.json': JSON.stringify({
+      schemaVersion: 2,
+      generatedAt: '2026-11-26T08:00:00.000Z',
+      modules: [],
+      lastRun: {
+        generatedAt: '2026-11-26T08:00:00.000Z',
+        extracted: 2, skippedExisting: 0, skippedManual: 0, skippedSimple: 0,
+        orphaned: 0, failed: 0, retried: 1, capped: false,
+        concurrency: 1, attempts: 2, durationMs: 1200,
+      },
+    }),
     '.dsh-repowiki/wiki/zh/overview.md': wikiPage('概览', '这是概览正文。'),
     '.dsh-repowiki/wiki/zh/core.md': wikiPage('核心模块', '核心正文。'),
+    '.dsh-repowiki/wiki/zh/_index.json': JSON.stringify({
+      schemaVersion: 2,
+      pages: [
+        {
+          slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
+          sources: ['a.js'],
+          // 五个章节引用同一文件：验证 chip 上限（4）与溢出提示
+          sections: [
+            { heading: 'A 章节', sources: ['a.js#L1-L3'] },
+            { heading: 'B 章节', sources: ['a.js#L5'] },
+            { heading: 'C 章节', sources: ['a.js#L7'] },
+            { heading: 'D 章节', sources: ['a.js#L9'] },
+            { heading: 'E 章节', sources: ['a.js#L11'] },
+          ],
+          generatedAt: '2026-11-26T08:00:00.000Z',
+        },
+        {
+          slug: 'core', path: 'wiki/zh/core.md', title: '核心模块', order: 1,
+          sources: [], sections: [], generatedAt: '2026-11-26T08:00:00.000Z',
+        },
+      ],
+    }),
     '.dsh-repowiki/memory/zh/use-digest.md': memoryPage('用摘要判变化', 'accepted', '摘要驱动增量重建。'),
     '.dsh-repowiki/memory/zh/pending-draft.md': memoryPage('待审草稿', 'pending', '尚未审核的知识。'),
     ...overrides,
@@ -132,7 +179,7 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
 
   const wf = {
     // RemoteResult 契约：成功值在 .value；失败 {ok:false, error} 且不抛
-    async read(sessionId, rel, range, signal) {
+    async read(sessionId, rel, range, _signal) {
       const text = files[rel]
       if (text === undefined) {
         return {
@@ -266,6 +313,14 @@ test('挂载页面：选中工作区后渲染统计、已生成卡片与未生�
   assert.ok(texts.some(s => s.includes('A 卡片')), '应渲染已生成卡片标题')
   assert.ok(texts.some(s => s.includes('A 的概要文本')), '应渲染卡片摘要')
   assert.ok(texts.some(s => s.includes('b.js')), '应渲染未生成条目')
+  assert.ok(!findNode(hooks.root, (n) => n.type === 'select' && n.props['aria-label'] === 'filterLang'),
+    '单语言索引不渲染语言筛选')
+  // 抽取快照：lastRun 渲染到统计行（t 桩返回 key，占位符由真实 locale 插值）
+  const snapshot = findNode(hooks.root, (n) => n.type === 'span'
+    && collectTexts(n).some(s => s === 'lastExtract'))
+  assert.ok(snapshot, '应渲染最近一次抽取快照')
+  assert.equal(snapshot.props.style, undefined, '无失败时不应使用错误色')
+  assert.equal(snapshot.props.title, '2026-11-26T08:00:00.000Z', '快照应带生成时间 tooltip')
 
   // 状态点配色回归：已生成用 state-done-primary（紫），未生成用 border-l2（灰）
   // —— 官方 design-platform.css 定义了两个令牌的明/暗双值（见 docs/adr/0004），
@@ -276,6 +331,46 @@ test('挂载页面：选中工作区后渲染统计、已生成卡片与未生�
     && n.props.style && String(n.props.style.background).includes('border-l2'))
   assert.ok(doneDot, '已生成卡片的状态点应使用 state-done-primary 令牌')
   assert.ok(emptyDot, '未生成条目的状态点应使用 border-l2 令牌')
+})
+
+test('大索引：超过 6 万行仍能完整读取（JSON 分页预算放宽）', async () => {
+  // 索引随仓库规模增长；旧上限 12 页 × 5000 行会把大 index.json 截断成坏 JSON
+  const bigIndex = {
+    schemaVersion: 5,
+    generatedAt: '2026-11-26T08:00:00.000Z',
+    stats: { files: 1, symbols: 1 },
+    stack: { technologies: [] },
+    files: [{ path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [{ name: 'x' }], imports: [] }],
+    edges: [],
+    // 未知字段仅用于把文件撑过旧页数上限；面板应完整读取并忽略它
+    padding: Array.from({ length: 22000 }, (_, i) => ({ i })),
+  }
+  const text = JSON.stringify(bigIndex, null, 2)
+  assert.ok(text.split('\n').length > 60000, 'fixture 需超过旧上限（6 万行）')
+
+  const hooks = await mountReadyPage({ '.dsh-repowiki/index.json': text })
+  await flush()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('statFiles')), '大索引应进入就绪状态')
+  assert.ok(!texts.some(s => s.includes('loadFailed')), '分页截断不应被当作读取失败')
+})
+
+test('抽取快照：失败数 > 0 用错误色提示；清单缺失时不渲染', async () => {
+  const failedRun = JSON.stringify({
+    schemaVersion: 2,
+    modules: [],
+    lastRun: { generatedAt: '2026-11-26T09:00:00.000Z', extracted: 1, failed: 2, retried: 0 },
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/knowledge/zh/_index.json': failedRun })
+  const warn = findNode(hooks.root, (n) => n.type === 'span' && n.props.role === 'status'
+    && String(n.props.style?.color ?? '').includes('state-error-primary')
+    && collectTexts(n).some(s => s === 'lastExtract'))
+  assert.ok(warn, '失败快照应以错误色渲染并带 status 角色')
+
+  // 清单缺失：不渲染快照（不把"没有记录"误报为失败）
+  const noManifest = await mountReadyPage({ '.dsh-repowiki/knowledge/zh/_index.json': undefined })
+  assert.ok(!collectTexts(noManifest.root).some(s => s.includes('lastExtract')),
+    '无知识清单时不应渲染抽取快照')
 })
 
 test('索引缺失时走"尚未生成"分支而非失败', async () => {
@@ -309,6 +404,44 @@ test('索引缺失时走"尚未生成"分支而非失败', async () => {
   const texts = collectTexts(hooks.root)
   assert.ok(texts.some(s => s.includes('noAsset')), '索引缺失应渲染"尚未生成"提示')
   assert.ok(!texts.some(s => s.includes('loadFailed')), '不应把 not-found 当作读取失败')
+})
+
+test('只有索引、knowledge 目录缺失时按空卡片渲染（不报读取失败）', async () => {
+  // 回归：只跑过 repowiki-index 的库此前会在枚举卡片目录时抛错，
+  // 整页变成 loadFailed；knowledge/ 或其 locale 目录缺失都应视为空集。
+  for (const brokenRel of ['.dsh-repowiki/knowledge', '.dsh-repowiki/knowledge/zh']) {
+    const { wf, workspaces, startSession } = makeFakeRemotes()
+    const originalList = wf.list.bind(wf)
+    wf.list = async (sessionId, rel) => {
+      if (rel === brokenRel) {
+        return { ok: false, error: { code: 'workspace-file/not-found', message: 'not found' } }
+      }
+      return originalList(sessionId, rel)
+    }
+    const hooks = makeHooks()
+    const mod = captured.factory((name) => {
+      if (name !== 'react') throw new Error(`意外 require: ${name}`)
+      return reactFor(hooks)
+    })
+    mod.apply(makeStubCtx(wf))
+    hooks.mount(RepoWikiPageOf(mod), {
+      t: (key) => key,
+      workspaces,
+      startSession,
+      files: wf,
+      notice: null,
+    })
+    await flush()
+    const select = findNode(hooks.root, (n) => n.type === 'select' && n.props.id === 'repowiki-workspace')
+    select.props.onChange({ target: { value: 'w1' } })
+    await flush()
+
+    const texts = collectTexts(hooks.root)
+    assert.ok(texts.some(s => s.includes('statFiles')), `${brokenRel} 缺失时应进入就绪状态并渲染统计`)
+    assert.ok(!texts.some(s => s.includes('loadFailed')), `${brokenRel} 缺失不应被当作读取失败`)
+    assert.ok(!texts.some(s => s === 'lastExtract'), `${brokenRel} 缺失时不渲染抽取快照`)
+    assert.ok(texts.some(s => s.includes('b.js')), '索引文件仍以未生成条目呈现')
+  }
 })
 
 test('startSession 抛错时页面给出可读提示而非静默失败', async () => {
@@ -399,9 +532,13 @@ test('总览模式：列出各工作区状态、点击行下钻单库视图', as
     '单库视图应展示卡片内容')
 })
 
-/** 挂载页面（未选工作区），返回 hooks。 */
-function mountPage() {
-  const { wf, workspaces, startSession } = makeFakeRemotes()
+/**
+ * 挂载页面（未选工作区），返回 hooks。
+ * @param {object} [overrides] - 覆盖工作区文件内容（键为相对路径）。
+ * @returns {object} hooks。
+ */
+function mountPage(overrides = {}) {
+  const { wf, workspaces, startSession } = makeFakeRemotes(overrides)
   const hooks = makeHooks()
   const mod = captured.factory((name) => {
     if (name !== 'react') throw new Error(`意外 require: ${name}`)
@@ -418,14 +555,256 @@ function mountPage() {
   return hooks
 }
 
-/** 挂载页面并选中工作区 w1，等待数据就绪。 */
-async function mountReadyPage() {
-  const hooks = mountPage()
+/**
+ * 挂载页面并选中工作区 w1，等待数据就绪。
+ * @param {object} [overrides] - 覆盖工作区文件内容。
+ * @returns {Promise<object>} hooks。
+ */
+async function mountReadyPage(overrides = {}) {
+  const hooks = mountPage(overrides)
   const select = findNode(hooks.root, (n) => n.type === 'select' && n.props.id === 'repowiki-workspace')
   select.props.onChange({ target: { value: 'w1' } })
   await flush()
   return hooks
 }
+
+test('语言筛选：多语言索引可按语言过滤卡片列表', async () => {
+  const mixed = {
+    schemaVersion: 5,
+    generatedAt: '2026-11-26T08:00:00.000Z',
+    stats: { files: 3, symbols: 3 },
+    stack: { technologies: [] },
+    files: [
+      { path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [{ name: 'x' }], imports: [] },
+      { path: 'd.py', lang: 'python', digest: 'dig-d', symbols: [{ name: 'main' }], imports: [] },
+      { path: 'e.cpp', lang: 'cpp', digest: 'dig-e', symbols: [{ name: 'run' }], imports: [] },
+    ],
+    edges: [],
+  }
+  const hooks = await mountReadyPage({ '.dsh-repowiki/index.json': JSON.stringify(mixed) })
+  const select = findNode(hooks.root, (n) => n.type === 'select' && n.props['aria-label'] === 'filterLang')
+  assert.ok(select, '多语言索引应渲染语言筛选')
+  assert.equal(select.children.length, 4, '全部语言 + 三种语言选项')
+  const optionText = collectTexts(select).join('|')
+  assert.ok(optionText.includes('JavaScript (1)'), '语言 id 显示为可读名')
+  assert.ok(optionText.includes('Python (1)'))
+  assert.ok(optionText.includes('C++ (1)'), 'C/C++ 使用展示名而非原始 id')
+  const distText = collectTexts(hooks.root).join('|')
+  assert.ok(distText.includes('langDistribution'), '单库视图展示语言分布')
+  assert.ok(distText.includes('C++ 1'), '分布使用可读语言名与文件数')
+
+  select.props.onChange({ target: { value: 'python' } })
+  await flush()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('d.py')), '筛选后保留 Python 文件')
+  assert.ok(!texts.some(s => s.includes('a.js')), '其他语言文件被过滤')
+})
+
+test('面板搜索可命中索引符号名（无需卡片文本）', async () => {
+  const hooks = await mountReadyPage()
+  const search = findNode(hooks.root, (n) => n.type === 'input'
+    && n.props['aria-label'] === 'searchPlaceholder')
+  assert.ok(search, '应渲染搜索框')
+
+  // c.js 的符号是 z；标题/标签/摘要/路径都不含 z，只有符号名能命中
+  search.props.onChange({ target: { value: 'z' } })
+  await flush()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('C 卡片')), '按符号名命中文件')
+  assert.ok(!texts.some(s => s.includes('A 卡片')), '未命中的文件被排除')
+})
+
+test('面板搜索可命中卡片正文（标题/摘要之外的内容）', async () => {
+  const hooks = await mountReadyPage()
+  const search = findNode(hooks.root, (n) => n.type === 'input'
+    && n.props['aria-label'] === 'searchPlaceholder')
+  assert.ok(search, '应渲染搜索框')
+
+  // BodyMarkerOnly 只在 A 卡片正文中，标题/摘要/标签/符号/路径均不含
+  search.props.onChange({ target: { value: 'bodymarkeronly' } })
+  await flush()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('A 卡片')), '按正文命中卡片')
+  assert.ok(!texts.some(s => s.includes('C 卡片')), '正文未命中的卡片被排除')
+})
+
+test('卡片详情可切换依赖深度（2 跳显示传递依赖与间接依赖方，重开重置）', async () => {
+  const hooks = await mountReadyPage()
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  assert.ok(tile, '卡片可打开')
+  tile.props.onClick()
+  await flush()
+  const direct = collectTexts(hooks.root)
+  assert.ok(!direct.some(s => s.includes('d.js:L12')), '默认只展示直接依赖')
+  assert.ok(!direct.some(s => s.includes('e.js:L2')), '默认只展示直接依赖方')
+  assert.ok(direct.some(s => s.includes('b.js:L7')), '直接依赖方以文件级列表展示')
+  assert.ok(direct.some(s => s.includes('detailDependents')), '详情渲染依赖方区块标题')
+
+  const depthTwo = findNode(hooks.root, (n) => n.type === 'button'
+    && n.props['aria-label'] === 'importDepthOption'
+    && n.children?.[0] === '2')
+  assert.ok(depthTwo, '详情应渲染深度切换按钮')
+  depthTwo.props.onClick()
+  await flush()
+  const after = collectTexts(hooks.root)
+  assert.ok(after.some(s => s === '⇢ '), '传递依赖用 ⇢ 标记')
+  assert.ok(after.some(s => s.includes('d.js:L12')), '2 跳命中 d.js')
+  assert.ok(after.some(s => s === '⇠ '), '间接依赖方用 ⇠ 标记')
+  assert.ok(after.some(s => s.includes('e.js:L2')), '2 跳命中间接依赖方 e.js')
+  assert.ok(after.some(s => s.includes(' hops)')), '标注跳数')
+
+  // 关闭后重新打开：深度回到 1，不沿用上一条详情的选择
+  const closeBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'detailClose')
+  assert.ok(closeBtn, '详情有关闭按钮')
+  closeBtn.props.onClick()
+  await flush()
+  const reopened = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  reopened.props.onClick()
+  await flush()
+  const reset = collectTexts(hooks.root)
+  assert.ok(!reset.some(s => s.includes('d.js:L12')), '重新打开重置为直接依赖')
+  assert.ok(!reset.some(s => s.includes('e.js:L2')), '重新打开重置为直接依赖方')
+})
+
+test('单库视图展示高风险入口（fan-in 前三，按不同依赖方计数）', async () => {
+  const hooks = await mountReadyPage()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('hubLabel'), '渲染 hub 行标签')
+  assert.ok(texts.includes('a.js (2)'), 'a.js 被 b、c 两个文件依赖')
+  assert.ok(texts.includes('c.js (2)'), 'c.js 被 a、e 两个文件依赖')
+  assert.ok(texts.includes('d.js (1)'), 'd.js 被 c 依赖（第三名）')
+  assert.ok(!texts.some(s => s.startsWith('b.js (')), '无依赖方的文件不进入列表')
+
+  // chip 可点击：打开对应文件的卡片详情（C 卡片存在）
+  const hubChip = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'c.js (2)')
+  assert.ok(hubChip, 'hub chip 渲染为可点击按钮')
+  hubChip.props.onClick()
+  await flush()
+  const region = findNode(hooks.root, (n) => n.props?.role === 'region')
+  assert.ok(region, '点击 hub 后打开详情')
+  assert.equal(region.props['aria-label'], 'C 卡片', '详情对应 hub 文件')
+  // c.js 属于 a.js ↔ c.js 二文件环：详情展示组大小与代表性路径
+  const regionTexts = collectTexts(region)
+  assert.ok(regionTexts.some(s => s.includes('⟲')), '详情展示循环摘要徽章')
+  assert.ok(regionTexts.some(s => s.includes('→')), '详情展示代表性环路径')
+  assert.ok(regionTexts.some(s => s.includes('a.js')), '路径包含环内其他文件')
+
+  // 环内其他文件为可点击链接：点击跳到该文件详情
+  const cycleLink = findNode(region, (n) => n.type === 'button' && n.props['aria-label'] === 'openFile')
+  assert.ok(cycleLink, '环内其他文件渲染为可点击链接')
+  cycleLink.props.onClick()
+  await flush()
+  const nextRegion = findNode(hooks.root, (n) => n.props?.role === 'region')
+  assert.equal(nextRegion.props['aria-label'], 'A 卡片', '点击环内文件跳转到其详情')
+
+  // 无依赖边时不渲染该行
+  const empty = await mountReadyPage({
+    '.dsh-repowiki/index.json': JSON.stringify({
+      schemaVersion: 5, generatedAt: '2026-11-26T08:00:00.000Z',
+      stats: { files: 1, symbols: 1 }, stack: { technologies: [] },
+      files: [{ path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [], imports: [] }],
+      edges: [],
+    }),
+  })
+  assert.ok(!collectTexts(empty.root).includes('hubLabel'), '无依赖边时隐藏 hub 行')
+})
+
+test('卡片行标记循环依赖成员（SCC 口径，非成员不标记）', async () => {
+  const hooks = await mountReadyPage()
+  const texts = collectTexts(hooks.root)
+  assert.equal(texts.filter(s => s === '⟲').length, 2, 'a.js ↔ c.js 两个成员各一个徽章')
+  const badge = findNode(hooks.root, (n) => typeof n.props?.['aria-label'] === 'string'
+    && n.props['aria-label'].startsWith('cycleBadgeHint'))
+  assert.ok(badge, '徽章带可访问名（走文案字典）')
+  assert.ok(badge.props.title.includes('cycleBadgeRoute'), '短环 tooltip 附代表性路径（文案字典 key）')
+})
+
+test('统计行：索引跳过文件数 > 0 时展示，否则隐藏', async () => {
+  const withSkipped = {
+    schemaVersion: 5,
+    generatedAt: '2026-11-26T08:00:00.000Z',
+    stats: { files: 1, symbols: 1, skipped: 2 },
+    stack: { technologies: [] },
+    files: [{ path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [{ name: 'x' }], imports: [] }],
+    edges: [],
+  }
+  const hooks = await mountReadyPage({ '.dsh-repowiki/index.json': JSON.stringify(withSkipped) })
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('statSkipped')), '跳过数 > 0 时展示统计')
+  const skippedNode = findNode(hooks.root, (n) => n.props?.title === 'statSkippedHint')
+  assert.ok(skippedNode, 'title 走文案字典而非硬编码英文')
+
+  const plain = await mountReadyPage()
+  assert.ok(!collectTexts(plain.root).some(s => s.includes('statSkipped')), '无跳过时不展示')
+})
+
+test('统计行：索引告警数展示并在悬停中列出前几条', async () => {
+  const warned = {
+    schemaVersion: 5,
+    generatedAt: '2026-11-26T08:00:00.000Z',
+    stats: { files: 1, symbols: 1 },
+    stack: { technologies: [] },
+    files: [{ path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [{ name: 'x' }], imports: [] }],
+    edges: [],
+    warnings: [
+      'other/use.go imports pkg/internal/secret/s.go, but internal packages under pkg/internal are only importable within pkg/',
+      'second warning',
+      'third warning',
+      'fourth warning',
+    ],
+  }
+  const hooks = await mountReadyPage({ '.dsh-repowiki/index.json': JSON.stringify(warned) })
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('statWarnings'), '告警数 > 0 时展示统计')
+  const node = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.props?.title === 'string' && n.props.title.includes('only importable within'))
+  assert.ok(node, '悬停提示列出告警原文')
+  assert.ok(node.props.title.includes('… +1'), '超过 3 条时提示剩余数量')
+  assert.ok(node.props.title.split('\n').length === 5, '悬停 3 条明细 + 计数 + 展开提示')
+  assert.equal(node.props['aria-expanded'], false, '默认收起')
+
+  // 点击展开全部明细（tooltip 之外的第四条也可见）
+  node.props.onClick()
+  await flush()
+  const list = findNode(hooks.root, (n) => n.type === 'ul' && n.props?.id === 'repowiki-index-warnings')
+  assert.ok(list, '展开后渲染告警列表')
+  const listTexts = collectTexts(list)
+  assert.equal(listTexts.length, 4, '全部告警逐条展示')
+  assert.ok(listTexts.includes('fourth warning'), 'tooltip 之外的告警也可见')
+  const expanded = findNode(hooks.root, (n) => n.type === 'button'
+    && n.props?.['aria-controls'] === 'repowiki-index-warnings')
+  assert.equal(expanded.props['aria-expanded'], true)
+
+  // 再次点击收起
+  expanded.props.onClick()
+  await flush()
+  assert.ok(!findNode(hooks.root, (n) => n.type === 'ul' && n.props?.id === 'repowiki-index-warnings'),
+    '再次点击收起列表')
+
+  const plain = await mountReadyPage()
+  assert.ok(!collectTexts(plain.root).includes('statWarnings'), '无告警时不展示')
+})
+
+test('详情依赖与依赖方列表中的文件可点击跳转', async () => {
+  const hooks = await mountReadyPage()
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  assert.ok(tile, '卡片可打开')
+  tile.props.onClick()
+  await flush()
+
+  const findLink = (text) => findNode(hooks.root, (n) => n.type === 'button'
+    && n.props['aria-label'] === 'openFile'
+    && n.children?.[0]?.children?.[0] === text)
+  const importLink = findLink('c.js:L3')
+  assert.ok(importLink, '出边条目渲染为链接（保留行号）')
+  const dependentLink = findLink('b.js:L7')
+  assert.ok(dependentLink, '依赖方条目渲染为链接')
+
+  importLink.props.onClick()
+  await flush()
+  const region = findNode(hooks.root, (n) => n.props?.role === 'region')
+  assert.equal(region.props['aria-label'], 'C 卡片', '点击出边文件打开其详情')
+})
 
 test('待更新检测：digest 不一致的卡片计入提示与待更新筛选', async () => {
   const hooks = await mountReadyPage()
@@ -463,6 +842,118 @@ test('空结果文案按上下文区分（不再误用 pendingHint）', async ()
   assert.ok(back.some((s) => s.includes('A 卡片')), '清空搜索后应恢复卡片列表')
 })
 
+test('Wiki 页面的 mermaid 围栏渲染为 SVG（不支持的类型降级为代码块）', async () => {
+  const page = [
+    '---',
+    JSON.stringify({
+      schemaVersion: 1, slug: 'core', title: '核心模块', locale: 'zh',
+      sources: [], generatedAt: '2026-11-26T08:00:00.000Z',
+    }, null, 2),
+    '---',
+    '# 核心模块',
+    '',
+    '```mermaid',
+    'flowchart TD',
+    '  A[入口 main] --> B{需要缓存?}',
+    '  B -->|是| C[(Redis)]',
+    '  B -->|否| D[数据库]',
+    '  A -.-> D',
+    '```',
+    '',
+    '```mermaid',
+    'graph LR',
+    '  X((开始)) --- Y[结束]',
+    '```',
+    '',
+    '```mermaid',
+    'sequenceDiagram',
+    '  A->>B: hi',
+    '```',
+  ].join('\n')
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/core.md': page })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+  const entry = findNode(hooks.root, (n) => n.type === 'button'
+    && n.children?.some(c => Array.isArray(c?.children) && c.children.includes('核心模块')))
+  assert.ok(entry, '可打开核心模块页面')
+  entry.props.onClick()
+  await flush()
+
+  const svgs = []
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'svg') svgs.push(node)
+    for (const child of node.children ?? []) visit(child)
+  }
+  visit(hooks.root)
+  assert.equal(svgs.length, 2, '两个可识别的 flowchart 渲染为 SVG')
+  assert.equal(svgs[0].props['aria-label'], 'Mermaid diagram')
+  const firstTexts = collectTexts(svgs[0])
+  for (const label of ['入口 main', '需要缓存?', 'Redis', '数据库']) {
+    assert.ok(firstTexts.includes(label), `节点标签渲染：${label}`)
+  }
+  assert.ok(firstTexts.includes('是') && firstTexts.includes('否'), '边标签渲染')
+  assert.ok(!collectTexts(hooks.root).some(s => s.includes('flowchart TD')), '已渲染的图不显示源码')
+  const secondTexts = collectTexts(svgs[1])
+  assert.ok(secondTexts.includes('开始') && secondTexts.includes('结束'), 'LR 图与圆形节点')
+  assert.ok(collectTexts(hooks.root).some(s => s.includes('sequenceDiagram')), '不支持的图类型降级为代码块')
+})
+
+test('Wiki 页面的 mermaid subgraph 渲染为分组虚线框', async () => {
+  const page = [
+    '---',
+    JSON.stringify({
+      schemaVersion: 1, slug: 'core', title: '核心模块', locale: 'zh',
+      sources: [], generatedAt: '2026-11-26T08:00:00.000Z',
+    }, null, 2),
+    '---',
+    '# 核心模块',
+    '',
+    '```mermaid',
+    'flowchart TD',
+    '  subgraph core[核心层]',
+    '    A[入口] --> B[服务]',
+    '  end',
+    '  subgraph data[数据层]',
+    '    C[(数据库)]',
+    '  end',
+    '  B --> C',
+    '```',
+  ].join('\n')
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/core.md': page })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+  const entry = findNode(hooks.root, (n) => n.type === 'button'
+    && n.children?.some(c => Array.isArray(c?.children) && c.children.includes('核心模块')))
+  assert.ok(entry, '可打开核心模块页面')
+  entry.props.onClick()
+  await flush()
+
+  const svg = findNode(hooks.root, (n) => n.type === 'svg')
+  assert.ok(svg, 'mermaid 图渲染为 SVG')
+  const texts = collectTexts(svg)
+  assert.ok(texts.includes('核心层'), '组名渲染')
+  assert.ok(texts.includes('数据层'))
+  for (const label of ['入口', '服务', '数据库']) {
+    assert.ok(texts.includes(label), `组内/组外节点标签：${label}`)
+  }
+  const dashed = []
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return
+    if (node.type === 'rect' && node.props?.strokeDasharray === '4 3') dashed.push(node)
+    for (const child of node.children ?? []) visit(child)
+  }
+  visit(svg)
+  assert.equal(dashed.length, 2, '两个分组虚线框')
+  assert.equal(dashed[0].props.rx, 8)
+})
+
 test('Wiki 页签：页面列表与单页原文浏览', async () => {
   const hooks = await mountReadyPage()
   const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
@@ -485,6 +976,64 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(pageTexts.some(s => s.includes('这是概览正文。')), '应呈现页面正文')
   const backBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
   assert.ok(backBtn, '应渲染返回列表控件（aria-label）')
+})
+
+test('Wiki 引用可点击跳转到对应页面', async () => {
+  const hooks = await mountReadyPage()
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  assert.ok(tile, '卡片可打开')
+  tile.props.onClick()
+  await flush()
+
+  const originalGetElementById = globalThis.document.getElementById
+  let scrolledTo = ''
+  globalThis.document.getElementById = (id) => ({ scrollIntoView: () => { scrolledTo = id } })
+  try {
+    const citation = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === '概览')
+    assert.ok(citation, 'Wiki 引用应渲染为可点击按钮')
+    citation.props.onClick()
+    await flush()
+  } finally {
+    if (originalGetElementById) globalThis.document.getElementById = originalGetElementById
+    else delete globalThis.document.getElementById
+  }
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('这是概览正文。')), '跳转后应展示被引用的 Wiki 页面正文')
+  assert.equal(scrolledTo, 'a-章节', '应滚动到引用章节的锚点')
+  const backBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
+  assert.ok(backBtn, '跳转后应渲染 Wiki 返回控件')
+})
+
+test('Wiki 章节 chip 可跳转到任意被引用章节', async () => {
+  const hooks = await mountReadyPage()
+  const tile = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'A 卡片')
+  tile.props.onClick()
+  await flush()
+
+  // 多章节引用：每个章节一个 chip，aria-label 带页面上下文
+  const chip = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === '概览 · B 章节')
+  assert.ok(chip, '应渲染章节 chip')
+  assert.ok(findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === '概览 · A 章节'),
+    '首章节 chip 同样可点击')
+  assert.ok(!findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === '概览 · E 章节'),
+    '章节 chip 有上限（第 5 个不渲染）')
+  assert.ok(collectTexts(hooks.root).some(s => s === 'detailRefsMore'), '溢出章节显示 +N 提示')
+
+  const originalGetElementById = globalThis.document.getElementById
+  let scrolledTo = ''
+  globalThis.document.getElementById = (id) => ({ scrollIntoView: () => { scrolledTo = id } })
+  try {
+    chip.props.onClick()
+    await flush()
+  } finally {
+    if (originalGetElementById) globalThis.document.getElementById = originalGetElementById
+    else delete globalThis.document.getElementById
+  }
+
+  assert.equal(scrolledTo, 'b-章节', 'chip 跳转到自身章节而非首个章节')
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.some(s => s.includes('这是概览正文。')), '跳转后仍展示页面正文')
 })
 
 test('记忆页签：条目列表（状态徽章）与单条原文浏览', async () => {
@@ -525,6 +1074,15 @@ test('卡片详情与 Wiki 详情以排版文字渲染（非 Markdown 源码）'
   assert.ok(detailTexts.some(s => s.includes('做某事')), '详情渲染"关键符号"章节列表项')
   assert.ok(!detailTexts.some(s => s.includes('## ')), '详情不应残留 Markdown 源码标题')
   assert.ok(!detailTexts.some(s => s.includes('"schemaVersion"')), 'frontmatter 不应展示')
+  assert.ok(detailTexts.some(s => s.includes('detailReferences')), '详情应展示反向引用标题')
+  assert.ok(detailTexts.some(s => s.includes('← b.js:L7')), '反向引用应带 import 行号')
+  assert.ok(detailTexts.some(s => s.includes('detailImports')), '详情应展示依赖文件标题')
+  assert.ok(detailTexts.some(s => s === '↔ '), '双向依赖用 ↔ 标记')
+  assert.ok(detailTexts.some(s => s.includes('c.js:L3')), '出边应带 import 行号')
+  assert.ok(detailTexts.some(s => s.includes(' (z)')), '出边应列出导入符号')
+  assert.ok(detailTexts.some(s => s.includes('detailWikiCitations')), '详情应展示 Wiki 引用标题')
+  assert.ok(detailTexts.some(s => s === 'A 章节'), '章节 chip 渲染 A 章节')
+  assert.ok(detailTexts.some(s => s === 'B 章节'), '章节 chip 渲染 B 章节')
   const headingNode = findNode(hooks.root, (n) => typeof n.type === 'string' && n.type.startsWith('h'))
   assert.ok(headingNode, '详情含排版标题节点')
 

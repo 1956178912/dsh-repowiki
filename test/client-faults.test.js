@@ -17,7 +17,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { loadClient, mountLoaded, act, React } from './lib/dom-harness.mjs'
 
-const { dom, Page } = await loadClient()
+const { Page } = await loadClient()
 
 /** 带 {code} 占位的 loadFailed 文案（验证错误码插值，其余 key 直通）。 */
 const tWithCode = (key) => key === 'loadFailed' ? 'loadFailed {code}' : key
@@ -149,7 +149,8 @@ test('正常路径补缺：列表视图（CardRow）渲染卡片行', async () =
   await act(async () => { listBtn.click() })
   const generated = [...container.querySelectorAll('button[aria-label]')]
     .filter((b) => !['reload', 'viewGrid', 'viewList'].includes(b.getAttribute('aria-label'))
-      && !b.getAttribute('aria-label').includes('(pending)'))
+      && !b.getAttribute('aria-label').includes('(pending)')
+      && !/ \(\d+\)$/.test(b.getAttribute('aria-label')))
   assert.ok(generated.length > 0, '列表视图应渲染卡片行')
   // 卡片行形态：标题 · 路径
   const rowText = generated[0].textContent

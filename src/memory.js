@@ -12,11 +12,21 @@
  */
 
 import * as path from 'node:path'
+import { createHash } from 'node:crypto'
 import { ASSET_DIR, MEMORY_DIR, MEMORY_SCHEMA_VERSION, MEMORY_STATUS } from './schema.js'
-import { encodeFrontmatter, parseFrontmatter } from './util.js'
+import { encodeFrontmatter, parseFrontmatter, writeTextVerified } from './util.js'
 
 /** slug 的最大长度（长标题截断，避免文件名失控）。 */
 const SLUG_MAX = 48
+
+/**
+ * 标题的 8 位 sha256 前缀（同名 slug 冲突时的稳定后缀）。
+ * @param {string} value - 标题。
+ * @returns {string} 8 位十六进制。
+ */
+function HASH8(value) {
+  return createHash('sha256').update(String(value)).digest('hex').slice(0, 8)
+}
 
 /**
  * 把标题 slug 化为稳定文件名（小写、非字母数字归一为连字符）。
@@ -54,7 +64,11 @@ export function renderMemoryMarkdown(meta, body) {
 
 /**
  * 写入一条记忆条目。
- * @param {object} fs - ctx.fs 服务。
+ *
+ * slug 冲突策略：目标文件已存在且标题不同（或 frontmatter 不可读）时，
+ * 追加标题哈希后缀，避免两条不同知识静默互相覆盖；标题相同视为同一条目
+ * 的更新，直接覆盖。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根绝对路径。
  * @param {object} entry - { slug, locale, title, body, tags?, path?, status }。
  * @returns {Promise<string>} 写入文件相对资产根路径。
@@ -69,15 +83,27 @@ export async function writeMemory(fs, root, entry) {
     createdAt: new Date().toISOString(),
   }
   if (typeof entry.path === 'string' && entry.path) meta.path = entry.path
-  const rel = memoryPath(entry.slug, entry.locale)
+  let rel = memoryPath(entry.slug, entry.locale)
+  let existingText = null
+  try {
+    existingText = await fs.readText(await fs.resolve(rel, { cwd: root }))
+  } catch {
+    // 目标不存在：直接写
+  }
+  if (existingText !== null) {
+    const parsed = parseMemoryText(existingText)
+    if (!parsed || parsed.meta.title !== entry.title) {
+      rel = memoryPath(`${entry.slug}-${HASH8(entry.title)}`, entry.locale)
+    }
+  }
   const target = await fs.resolve(rel, { cwd: root })
-  await fs.writeText(target, renderMemoryMarkdown(meta, entry.body))
+  await writeTextVerified(fs, target, renderMemoryMarkdown(meta, entry.body))
   return rel
 }
 
 /**
  * 列出某 locale 的记忆条目（按状态过滤）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根绝对路径。
  * @param {string} locale - 语言代码。
  * @param {string} [status] - 过滤状态（'pending'/'accepted'/'rejected'），
@@ -111,6 +137,8 @@ export async function listMemory(fs, root, locale, status, withBody = false) {
         status: MEMORY_STATUS.includes(parsed.meta.status) ? parsed.meta.status : 'pending',
         tags: Array.isArray(parsed.meta.tags) ? parsed.meta.tags : [],
         createdAt: typeof parsed.meta.createdAt === 'string' ? parsed.meta.createdAt : '',
+        ...(typeof parsed.meta.reviewedAt === 'string' && parsed.meta.reviewedAt
+          ? { reviewedAt: parsed.meta.reviewedAt } : {}),
         ...(typeof parsed.meta.path === 'string' && parsed.meta.path
           ? { path: parsed.meta.path } : {}),
       }
@@ -128,12 +156,12 @@ export async function listMemory(fs, root, locale, status, withBody = false) {
 
 /**
  * 修改记忆条目状态（审核闭环：accept/reject）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根绝对路径。
  * @param {string} locale - 语言代码。
  * @param {string} slug - 条目 slug。
  * @param {'accepted'|'rejected'} status - 目标状态。
- * @returns {Promise<string|null>} 更新后的相对路径；条目不存在返回 null。
+ * @returns {Promise<{rel:string, reviewedAt:string}|null>} 更新后的相对路径与审核时间；条目不存在返回 null。
  */
 export async function setMemoryStatus(fs, root, locale, slug, status) {
   const rel = memoryPath(slug, locale)
@@ -146,11 +174,14 @@ export async function setMemoryStatus(fs, root, locale, slug, status) {
   }
   const parsed = parseMemoryText(text)
   if (!parsed) return null
-  const meta = { ...parsed.meta, status }
-  const body = parsed.body.replace(/^#[^\n]*\n+/, '')
+  const reviewedAt = new Date().toISOString()
+  const meta = { ...parsed.meta, status, reviewedAt }
+  // parseFrontmatter 的 body 以换行开头；先跳过前导空白再剥离一级标题，
+  // 否则重写会把旧标题留在正文里、与新渲染的标题重复
+  const body = parsed.body.replace(/^\s*#[^\n]*\n+/, '')
   const target = await fs.resolve(rel, { cwd: root })
-  await fs.writeText(target, renderMemoryMarkdown(meta, body))
-  return rel
+  await writeTextVerified(fs, target, renderMemoryMarkdown(meta, body))
+  return { rel, reviewedAt }
 }
 
 /**

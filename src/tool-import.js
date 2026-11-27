@@ -10,6 +10,7 @@
 import { resolveAssetRoot, readIndex } from './assets.js'
 import { copyTree, dirHasContent } from './transfer.js'
 import { cwdOf, toAbsPath } from './util.js'
+import { withLock } from './lock.js'
 
 /** 工具描述。 */
 const DESCRIPTION = [
@@ -25,7 +26,7 @@ const DESCRIPTION = [
 
 /**
  * 构造 repowiki-import 工具定义。
- * @param {object} ctx - 插件上下文（提供 ctx.fs）。
+ * @param {PluginContext} ctx - 插件上下文（提供 ctx.fs）。
  * @returns {object} ToolDefinition。
  */
 export function repowikiImportTool(ctx) {
@@ -57,6 +58,7 @@ export function repowikiImportTool(ctx) {
           dirs: { type: 'integer' },
           skipped: { type: 'integer' },
           failed: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { path: { type: 'string' }, reason: { type: 'string' } }, required: ['path', 'reason'] }, description: 'Bounded list (first 20) of items that could not be copied.' },
+          aborted: { type: 'boolean', description: 'True when the caller cancelled; the import may be partial.' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
@@ -67,13 +69,14 @@ export function repowikiImportTool(ctx) {
         type: 'text',
         text: [
           `Imported ${value.files} file(s) (${value.dirs} directories, ${value.skipped} skipped) from ${value.source} in ${value.durationMs}ms.`,
+          ...(value.aborted ? ['Cancelled: the import may be partial.'] : []),
           ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
           value.indexOk ? 'index.json is present and compatible.' : 'Warning: index.json is missing or its schema version is incompatible — run repowiki-index.',
         ].join('\n'),
       }],
     },
     timeoutMs: 120_000,
-    async execute(args, _exec) {
+    async execute(args, exec) {
       const fs = ctx.fs
       if (!fs) throw new Error('repowiki-import requires the ctx.fs capability')
       const startedAt = Date.now()
@@ -93,25 +96,31 @@ export function repowikiImportTool(ctx) {
           hint: `Source ${sourceAbs} does not exist or is empty. Nothing to import.`,
         }
       }
-      if (!args.overwrite && (await dirHasContent(fs, assetDir))) {
-        return {
-          root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
-          hint: `${assetDir} already holds assets. Pass overwrite=true to replace them.`,
+      // 写操作串行化（O5，ADR-0005）：覆盖判定与复制整体进入临界区，
+      // 避免“检查通过→另一路并发改动→复制”的 TOCTOU 交错
+      return withLock(root, async () => {
+        if (!args.overwrite && (await dirHasContent(fs, assetDir))) {
+          return {
+            root, source: sourceAbs, files: 0, dirs: 0, skipped: 0, indexOk: false, durationMs: 0,
+            hint: `${assetDir} already holds assets. Pass overwrite=true to replace them.`,
+          }
         }
-      }
-      const counts = await copyTree(fs, sourceAbs, assetDir)
-      // 导入后校验索引可读性（版本不兼容时提示重建而非失败）
-      const indexOk = (await readIndex(fs, root)) !== null
-      return {
-        root,
-        source: sourceAbs,
-        files: counts.files,
-        dirs: counts.dirs,
-        skipped: counts.skipped,
-        failed: counts.failed,
-        indexOk,
-        durationMs: Date.now() - startedAt,
-      }
+        const counts = await copyTree(fs, sourceAbs, assetDir, { signal: exec.signal })
+        // 导入后校验索引可读性（版本不兼容时提示重建而非失败）
+        const indexOk = (await readIndex(fs, root)) !== null
+        return {
+          root,
+          source: sourceAbs,
+          files: counts.files,
+          dirs: counts.dirs,
+          skipped: counts.skipped,
+          failed: counts.failed,
+          aborted: counts.aborted,
+          indexOk,
+          ...(counts.aborted ? { hint: 'Cancelled: the import may be partial. Re-run repowiki-import to complete it.' } : {}),
+          durationMs: Date.now() - startedAt,
+        }
+      })
     },
     presentCall: (args) => ({
       card: 'generic',

@@ -17,6 +17,7 @@ import { resolveAssetRoot } from './assets.js'
 import {
   slugifyMemory, writeMemory, listMemory, setMemoryStatus,
 } from './memory.js'
+import { withAssetRootLock } from './lock.js'
 import { getLocale } from './spawn.js'
 import { cwdOf } from './util.js'
 
@@ -32,7 +33,7 @@ const DESCRIPTION = [
 
 /**
  * 构造 repowiki-memory 工具定义。
- * @param {object} ctx - 插件上下文（提供 ctx.fs）。
+ * @param {PluginContext} ctx - 插件上下文（提供 ctx.fs）。
  * @returns {object} ToolDefinition。
  */
 export function repowikiMemoryTool(ctx) {
@@ -98,12 +99,14 @@ export function repowikiMemoryTool(ctx) {
                 status: { type: 'string', enum: MEMORY_STATUS },
                 tags: { type: 'array', items: { type: 'string' } },
                 createdAt: { type: 'string' },
+                reviewedAt: { type: 'string' },
                 path: { type: 'string' },
               },
               required: ['slug', 'title', 'status', 'tags', 'createdAt'],
             },
           },
           total: { type: 'integer' },
+          reviewedAt: { type: 'string' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
@@ -136,8 +139,6 @@ export function repowikiMemoryTool(ctx) {
       const locale = typeof args.locale === 'string' && ['zh', 'en'].includes(args.locale)
         ? args.locale
         : getLocale(ctx)
-      const { root } = await resolveAssetRoot(fs, cwdOf(ctx))
-
       if (action === 'write') {
         const title = typeof args.title === 'string' ? args.title.trim() : ''
         const body = typeof args.body === 'string' ? args.body.trim() : ''
@@ -150,20 +151,25 @@ export function repowikiMemoryTool(ctx) {
         // 纯非 ASCII 标题归一为空时用时间戳兜底，保证文件名稳定
         const slug = slugifyMemory(title) || `memory-${Date.now()}`
         const status = args.status === 'accepted' ? 'accepted' : 'pending'
-        const rel = await writeMemory(fs, root, {
-          slug, locale, title, body,
-          tags: Array.isArray(args.tags) ? args.tags : undefined,
-          path: typeof args.path === 'string' ? args.path : undefined,
-          status,
+        // 写操作串行化（O5，ADR-0005）：同名 slug 的写入判定与落盘整体进入临界区
+        return withAssetRootLock(fs, cwdOf(ctx), async ({ root }) => {
+          const rel = await writeMemory(fs, root, {
+            slug, locale, title, body,
+            tags: Array.isArray(args.tags) ? args.tags : undefined,
+            path: typeof args.path === 'string' ? args.path : undefined,
+            status,
+          })
+          return {
+            action, locale, slug, status, total: 0, path: rel,
+            durationMs: Date.now() - startedAt,
+          }
         })
-        return {
-          action, locale, slug, status, total: 0, path: rel,
-          durationMs: Date.now() - startedAt,
-        }
       }
 
       if (action === 'list') {
         const status = MEMORY_STATUS.includes(args.status) ? args.status : 'pending'
+        // 只读路径不加锁（与 repowiki-cards 一致），保持检索即时
+        const { root } = await resolveAssetRoot(fs, cwdOf(ctx))
         const entries = await listMemory(fs, root, locale, status)
         return {
           action, locale, entries, total: entries.length,
@@ -192,18 +198,22 @@ export function repowikiMemoryTool(ctx) {
         }
       }
       const status = action === 'accept' ? 'accepted' : 'rejected'
-      const rel = await setMemoryStatus(fs, root, locale, slug, status)
-      if (!rel) {
-        return {
-          action, locale, slug, total: 0, status,
-          durationMs: Date.now() - startedAt,
-          hint: `Entry ${slug} not found (or its frontmatter is unreadable).`,
+      // 写操作串行化（O5，ADR-0005）：setMemoryStatus 是读-改-写，
+      // 并发 accept/reject 会丢状态更新
+      return withAssetRootLock(fs, cwdOf(ctx), async ({ root }) => {
+        const result = await setMemoryStatus(fs, root, locale, slug, status)
+        if (!result) {
+          return {
+            action, locale, slug, total: 0, status,
+            durationMs: Date.now() - startedAt,
+            hint: `Entry ${slug} not found (or its frontmatter is unreadable).`,
+          }
         }
-      }
-      return {
-        action, locale, slug, status, path: rel, total: 0,
-        durationMs: Date.now() - startedAt,
-      }
+        return {
+          action, locale, slug, status, path: result.rel, reviewedAt: result.reviewedAt, total: 0,
+          durationMs: Date.now() - startedAt,
+        }
+      })
     },
     presentCall: (args) => ({
       card: 'generic',

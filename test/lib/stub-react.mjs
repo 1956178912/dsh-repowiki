@@ -83,6 +83,10 @@ export function makeHooks() {
       if (!Object.hasOwn(states, i)) states[i] = { value: { current: initial } }
       return states[i].value
     },
+    useDeferredValue(value) {
+      // 测试桩直接返回当前值；真实 React 的延迟调度不影响断言
+      return value
+    },
   }
 }
 
@@ -145,6 +149,7 @@ export function reactFor(hooks) {
     useMemo: hooks.useMemo,
     useCallback: hooks.useCallback,
     useRef: hooks.useRef,
+    useDeferredValue: hooks.useDeferredValue,
   }
 }
 

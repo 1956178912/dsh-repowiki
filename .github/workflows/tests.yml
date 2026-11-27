@@ -5,20 +5,85 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['22', '24']
+        include:
+          - os: ubuntu-latest
+            node: '22'
+            blocking: true
+          - os: ubuntu-latest
+            node: '24'
+            blocking: true
+          - os: macos-latest
+            node: '22'
+            blocking: true
+          - os: windows-latest
+            node: '22'
+            blocking: false
+    continue-on-error: ${{ !matrix.blocking }}
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ matrix.node }}
+          cache: npm
       - name: Install dev dependencies
         run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Secret scan
+        run: npm run scan:secrets
       - name: Run test suite
-        run: node --test test/*.test.js
+        run: npm test
+
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run coverage:check
+
+  audit:
+    name: dependency audit + SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: npm audit (high and above)
+        run: npm audit --audit-level=high
+      - name: SBOM (CycloneDX)
+        continue-on-error: true
+        run: npm sbom --sbom-format=cyclonedx > sbom.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom
+          path: sbom.json
+          if-no-files-found: ignore

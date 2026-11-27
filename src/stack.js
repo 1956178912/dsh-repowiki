@@ -83,6 +83,163 @@ const GO_TECH = {
   'go.uber.org/zap': 'zap', 'github.com/sirupsen/logrus': 'logrus',
 }
 
+/** composer.json 的包名 → 技术展示名。 */
+const COMPOSER_TECH = {
+  'laravel/framework': 'Laravel',
+  'symfony/framework-bundle': 'Symfony',
+  'symfony/console': 'Symfony',
+  'slim/slim': 'Slim',
+  'cakephp/cakephp': 'CakePHP',
+  'yiisoft/yii2': 'Yii 2',
+  'phpunit/phpunit': 'PHPUnit',
+  'guzzlehttp/guzzle': 'Guzzle',
+  'monolog/monolog': 'Monolog',
+  'doctrine/orm': 'Doctrine ORM',
+  'doctrine/dbal': 'Doctrine DBAL',
+  'predis/predis': 'Predis',
+  'aws/aws-sdk-php': 'AWS SDK for PHP',
+  'stripe/stripe-php': 'Stripe PHP',
+  'phpmailer/phpmailer': 'PHPMailer',
+  'twig/twig': 'Twig',
+  'nesbot/carbon': 'Carbon',
+  'vlucas/phpdotenv': 'phpdotenv',
+  'firebase/php-jwt': 'Firebase JWT',
+}
+
+/** composer 包名前缀 → 技术展示名（包名未精确命中时兜底）。 */
+const COMPOSER_PREFIX_TECH = [
+  ['laravel/', 'Laravel'],
+  ['symfony/', 'Symfony'],
+  ['doctrine/', 'Doctrine'],
+  ['phpunit/', 'PHPUnit'],
+]
+
+/** Gemfile 的 gem 名 → 技术展示名。 */
+const BUNDLER_TECH = {
+  rails: 'Ruby on Rails', railties: 'Ruby on Rails', activerecord: 'Active Record',
+  sinatra: 'Sinatra', hanami: 'Hanami', grape: 'Grape', rack: 'Rack',
+  puma: 'Puma', unicorn: 'Unicorn', sidekiq: 'Sidekiq', resque: 'Resque',
+  'delayed_job': 'Delayed Job',
+  rspec: 'RSpec', 'rspec-rails': 'RSpec', minitest: 'Minitest', capybara: 'Capybara',
+  'factory_bot': 'Factory Bot', 'factory_bot_rails': 'Factory Bot', faker: 'Faker',
+  devise: 'Devise', doorkeeper: 'Doorkeeper', cancancan: 'CanCanCan',
+  jbuilder: 'Jbuilder', kaminari: 'Kaminari', 'will_paginate': 'WillPaginate',
+  sequel: 'Sequel', pg: 'pg', mysql2: 'MySQL client', sqlite3: 'SQLite3',
+  redis: 'redis-rb', httparty: 'HTTParty', faraday: 'Faraday', nokogiri: 'Nokogiri',
+  graphql: 'GraphQL Ruby', rubocop: 'RuboCop', standard: 'StandardRB',
+  brakeman: 'Brakeman', 'stimulus-rails': 'Stimulus', 'turbo-rails': 'Turbo',
+  view_component: 'ViewComponent', 'dry-validation': 'Dry Validation',
+  'sorbet-runtime': 'Sorbet', 'shopify_api': 'Shopify API',
+}
+
+/** Swift Package Manager 的仓库名（小写）→ 技术展示名。 */
+const SWIFT_TECH = {
+  vapor: 'Vapor', 'swift-nio': 'SwiftNIO', 'swift-argument-parser': 'ArgumentParser',
+  'swift-log': 'swift-log', 'swift-collections': 'Swift Collections',
+  'swift-syntax': 'SwiftSyntax', 'swift-algorithms': 'Swift Algorithms',
+  alamofire: 'Alamofire', 'swift-composable-architecture': 'Composable Architecture',
+  'swift-snapshot-testing': 'Snapshot Testing', 'realm-swift': 'Realm', realm: 'Realm',
+  quick: 'Quick', nimble: 'Nimble', 'grpc-swift': 'gRPC Swift',
+  'firebase-ios-sdk': 'Firebase', kingfisher: 'Kingfisher', 'lottie-ios': 'Lottie',
+}
+
+/** sbt 的 artifact 名 → 技术展示名。 */
+const SBT_TECH = {
+  'spark-core': 'Apache Spark', 'spark-sql': 'Apache Spark',
+  'akka-actor': 'Akka', 'akka-stream': 'Akka Streams', 'akka-http': 'Akka HTTP',
+  'pekko-actor': 'Apache Pekko', 'pekko-stream': 'Apache Pekko',
+  'cats-core': 'Cats', 'cats-effect': 'Cats Effect', 'fs2-core': 'FS2',
+  zio: 'ZIO', 'zio-http': 'ZIO HTTP',
+  'http4s-core': 'http4s', 'http4s-blaze-server': 'http4s',
+  play: 'Play Framework', 'play-ws': 'Play Framework',
+  circe: 'Circe', 'circe-generic': 'Circe',
+  doobie: 'Doobie', slick: 'Slick', quill: 'Quill',
+  tapir: 'Tapir', sttp: 'sttp',
+  scalatest: 'ScalaTest', scalacheck: 'ScalaCheck', munit: 'MUnit',
+  'kafka-clients': 'Kafka client', 'kafka-streams-scala': 'Kafka Streams',
+  shapeless: 'Shapeless', enumeratum: 'Enumeratum',
+  'scala-collection-compat': 'Scala Collection Compat',
+}
+
+/** sbt groupId 前缀 → 技术展示名（artifact 未命中时的兜底）。 */
+const SBT_GROUP_TECH = [
+  ['org.apache.spark', 'Apache Spark'],
+  ['com.typesafe.akka', 'Akka'],
+  ['org.apache.pekko', 'Apache Pekko'],
+  ['dev.zio', 'ZIO'],
+  ['org.http4s', 'http4s'],
+  ['org.scalatest', 'ScalaTest'],
+  ['org.scalacheck', 'ScalaCheck'],
+  ['io.circe', 'Circe'],
+  ['org.tpolecat', 'Doobie'],
+  ['com.softwaremill.sttp', 'sttp'],
+  ['org.playframework', 'Play Framework'],
+]
+
+/**
+ * CMake `find_package(<Name>)` 的包名 → 技术展示名。
+ * 只收录名称稳定、拼写约定明确的主流包；未知包只计入依赖数。
+ */
+const CMAKE_TECH = {
+  Qt6: 'Qt', Qt5: 'Qt', Boost: 'Boost', OpenCV: 'OpenCV', Eigen3: 'Eigen',
+  fmt: 'fmt', spdlog: 'spdlog', protobuf: 'Protocol Buffers', gRPC: 'gRPC',
+  Vulkan: 'Vulkan', SDL2: 'SDL', SFML: 'SFML', glfw3: 'GLFW',
+  Catch2: 'Catch2', GTest: 'GoogleTest', GoogleTest: 'GoogleTest',
+  nlohmann_json: 'nlohmann/json', OpenSSL: 'OpenSSL', ZLIB: 'zlib',
+  SQLite3: 'SQLite', CURL: 'libcurl', LibXml2: 'libxml2', CUDA: 'CUDA',
+}
+
+/** Maven/Gradle 的 artifact 名 → 技术展示名（JVM 生态共用）。 */
+const JVM_TECH = {
+  'spring-boot-starter': 'Spring Boot',
+  'spring-boot-starter-web': 'Spring Boot',
+  'spring-boot-starter-webflux': 'Spring WebFlux',
+  'spring-boot-starter-data-jpa': 'Spring Data JPA',
+  'spring-boot-starter-security': 'Spring Security',
+  'spring-boot-starter-test': 'Spring Boot Test',
+  'spring-core': 'Spring Framework',
+  'spring-context': 'Spring Framework',
+  'spring-webmvc': 'Spring MVC',
+  'spring-kafka': 'Spring Kafka',
+  'junit': 'JUnit',
+  'junit-jupiter': 'JUnit 5',
+  'junit-jupiter-api': 'JUnit 5',
+  'junit-jupiter-engine': 'JUnit 5',
+  'mockito-core': 'Mockito',
+  'mockito-junit-jupiter': 'Mockito',
+  'assertj-core': 'AssertJ',
+  'testcontainers': 'Testcontainers',
+  'jackson-databind': 'Jackson',
+  'gson': 'Gson',
+  'lombok': 'Lombok',
+  'hibernate-core': 'Hibernate',
+  'mybatis': 'MyBatis',
+  'mybatis-spring': 'MyBatis',
+  'guava': 'Guava',
+  'slf4j-api': 'SLF4J',
+  'logback-classic': 'Logback',
+  'log4j-core': 'Log4j',
+  'kotlin-stdlib': 'Kotlin',
+  'kotlinx-coroutines-core': 'Kotlin Coroutines',
+  'ktor-server-core': 'Ktor',
+  'quarkus-core': 'Quarkus',
+  'micronaut-core': 'Micronaut',
+  'netty-all': 'Netty',
+  'okhttp': 'OkHttp',
+  'retrofit': 'Retrofit',
+}
+
+/** Maven groupId 前缀 → 技术展示名（artifact 未命中时的兜底）。 */
+const JVM_GROUP_TECH = [
+  ['org.springframework', 'Spring Framework'],
+  ['org.junit', 'JUnit'],
+  ['org.mockito', 'Mockito'],
+  ['org.jetbrains.kotlin', 'Kotlin'],
+  ['io.quarkus', 'Quarkus'],
+  ['io.micronaut', 'Micronaut'],
+  ['io.netty', 'Netty'],
+]
+
 /** Cargo.toml 的 crate 名 → 技术展示名。 */
 const CARGO_TECH = {
   tokio: 'Tokio', asyncstd: 'async-std', serde: 'Serde', 'serde_json': 'Serde',
@@ -121,11 +278,11 @@ function pipTechnologies(lines, source) {
   const techs = []
   for (const raw of lines) {
     // 去掉注释、环境标记与版本约束，只留分发名（小写归一）
-    const name = raw.split(/[#;\[]/)[0].trim().split(/[<>=!~\[ ]/)[0].toLowerCase()
+    const name = raw.split(/[#;[]/)[0].trim().split(/[<>=!~[ ]/)[0].toLowerCase()
     if (!name) continue
     const display = PIP_TECH[name]
     if (display) {
-      const version = /[<>=!~](.+)$/.exec(raw.split(/[#;\[]/)[0])
+      const version = /[<>=!~](.+)$/.exec(raw.split(/[#;[]/)[0])
       techs.push({ name: display, ecosystem: 'pip', source, version: version ? version[1] : undefined })
     }
   }
@@ -177,6 +334,146 @@ function cargoDeps(text) {
 }
 
 /**
+ * 从 pom.xml 提取依赖（artifactId/groupId/version）。
+ * @param {string} text - pom.xml 内容。
+ * @returns {{artifact:string, group?:string, version?:string}[]} 依赖列表。
+ */
+function pomDependencies(text) {
+  const deps = []
+  for (const block of text.matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)) {
+    const body = block[1]
+    const artifact = /<artifactId>\s*([^<]+?)\s*<\/artifactId>/.exec(body)?.[1]
+    if (!artifact) continue
+    deps.push({
+      artifact,
+      group: /<groupId>\s*([^<]+?)\s*<\/groupId>/.exec(body)?.[1],
+      version: /<version>\s*([^<]+?)\s*<\/version>/.exec(body)?.[1],
+    })
+  }
+  return deps
+}
+
+/**
+ * 从 pom.xml 提取项目名（排除依赖块后取首个 artifactId，退回 <name>）。
+ * @param {string} text - pom.xml 内容。
+ * @returns {string|undefined} 项目名。
+ */
+function pomProjectName(text) {
+  const withoutDeps = text.replace(/<dependencies>[\s\S]*?<\/dependencies>/g, '')
+  return /<artifactId>\s*([^<]+?)\s*<\/artifactId>/.exec(withoutDeps)?.[1]
+    ?? /<name>\s*([^<]+?)\s*<\/name>/.exec(withoutDeps)?.[1]
+}
+
+/**
+ * 从 build.gradle / build.gradle.kts 提取依赖坐标。
+ * @param {string} text - Gradle 构建脚本内容。
+ * @returns {{group:string, artifact:string, version?:string}[]} 依赖列表。
+ */
+function gradleDependencies(text) {
+  const deps = []
+  const re = /\b(?:implementation|api|compileOnly|compileOnlyApi|runtimeOnly|testImplementation|testRuntimeOnly|annotationProcessor|kapt)\s*[(\s]\s*['"]([^'"]+)['"]/g
+  for (const m of text.matchAll(re)) {
+    const parts = m[1].split(':')
+    if (parts.length < 2) continue
+    deps.push({ group: parts[0], artifact: parts[1], version: parts[2] })
+  }
+  return deps
+}
+
+/**
+ * JVM 依赖 → 技术展示名（artifact 精确优先，groupId 前缀兜底）。
+ * @param {{artifact:string, group?:string}} dep - 依赖坐标。
+ * @returns {string|undefined} 技术展示名。
+ */
+function jvmTechName(dep) {
+  if (JVM_TECH[dep.artifact]) return JVM_TECH[dep.artifact]
+  if (!dep.group) return undefined
+  return JVM_GROUP_TECH.find(([prefix]) => dep.group.startsWith(prefix))?.[1]
+}
+
+/**
+ * 从 Gemfile 提取 gem 声明（名称 + 可选的版本约束）。
+ * @param {string} text - Gemfile 内容。
+ * @returns {{name:string, version?:string}[]} gem 列表。
+ */
+function bundlerDeps(text) {
+  const deps = []
+  for (const raw of text.split('\n')) {
+    const m = /^gem\s+['"](?<name>[^'"]+)['"](?<rest>.*)$/.exec(raw.trim())
+    if (!m) continue
+    // gem 'rails', '~> 7.0'（后续字符串里第一个像版本约束的即版本）
+    const versions = [...m.groups.rest.matchAll(/['"]([^'"]+)['"]/g)].map(v => v[1])
+    const version = versions.find(v => /^[~<>=!^]*\s*\d/.test(v))
+    deps.push({ name: m.groups.name, ...(version ? { version } : {}) })
+  }
+  return deps
+}
+
+/**
+ * 从 Package.swift 提取远端包依赖（仓库名小写归一）。
+ * @param {string} text - Package.swift 内容。
+ * @returns {{name:string}[]} 仓库名列表。
+ */
+function swiftPackageDeps(text) {
+  const deps = []
+  for (const m of text.matchAll(/\.package\s*\([^)]*?url:\s*"([^"]+)"/g)) {
+    const repo = /([^/]+?)(?:\.git)?\/?$/.exec(m[1])?.[1]
+    if (repo) deps.push({ name: repo.toLowerCase() })
+  }
+  return deps
+}
+
+/**
+ * 从 build.sbt 提取 libraryDependencies 坐标。
+ * @param {string} text - build.sbt 内容。
+ * @returns {{group:string, artifact:string, version?:string}[]} 依赖列表。
+ */
+function sbtDependencies(text) {
+  const deps = []
+  for (const m of text.matchAll(/"([\w.-]+)"\s*%%?\s*"([\w.-]+)"(?:\s*%\s*"([^"]+)")?/g)) {
+    deps.push({ group: m[1], artifact: m[2], version: m[3] })
+  }
+  return deps
+}
+
+/**
+ * sbt 依赖 → 技术展示名（artifact 精确优先，groupId 前缀兜底）。
+ * @param {{artifact:string, group:string}} dep - 依赖坐标。
+ * @returns {string|undefined} 技术展示名。
+ */
+function sbtTechName(dep) {
+  if (SBT_TECH[dep.artifact]) return SBT_TECH[dep.artifact]
+  return SBT_GROUP_TECH.find(([prefix]) => dep.group.startsWith(prefix))?.[1]
+}
+
+/**
+ * 从 CMakeLists.txt 提取 `find_package` 的包名（大小写不敏感、去重、
+ * 保持出现顺序）。
+ * @param {string} text - CMakeLists.txt 内容。
+ * @returns {string[]} 包名列表。
+ */
+function cmakePackages(text) {
+  const names = []
+  const seen = new Set()
+  for (const m of text.matchAll(/find_package\s*\(\s*([A-Za-z0-9_.+-]+)/gi)) {
+    const name = m[1]
+    if (seen.has(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  return names
+}
+
+/**
+ * 从 CMakeLists.txt 提取 project() 名称。
+ * @param {string} text - CMakeLists.txt 内容。
+ * @returns {string|undefined} 项目名。
+ */
+function cmakeProjectName(text) {
+  return /project\s*\(\s*([A-Za-z0-9_.+-]+)/i.exec(text)?.[1]
+}
+
+/**
  * 识别技术栈（纯函数入口）。
  * @param {Record<string, string>} manifests - 相对路径 → 清单文件文本。
  * @returns {StackInfo} 识别结果。
@@ -212,9 +509,79 @@ export function detectStack(manifests) {
         const name = CARGO_TECH[dep.name]
         if (name) info.technologies.push({ name, ecosystem: 'cargo', source: path, version: dep.version })
       }
+    } else if (path === 'composer.json') {
+      let pkg
+      try { pkg = JSON.parse(text) } catch { continue }
+      if (typeof pkg !== 'object' || pkg === null) continue
+      if (typeof pkg.name === 'string') info.projectName = info.projectName ?? pkg.name
+      const deps = { ...pkg.require, ...pkg['require-dev'] }
+      info.dependencyCounts.composer = Object.keys(deps).length
+      for (const [dep, version] of Object.entries(deps)) {
+        if (dep === 'php') continue
+        const display = COMPOSER_TECH[dep]
+          ?? COMPOSER_PREFIX_TECH.find(([prefix]) => dep.startsWith(prefix))?.[1]
+        if (display) {
+          info.technologies.push({
+            name: display,
+            ecosystem: 'composer',
+            source: path,
+            ...(typeof version === 'string' ? { version } : {}),
+          })
+        }
+      }
+    } else if (path === 'pom.xml') {
+      const deps = pomDependencies(text)
+      info.dependencyCounts.maven = deps.length
+      if (!info.projectName) info.projectName = pomProjectName(text)
+      for (const dep of deps) {
+        const name = jvmTechName(dep)
+        if (name) info.technologies.push({ name, ecosystem: 'jvm', source: path, version: dep.version })
+      }
+    } else if (path === 'build.gradle' || path === 'build.gradle.kts') {
+      const deps = gradleDependencies(text)
+      info.dependencyCounts.gradle = deps.length
+      if (!info.projectName) {
+        info.projectName = /rootProject\.name\s*=\s*['"]([^'"]+)['"]/.exec(text)?.[1]
+      }
+      for (const dep of deps) {
+        const name = jvmTechName(dep)
+        if (name) info.technologies.push({ name, ecosystem: 'jvm', source: path, version: dep.version })
+      }
+    } else if (path === 'Gemfile') {
+      const deps = bundlerDeps(text)
+      info.dependencyCounts.bundler = deps.length
+      for (const dep of deps) {
+        const name = BUNDLER_TECH[dep.name]
+        if (name) info.technologies.push({ name, ecosystem: 'bundler', source: path, version: dep.version })
+      }
+    } else if (path === 'Package.swift') {
+      const deps = swiftPackageDeps(text)
+      info.dependencyCounts.swiftpm = deps.length
+      if (!info.projectName) info.projectName = /name:\s*"([^"]+)"/.exec(text)?.[1]
+      for (const dep of deps) {
+        const name = SWIFT_TECH[dep.name]
+        if (name) info.technologies.push({ name, ecosystem: 'swiftpm', source: path })
+      }
+    } else if (path === 'build.sbt') {
+      const deps = sbtDependencies(text)
+      info.dependencyCounts.sbt = deps.length
+      if (!info.projectName) info.projectName = /name\s*:=\s*"([^"]+)"/.exec(text)?.[1]
+      for (const dep of deps) {
+        const name = sbtTechName(dep)
+        if (name) info.technologies.push({ name, ecosystem: 'sbt', source: path, version: dep.version })
+      }
+    } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
+      const packages = cmakePackages(text)
+      // 根清单 + 嵌套子项目清单：依赖按出现次数累加，技术名在末尾统一去重
+      info.dependencyCounts.cmake = (info.dependencyCounts.cmake ?? 0) + packages.length
+      if (path === 'CMakeLists.txt' && !info.projectName) info.projectName = cmakeProjectName(text)
+      for (const pkg of packages) {
+        const name = CMAKE_TECH[pkg]
+        if (name) info.technologies.push({ name, ecosystem: 'cmake', source: path })
+      }
     }
-    // pyproject.toml / composer.json：Phase 1 只计入元数据，不做技术映射
-    //（pyproject 的依赖段形态多样，识别放后续迭代，避免错误结论）
+    // pyproject.toml：依赖段形态多样，当前只计入元数据，不做技术映射
+    //（识别放后续迭代，避免错误结论）
   }
   // 去重（同一技术可能来自 dependencies + devDependencies）
   const seen = new Set()

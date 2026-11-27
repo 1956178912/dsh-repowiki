@@ -8,20 +8,23 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 + 面板视图 + 多工作区总览（v0.42.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链、跨语言资产回退、文档健康度、符号级影响面与使用点证据、PageRank 核心文件与有预算的任务上下文包（v0.119.0）
 
 | 能力 | 说明 |
 |---|---|
-| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：符号表、import 依赖边、技术栈识别，写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目 |
-| `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径过滤，返回文件+符号与项目技术栈；`includeMemory` 附带同查询命中的已采信会话记忆 |
-| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；源文件摘要变化时卡片自动刷新，但标记为 `manuallyEdited` 的卡片受保护；源文件已消失的卡片报告为孤儿 |
-| `repowiki-generate` 工具 | 只读卡片集合 + 技术栈（+ 已采信的会话记忆作为约定/决策），凝练为按主题分组的 Wiki 页面（Markdown + 可选 mermaid），写入 `.dsh-repowiki/wiki/<locale>/` |
-| 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold |
-| `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；目标非空时默认拒绝，除非 `overwrite` |
+| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：JS/TS、Vue 与 Svelte SFC、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、C、C++（含 Scala 3 缩进语法、`extension` 与 `given`）符号表，本地 import 依赖边（含嵌套 `go.mod` 的 Go 多模块仓库），技术栈识别（npm/pip/go/cargo/maven/gradle/composer/bundler/swiftpm/sbt/cmake），语言分布与 Git 溯源（只读 `.git/HEAD` 的 `branch`/`commit`），模块树（按目录归组，深度 ≤2），写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目，并给出新增/变更/删除计数；尊重文档化的 `.gitignore` 子集并统计 `ignored`；不可读或超大源码文件计入 `skipped`（附告警）而非静默消失；Go `internal` 可见性违规以告警报告（边仍保留；上限 50 条，其余折叠为汇总）；取消时不覆盖旧索引 |
+| `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径 / 模块 / 语言过滤，或只看公开符号（`exportedOnly`）；命中按精确 > 前缀 > 子串排序（同强度内导出优先），文件按最佳命中排序，方法结果带所属类型；返回文件+符号、项目技术栈与模块树；`target=docs/all` 对卡片、Wiki 与已采信记忆做零依赖 BM25 排序检索；`includeMemory` 附带同查询命中的已采信会话记忆；`references=true` 追加带语句行号的 import 级反向引用（`referencedBy: [{path, line}]`，上限 100 条）；`wikiReferences=true` 追加 Wiki 引用（`wikiReferences: [{path, slug, title, sections}]`）；`imports=true` 列出命中文件的出边（`imports: [{path, line, symbols, depth}]`，保留副作用导入、跳过自引用、上限 100 条）；`depth` 2–3 展开传递依赖（最小跳数优先、环保持有界）；`locale` 省略时自动使用"环境语言 → 实际有资产的另一语言"回退，显式指定则严格读取该语言 |
+| `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；prompt 携带项目名、技术栈与模块路径，`relatedModules` 复用真实模块名；关键符号附索引行号；同目录写 `_index.json` 模块→卡片清单；源文件摘要变化时卡片自动刷新，但标记为 `manuallyEdited` 的卡片受保护；源文件已消失的卡片报告为孤儿；`locales: ['zh','en']` 按 locale 串行处理并在 `byLocale` 分语言汇报；`concurrency`（1–4，默认取计划）并行派发多个文件抽取，写卡仍串行；`attempts`（1–3，默认 2）对抛错/坏输出做可取消的指数退避重试（模型明确 `skip` 不重试） |
+| `repowiki-generate` 工具 | 只读卡片集合 + 技术栈（+ 已采信的会话记忆作为约定/决策）与最多 15 条跨模块依赖摘要、最多 5 组文件级循环依赖、最多 5 个 fan-in 热点文件，凝练 Wiki 页面写入 `.dsh-repowiki/wiki/<locale>/`；`granularity=theme/module/all`（模块页确定性生成，无模型调用，区分出边/入边模块依赖、标注双向依赖的循环模块并追加高风险入口节）；`locales: ['zh','en']` 时主题页按 locale 各合成一次；自动目录、页级/章节引用为相对路径 + 可选 `#Lx-Ly` 并按索引白名单净化；每轮写 `wiki/<locale>/_index.json`（含 `inputDigest` 供陈旧检测）；重复 slug 自动改名，单页失败进入 `failed` 清单而非丢弃整轮；清单里的卡片指纹与已采信记忆指纹一致时跳过主题合成（不调用模型），`force=true` 可强制重跑；抛错或空页面列表按可取消退避重试（`attempts` 1–3） |
+| `repowiki-status` 工具 | 只读健康诊断（无 LLM）：索引存在/版本/兼容、文件/符号/模块数（含跳过文件）、语言分布、Git 分支/提交、最近抽取快照（`lastExtract`：计数、失败/重试、并发、尝试次数、耗时）、卡片陈旧/孤儿、Wiki 清单/陈旧/孤儿、记忆审核计数、plan 来源、进程内锁队列、跨模块依赖热点、文件级循环依赖组（每组附一条代表性最短环路径）、fan-in hub（被最多文件依赖的入口）、PageRank 核心文件（前 10，计入间接重要性，仅索引有依赖边时）与告警（文本报告最多 3 条 + 折叠计数）；新增文档覆盖率（分母为 plan 阈值下有资格生成卡片的文件，附缺口最大的模块）与加权健康分（文档 40 / Wiki 25 / 架构 20 / 卫生 15，A–D 等级 + 前四条待办）；读取 locale 支持"环境语言 → 有资产语言"回退并在输出中标注 |
+| `repowiki-impact` 工具 | 改动前的影响面分析（只读、确定性、无 LLM）：把变更路径匹配到索引文件（绝对路径/后缀/唯一 basename，歧义只列候选不猜）；在反向 import 图上按最小跳数展开直接与传递依赖方（`depth` 1–3，明细有界但总数精确）；列出涉及变更文件的循环组（含代表路径）、变更文件的 fan-in；返回会受影响的卡片（含陈旧标记）与 Wiki 页面/章节引用；给出可解释的风险分层（直接依赖 / 传递依赖 / 循环 / hub 四个计分因子，low–critical）与按优先级排序的验证建议。可选 `symbols` 支持裸符号名与 `path#name`：直接层要求具名 import 证据，传递层保留文件图保守展开；解析不到时不悄悄放大范围，`conservativeImpactedTotal` 保留文件级上界；默认扫描直接具名导入方并返回 `usages` 词法使用点（`path:line` + 源码行），排除 import/export 列表、解构绑定与整行注释，最多 20 个文件 / 每符号 10 条 / 总计 100 条，读取失败列入 `usagesUnreadable`（未知而非无使用），`includeUsages=false` 可关闭源码读取 |
+| `repowiki-context` 工具 | 一次调用生成任务证据包（只读、确定性、无 LLM）：按标识符、路径、显式 anchor 与卡片/Wiki/记忆 BM25 命中给文件排序；把相关符号定义、带真实行号的源码片段、直接 imports/dependents、相关循环与 fan-in 热点合成一个 Markdown 包。`budget` 为 2,000–40,000 字符硬上限（默认 12,000），源码/文档/关系省略分别计数，不把截断内容冒充完整证据；主文件列表与源码读取均有界；任务未命中任何索引文件且 import 图有边时，用 PageRank 前 5 个文件作为 repo map 兜底，逐条标 `(repo map)` 并输出 `fallback: 'repo-map'`，明确"起点而非任务相关性" |
+| 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold / concurrency / attempts |
+| `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；目标非空时默认拒绝，除非 `overwrite`；取消时如实上报 `aborted` |
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
 | `repowiki-edit` 工具 | 人工修订知识卡片：`create` 新建人工卡（path 可为索引外路径），`update` 改写现有卡片；两者置 `manuallyEdited`，`repowiki-extract` 不再自动刷新该卡 |
-| `repowiki-memory` 工具 | 把本会话学到的知识沉淀到 `.dsh-repowiki/memory/<locale>/`（默认 `pending` 待审），再经 `list` / `accept` / `reject` 完成审核闭环；条目为带 JSON frontmatter 的 Markdown，随 Git 共享 |
-| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面。**默认总览模式**列出所有工作区的状态点与统计；点击行下钻单库视图：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、搜索、网格与列表视图、卡片详情、以及浏览已生成页面的 Wiki 页签——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取——以及生成动作（ADR-0004） |
+| `repowiki-memory` 工具 | 把本会话学到的知识沉淀到 `.dsh-repowiki/memory/<locale>/`（默认 `pending` 待审），再经 `list` / `accept` / `reject` 完成审核闭环；条目为带 JSON frontmatter 的 Markdown，随 Git 共享；同名 slug 不同标题哈希共存，审核记录 `reviewedAt` |
+| Repo Wiki 面板（web） | 侧栏"自动化任务"旁的"Repo Wiki"入口，打开工作区页面。**默认总览模式**列出所有工作区的状态点与统计；点击行下钻单库视图：文件/符号/卡片/文档统计与最近更新、"全部/已生成/未生成/待更新"筛选（未生成 = 在 `index.json` 中但没有卡片；待更新 = 卡片 digest 与索引不一致）、按标题/路径/标签/符号/卡片正文的延迟搜索、分页（120 + 加载更多）、按路径/标题/更新时间排序、多语言索引下的语言筛选（展示可读语言名）与按语言文件分布、索引有跳过文件时的跳过计数、索引告警计数（可展开完整列表，悬停预览前三条）、高风险入口提示行（被最多文件依赖，chip 可点开对应详情）、标签筛选、网格与列表视图、循环依赖文件的 `⟲` 徽章（2–3 文件环的 tooltip 附代表性断链路径）、按模块分组、卡片详情与复制路径、循环摘要（组大小 + 代表性路径，环内其他文件可点击）、行号级 import 反向引用与出边（两个列表中的文件均可点击打开详情；双向依赖用 `↔` 标记，1/2/3 跳深度控件同时驱动依赖与依赖方两个方向）、可点击的 Wiki 引用与章节 chips（跳转到任意被引章节）、最近一次抽取快照（失败数用错误色）、以及 Wiki 页签（搜索、清单分组、孤儿标记）——Wiki/卡片 Markdown 由零依赖渲染器呈现，` ```mermaid ` 围栏（含 `subgraph` 分组）会画成带主题令牌的内联 SVG 流程图——数据经 `ctx.remote.workspaceFiles` 从 `.dsh-repowiki/` 读取（资产 JSON 分页上限 60 万行，大型仓库索引可完整加载）——以及生成动作（ADR-0004） |
 
 路线图：
 - Phase 3（v0.6.0 完成）：内容摘要驱动的索引增量重建、卡片自动刷新、人工修订保护、孤儿卡片报告、目录导入导出
@@ -32,6 +35,200 @@
 - 多工作区总览（v0.18.0，ui-plan 切片 2）：每行一个工作区带状态与统计，点击下钻；复用各工作区自身的会话 scope，无需新的 Host 数据面
 - 主题令牌实证（v0.21.0）：解析 app.asar 提取官方主题 CSS——`design-platform.css` 定义全部 264 个 `--dsw-alias-*` 令牌（含深色重定义），主前端壳消费 348 处，本插件令牌全部命中；同时"已生成"状态点改用 `state-done-primary`（紫），解决灰蓝难区分
 - 宿主漂移自检（v0.22.0）：`npm run verify:host` 直接核对 client.js 引用的令牌在新版 dsh 自带 CSS 中是否仍存在且有深色变体；CI 无宿主时自动跳过
+- Qoder Repo Wiki 对齐（v0.43.0）：模块树（`modules[]` + `files[].module`）、
+  卡片/Wiki 相对路径与行号引用、自动目录与章节来源、面板按模块分组；
+  引用经路径白名单净化（ADR-0006）
+- 并发写串行化（v0.43.0）：六个写工具按资产根进程内 FIFO 排队（O5，ADR-0005）
+- 安全与正确性基线（v0.44.0）：面板链接协议白名单、端到端 `AbortSignal` 取消、
+  写入回读校验、索引 schema v3（兼容 v2）、记忆哈希后缀防覆盖；锁范围收窄为
+  "写前判定 + 写盘"，LLM 派发不再持锁（ADR-0005 修订）
+- 产品力与体验（v0.45.0）：`.gitignore` 子集、零依赖 BM25 正文检索、模块级
+  Wiki 与清单、陈旧/孤儿检测、`repowiki-status`、面板分页/排序/标签/Wiki 搜索/
+  可访问性
+- 工程卓越与发布（v0.46.0）：TypeScript `checkJs`（渐进）、ESLint、3 OS CI 矩阵
+  （Windows canary）、覆盖率门禁、密钥扫描、CodeQL、Dependabot、SBOM、发布脚本
+  与 runbook/基准文档（ADR-0007）
+- 语言与生态扩展（v0.47.0）：Go/Rust/Java 符号与本地依赖边、Maven/Gradle
+  技术栈、Git 溯源（`.git/HEAD` 分支/提交）、语言分布、多 locale 抽取与生成、
+  索引 schema v4（兼容 v2/v3）
+- 反向引用（v0.48.0）：`repowiki-cards references=true` 与面板详情回答
+  "哪些文件 import 了这个符号"，由 `index.edges` 按需反演，输出有界且
+  如实标注 import 级语义
+- 行号级引用（v0.49.0）：索引 schema v5 在每条边上记录 import/use/require
+  行号，反引用与面板定位到 `path:Lx`；旧索引自动降级为仅路径
+- Wiki 引用反查（v0.50.0）：Wiki 清单 v2 记录章节级来源，
+  `repowiki-cards wikiReferences=true` 与面板回答"这个文件被哪些 Wiki
+  页面/章节引用"，闭合代码 ↔ 文档双向链路
+- 8 语言覆盖（v0.51.0）：C#/Kotlin/PHP 符号与本地依赖边、Composer 技术栈、
+  全部受支持语言的 prompt 围栏标识
+- 有界并发抽取（v0.52.0）：计划/工具参数 `concurrency` 1–4 并行模型调用，
+  写盘仍串行；取消后不再派发，失败清单排序保证输出可复现
+- 抽取重试（v0.53.0）：`attempts` 1–3 对抛错/坏输出做可取消的指数退避
+  重试；明确 skip 终止，不浪费调用；结果报告 `attempts`/`retried`
+- Wiki 引用跳转（v0.53.1）：详情中的引用标题可点击，切换到 Wiki 页签并
+  打开对应页面，带可访问名称
+- 章节级深链（v0.53.2）：跳转后滚动到首个被引用章节，复用 Markdown 渲染
+  的同一锚点函数，目标与标题 id 一致
+- 抽取运行诊断（v0.54.0）：知识清单 v2 持久化最近一次运行（计数、失败、
+  重试、并发、尝试次数、耗时），`repowiki-status` 直接展示
+- 面板运行快照（v0.54.1）：单库统计行展示知识清单里的最近一次抽取，
+  失败数用错误色；切换到无会话/无资产工作区时状态干净重置
+- 11 语言覆盖（v0.55.0）：Ruby（class/module/def/attr/常量，
+  `require_relative` 相对边）、Swift（class/struct/enum/protocol/
+  extension/func/init，模块级 import）、Scala（class/case class/trait/
+  object/enum/def，分组/重命名 import）；Gemfile、Package.swift、
+  build.sbt 技术栈识别
+- Wiki 章节 chips（v0.56.0）：每个被引章节一个可点击 chip，跳转到该章节
+  （数量有界，溢出显示 +N）；Ruby 块范围忽略 heredoc 内容与
+  `=begin/=end` 块注释
+- 检索排序与语言过滤（v0.57.0）：符号命中按精确 > 前缀 > 子串排序
+  （导出符号优先），文件按最佳命中排序；`repowiki-cards` 新增 `lang` /
+  `exportedOnly`，面板新增语言下拉
+- 面板符号搜索与 Scala 3（v0.58.0）：面板按索引符号名定位文件；工具结果
+  展示方法所属类型；Scala 3 缩进体获得正确的成员范围与归属
+- Wiki 增量合成（v0.59.0）：卡片与已采信记忆指纹未变时
+  `repowiki-generate` 跳过模型调用（`force` 可覆盖）；记忆变化晚于 Wiki
+  时状态工具给出告警
+- SwiftPM target 依赖边（v0.60.0）：`import Core` 解析到
+  `Sources/Core/` 的代表文件，多 target 仓库获得依赖与反向引用数据；
+  自引用边被丢弃
+- 生成重试与索引变更计数（v0.61.0）：主题合成抛错/空输出按退避重试
+  （`attempts` 1–3）；`repowiki-index` 报告新增/变更/删除数
+- 上下文感知卡片与 Scala 3（v0.62.0）：卡片 prompt 携带项目名/技术栈/
+  模块路径以约束 `relatedModules`；Scala `extension` 方法与 `given`
+  实例获得正确归属与范围
+- 大索引面板加载（v0.63.0）：资产 JSON 采用 120 页读取预算，大型仓库的
+  `index.json` 不再被截断成坏 JSON；仍超限时报 `too-large` 而非解析错误
+- JS/TS 别名与工作区依赖边（v0.64.0）：非相对 import 经
+  `tsconfig`/`jsconfig` 的 `paths` + `baseUrl`（就近配置优先）与 monorepo
+  包名（`exports`/`main` → 源码入口）解析到本地文件；外部包仍不建边
+- Python 绝对导入（v0.65.0）：`import a.b` / `from a.b import c` 在项目根
+  与任意 `src`/`lib` 布局根下解析，`from 包 import 名` 优先同名子模块；
+  标准库与第三方 import 仍不建边
+- SwiftPM 自定义路径（v0.66.0）：解析 `Package.swift` 的 target 声明
+  （剥离注释、支持多行），`import 模块` 解析到声明的 `path:` 目录；
+  显式声明优先于 `Sources/<Target>/` 约定
+- Ruby 加载路径（v0.67.0）：裸 `require 'pkg/file'` 按任意层级 `lib/`
+  目录（深度优先）再回退项目根解析；`require_relative` 保持文件相对；
+  聚合入口与嵌套 gem 现在能建边，外部 gem 仍不建边
+- 有界并行索引（v0.68.0）：源码读取/解析默认 8 路并发
+  （`readConcurrency`，硬顶 16），按遍历位置装配，索引保持确定性；
+  本地同步 fs 收益有限，远程 RTT 受限的 `ctx.fs` 收益最大
+- C/C++ 支持（v0.69.0）：class/struct/union/enum/typedef、函数/方法/
+  构造/析构与原型（多行签名、`static` 可见性、匿名 typedef）；引号
+  `#include` 先按文件目录、再按 `include`/`src`/`inc` 根解析，系统头不建边
+- CMake 技术栈（v0.70.0）：`CMakeLists.txt` 的 `project()` 提供项目名，
+  `find_package()` 计入 `dependencyCounts.cmake` 并映射技术（Qt、Boost、
+  OpenCV、Eigen、fmt、spdlog、protobuf、gRPC、Catch2、GoogleTest 等）；
+  未知包只计数，不臆造技术名
+- 嵌套 CMake 子项目（v0.71.0）：任意层级 `CMakeLists.txt` 都贡献
+  `find_package` 计数与技术（带各自清单来源，嵌套上限 50 份）；项目名
+  仍只取根清单
+- Scala 多行签名（v0.72.0）：声明头跨行（`{`、`=` 或 Scala 3 `:` 结束）
+  时得到正确的范围与 `parent` 归属，缩进体以签名结束行为基准
+- 面板可读语言名（v0.73.0）：语言筛选与卡片详情展示 `JavaScript`、
+  `C#`、`C++` 等名称，筛选值仍为原始索引 id
+- pyproject 导入根（v0.74.0）：setuptools `package-dir`、PDM 字符串形式、
+  `packages.find where` 与 poetry `from` 目录并入 Python 导入根；绝对
+  路径与 `..` 值被忽略
+- 语言分布（v0.75.0）：单库视图展示可读的按语言文件数（前 8 种 + 溢出），
+  旧索引回退按文件行统计
+- 模块页依赖方向（v0.76.0）：确定性模块 Wiki 页拆分 `依赖模块`（出边）
+  与 `被依赖模块`（入边），各自排序并截断到 8 条
+- 尖括号 include（v0.77.0）：`#include <core/api.hpp>` 经
+  `include`/`src`/`inc` 根解析（引号形式仍先查文件目录）；系统头不建边
+- 模块依赖 prompt（v0.78.0）：主题合成注入最多 15 条跨模块依赖摘要，
+  并要求只使用这些方向，架构页以索引进图为依据
+- 状态热点（v0.79.0）：`repowiki-status` 返回并渲染前 10 条跨模块 import
+  边，不生成 Wiki 也能看到架构热点
+- 文件出边查询（v0.80.0）：`repowiki-cards imports=true` 回答"这个文件依赖
+  谁"，给出目标路径、语句行号与具名符号，与反向引用互补
+- 循环依赖检测（v0.81.0）：`repowiki-status` 以强连通分量口径报告文件级
+  循环组，主题合成被要求把循环作为架构风险指出
+- 面板依赖列表（v0.82.0）：卡片详情与反向引用并列展示出边，双向依赖用
+  `↔` 标记（两文件成环一眼可见）
+- 模块页循环节（v0.83.0）：确定性模块页列出双向 import 的模块，判断基于
+  完整边计数（先于各方向前 8 条截断）
+- Hatch 导入根（v0.84.0）：`[tool.hatch.build]` / target 的 `packages`
+  转为 Python 导入根，setuptools / PDM / poetry / Hatch 四类构建后端齐备
+- Vue SFC 索引（v0.85.0）：`<script>` / `<script setup>` 内容按 JS/TS
+  规则解析，行号与源文件一致；template/style 不产符号
+- 跳过文件计数（v0.86.0）：不可读或超大源码文件在索引统计、工具输出、
+  状态行与告警中如实报告为 `skipped`
+- 卡片正文检索（v0.87.0）：面板搜索同时打分卡片正文（职责/关键符号/
+  陷阱），每行预先小写，逐键搜索成本受控
+- Svelte SFC 索引（v0.88.0）：模块与实例 script 块按 JS/TS 规则解析，
+  行号与源文件一致；标记与样式不产符号
+- 面板跳过统计（v0.89.0）：索引报告跳过文件时，统计行追加 `跳过文件 N`
+  并附本地化悬停说明
+- 面板循环徽章（v0.90.0）：处于 import 环的文件在网格与列表视图显示
+  `⟲`，带本地化可访问名与悬停提示
+- Go 多模块解析（v0.91.0）：嵌套 `go.mod` 前缀解析子模块 import；
+  目录更深/module 更长优先，根模块行为不变
+- 传递依赖（v0.92.0）：`repowiki-cards imports=true depth=2..3` 按 BFS
+  展开 import 图（最小跳数优先、有界、环不无限展开）
+- 面板依赖深度（v0.93.0）：卡片详情"依赖文件"区块提供 1/2/3 跳选择器，
+  客户端与服务端同语义 BFS（更深跳数用 `⇢` + `N hops` 标注，重开卡片
+  重置为 1 跳）
+- 反向影响面（v0.94.0）：`repowiki-cards dependents=true` 回答"谁 import
+  了这个文件"，`depth=2..3` 追加间接依赖方（`←` / `⇠`）；面板详情新增
+  依赖方列表，与出边共用同一个深度控件
+- fan-in hub（v0.95.0）：`repowiki-status` 按不同依赖方数量排名最常被
+  导入的文件（并列按路径），作为改动风险热点
+- 内联 mermaid 图（v0.96.0）：Wiki 页面与卡片正文里的 ```` ```mermaid ````
+  围栏渲染为带主题令牌的 SVG 流程图（确定性分层布局；不支持的类型降级为
+  代码块）
+- 面板高风险入口（v0.97.0）：单库视图列出 fan-in 前三的文件，与状态工具
+  排名同口径
+- Go `internal` 检查（v0.98.0）：索引报告跨 `internal` 边界的导入为告警
+  （边保留；根 `internal/` 不受限）
+- 面板索引告警（v0.99.0）：统计行展示告警数，悬停列出前几条
+- 高风险入口可点击（v0.100.0）：fan-in chip 点击打开对应文件详情
+- 生成 prompt 注入 fan-in 热点（v0.101.0）：主题合成带上前五个高风险
+  入口与"不得虚构"约束
+- 模块页高风险入口（v0.102.0）：确定性模块页追加本模块 fan-in 前三文件
+  （跨模块依赖方计入）
+- mermaid subgraph 分组（v0.103.0）：`subgraph` 块渲染为带组名的虚线分组框
+- 索引告警可展开（v0.104.0）：统计行计数按钮切换完整告警列表（悬停保留
+  三条预览）
+- mermaid 指令对齐（v0.105.0）：合成 prompt 要求 `flowchart` + `subgraph`
+  与简短标签
+- internal 告警有界化（v0.106.0）：Go `internal` 违规上限 50 条，其余
+  折叠为汇总
+- 状态报告告警有界（v0.107.0）：文本最多 3 条 + 折叠计数，结构化数组保留
+  全量
+- 循环代表性路径（v0.108.0）：每个环附一条最短闭合路径（`a → b → a`），
+  状态行与合成 prompt 同步展示
+- 面板循环徽章附路径（v0.109.0）：`⟲` tooltip 对 2–3 文件环追加该路径
+- 详情循环摘要（v0.110.0）：详情面板直接展示组大小与短环路径，无需悬停
+- 环内路径可点击（v0.111.0）：路径中的其他文件可点开各自详情
+- 依赖条目可点击（v0.112.0）：依赖与依赖方列表均可打开目标文件详情
+- 跨语言资产自动回退（v0.113.0）：`repowiki-cards` 的正文/记忆/Wiki 引用
+  与 `repowiki-status` 在未显式指定 locale 时自动回退到实际有卡片/Wiki/
+  记忆的语言；显式指定保持严格。修复了"资产在 zh、宿主语言是 en 时
+  检索静默为空"的环境相关缺陷，测试套件在 `LANG=en` 与 `LANG=zh` 下
+  均全绿
+- 文档覆盖率与健康度（v0.114.0）：状态工具按 plan 的复杂度阈值统计
+  有资格文件的卡片覆盖，输出缺口最大的模块；四分量加权健康分（A–D）
+  与前四条待办，让"文档欠债"与架构/告警问题可排序
+- 变更影响面工具（v0.115.0）：`repowiki-impact` 在编辑前给出直接/传递
+  依赖方、循环组、fan-in、受影响卡片与 Wiki 引用、可解释风险分层与
+  验证顺序；路径歧义只列候选不猜
+- 符号级影响面（v0.116.0）：`repowiki-impact symbols=[...]` 以具名 import
+  证据过滤直接依赖方，同时保留传递层与文件级上界；未解析符号不放大范围
+- 有预算的任务上下文（v0.117.0）：`repowiki-context` 一次打包排序文件、
+  带行号源码、知识文档与静态关系，按字符预算截断并显式报告各类省略数
+- 解析正确的增量索引（v0.117.0）：多行 JS/TS import/export-from 保留起始
+  行号与具名符号；`parserVersion` 让旧解析缓存自动失效，同时不把已有文件
+  误报为新增
+- 使用点证据（v0.118.0）：符号模式下 `repowiki-impact` 扫描直接具名导入方，
+  按标识符边界定位符号出现行（排除 import/export 列表、解构与整行注释），
+  输出 `path:line` 与源码行；明确标注为词法证据而非解析后的调用点，读取
+  20 个文件 / 每符号 10 条 / 总计 100 条有界，失败文件单独披露
+- PageRank 核心文件与 repo map 兜底（v0.119.0）：`repowiki-status` 按静态
+  import 图 PageRank 排名文件，补上 fan-in 看不到的间接重要性；
+  `repowiki-context` 在任务无任何命中时用同一排名兜底，并明确标注
+  "起点而非任务相关性"
 - 可选语义索引按方案保持后置（YAGNI）
 - 会话记忆条目对后续会话可见，与知识卡片一同构成知识库
 
@@ -39,10 +236,15 @@
 
 - **单 bundle、单插件条目、零 npm 运行时依赖、零构建工具**：纯 ES Module，手写 `ToolDefinition`（不 import `@deepseek-ai/dsh-tools`），安装目录即可运行。
 - **资产即文件**：索引、卡片与 Wiki 全部落入 `<项目根>/.dsh-repowiki/`，随 Git 共享；定位策略为"当前目录向上查找，退回当前目录"。
-- **全部文件 IO 走 `ctx.fs`**（方案 §9.1），不经裸 node fs，保持策略一致性。
+- **全部文件 IO 走 `ctx.fs`**（方案 §9.1），不经裸 node fs，保持策略一致性；资产写入后回读校验，内容不一致立即报错而非静默成功。
 - **LLM 子任务走 spawn 子代理**（ADR-0003）：`ctx.subagents.startActivation({provider:'spawn'})` 继承会话模型；结构化输出经 `outputSchema` 约束；取消走 `exec.signal`；Markdown 格式由插件渲染，模型不决定格式。
 - **`inject: ['fs', 'tools', 'subagents']`**：均为能力 seam，缺失时插件在该 profile 不激活而非抛错。
-- **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS/Python 的函数/类/方法/接口/类型/导入。
+- **符号提取为零依赖轻量解析**（ADR-0001），不引入外部解析框架：JS/TS、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、C、C++ 的函数/类/方法/接口/类型/导入；本地依赖边分别按 Python 绝对/相对导入（项目根 + pyproject 自定义根 + `src`/`lib` 布局根）、C/C++ `#include`（引号形式先查文件目录；两种形式都经 `include`/`src`/`inc` 根）、`go.mod`、Rust crate/模块约定、Java 包后缀、C#/Kotlin/Scala 点分路径、PHP 大小写不敏感命名空间、Ruby `require_relative` 与 `lib/` 加载路径 `require`、SwiftPM `Package.swift` 目标路径（`Sources/<Target>/` 兜底），以及 JS/TS 的 `tsconfig`/`jsconfig` `paths` + `baseUrl` 别名与工作区包 `exports` 解析（外部模块忽略）。文件读取与解析采用有界并发（默认 8 路），结果按遍历顺序装配，索引保持确定性。
+- **Git 溯源不启子进程**：`index.json` 的 `git.branch`/`git.commit` 来自 `.git/HEAD`、松散引用、`packed-refs` 与 worktree `commondir`；非 Git 仓库省略该字段。
+- **并发写安全**（ADR-0005）：六个写工具按解析出的资产根排队（进程内 promise 链锁）；extract/generate 的模型调用在锁外，临界区内做写前二次判定；抽取可按 `concurrency` 并行最多 4 路模型调用，并按 `attempts` 做有界重试，写盘仍逐张串行；不同仓库互不阻塞，只读检索不加锁。
+- **零依赖排序检索**：卡片/Wiki/已采信记忆的 BM25（拉丁词 + 中文单字/二元组），无 embedding、无向量库。
+- **按需反向引用**：`src/references.js` 在查询期反演 `index.edges`（目标文件 → 符号 → 引用位置）；schema v5 的边携带 import 行号，结果精确到 `path:Lx`，有界且明确为 import 级语义。
+- **按需 Wiki 引用**：`src/wiki-references.js` 反演 Wiki 清单（源文件 → 页面/章节）；清单 v2 记录章节级来源，"这个文件被哪些文档引用"无需重读 Wiki 正文。
 
 ## 客户端 UI（web）
 
@@ -70,6 +272,19 @@ npm test
 # 带覆盖率
 npm run test:coverage
 
+# 覆盖率门禁：行 ≥95、分支 ≥85、函数 ≥85
+npm run coverage:check
+
+# 静态检查（仅开发期工具；运行时保持零依赖）
+npm run typecheck
+npm run lint
+
+# 密钥扫描（git 跟踪文件）
+npm run scan:secrets
+
+# 本地索引基准（合成仓库）
+npm run bench -- 2000
+
 # 宿主漂移自检：解析本机 app.asar，核对 client.js 引用的每个
 # --dsw-alias-* 令牌在 dsh 自带 CSS 中仍有定义且有深色变体；
 # 找不到 app.asar（如 CI）时以 exit=3 跳过（v0.22.0）
@@ -87,14 +302,34 @@ npm run verify:host
 ```
 index.js               插件入口（apply + inject: fs/tools/subagents）
 scripts/verify-host-tokens.mjs  本地宿主漂移自检（令牌存活性，v0.22.0）
+scripts/check-coverage.mjs      覆盖率门禁（行/分支/函数）
+scripts/scan-secrets.mjs        git 跟踪文件密钥扫描
+scripts/bench.mjs               合成仓库索引基准
+scripts/release.mjs             本地发布（测试 + 版本 + commit/tag）
 docs/detail/           插件管理页详情页（一图式文档，v0.25.0）
+docs/adr/              架构决策记录（中文）
+docs/checkpoints/      阶段检查点（中文）
+docs/runbook.md        诊断与恢复运行手册
+docs/compatibility.md  DSH / Node / OS 兼容矩阵
+docs/benchmarks.md     基准方法与最近数据
 cordis.patch.yml       Loader patch（插入插件行）
 src/schema.js          常量与领域约定（单一来源）
-src/symbols.js         零依赖符号提取（JS/TS/Python）
+src/symbols.js         零依赖符号提取（11 种语言）
 src/deps.js            import/require 依赖边提取
-src/stack.js           技术栈识别（npm/pip/go/cargo）
+src/stack.js           技术栈识别（npm/pip/go/cargo/maven/gradle/composer/bundler/swiftpm/sbt/cmake）
 src/assets.js          资产定位与读写（ctx.fs 注入）
 src/indexer.js         索引编排（遍历+提取+边解析+组装）
+src/ignore.js          `.gitignore` 子集解析与匹配
+src/modules.js         模块树（目录归组、父子关系、直属计数）
+src/lock.js            资产根并发写锁（进程内 FIFO，O5）
+src/search.js          零依赖 BM25 排序（卡片/Wiki/记忆）
+src/locale.js          资产语言探测与"有内容优先"回退
+src/health.js          文档覆盖率与加权健康分（纯函数）
+src/impact.js          文件/符号级影响面（路径与符号解析/反向 BFS/循环/风险，纯函数）
+src/graph-rank.js      静态 import 图上的文件级 PageRank（纯函数）
+src/usages.js          词法级符号使用点（标识符边界、导入块排除、有界，纯函数）
+src/context.js         任务词提取、文件排序、源码证据与字符预算打包（纯函数）
+src/module-doc.js      确定性模块 Wiki 页（无模型调用）
 src/card-schema.js     卡片/Wiki 的 outputSchema（子代理契约）
 src/prompts.js         子代理 prompt 构造
 src/render.js          卡片/Wiki Markdown 渲染
@@ -102,18 +337,21 @@ src/knowledge.js       knowledge/wiki 目录读写、frontmatter 解析
 src/config.js          repowiki-plan.json 读取与候选筛选
 src/spawn.js           spawn 子代理调用封装
 src/transfer.js        导入导出的快照拷贝（ctx.fs 注入）
+src/util.js            路径/摘要/frontmatter/写入校验等公共助手
 src/tool-index.js      repowiki-index 工具
 src/tool-cards.js      repowiki-cards 工具
 src/tool-extract.js    repowiki-extract 工具
 src/tool-generate.js   repowiki-generate 工具
+src/tool-status.js     repowiki-status 工具
+src/tool-impact.js     repowiki-impact 工具
+src/tool-context.js    repowiki-context 工具
 src/tool-export.js     repowiki-export 工具
 src/tool-import.js     repowiki-import 工具
 src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
-test/                  单元与集成测试（141 用例）
-docs/adr/              架构决策记录（中文）
-docs/checkpoints/      阶段检查点（中文）
+src/types.d.ts         ctx.fs / 工具定义的共享类型声明
+test/                  单元与集成测试（446 用例）
 ```
 
 ## 许可

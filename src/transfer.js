@@ -21,15 +21,17 @@ const TEXT_EXTENSIONS = new Set(['.md', '.json'])
 
 /**
  * 递归复制目录树（仅文本资产文件）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} srcAbs - 源目录绝对路径。
  * @param {string} dstAbs - 目标目录绝对路径。
- * @returns {Promise<{files:number, dirs:number, skipped:number, failed:Array}>} 复制计数。
+ * @param {{signal?:AbortSignal}} [opts] - 协作式取消信号。
+ * @returns {Promise<{files:number, dirs:number, skipped:number, failed:Array, aborted:boolean}>} 复制计数。
  * failed 为失败明细（path+reason，最多 20 条），满 20 条后只累计 skipped
  * 不再收集明细——用户不必猜"N skipped"到底是哪些文件、为什么。
  */
-export async function copyTree(fs, srcAbs, dstAbs) {
-  const counts = { files: 0, dirs: 0, skipped: 0, failed: [] }
+export async function copyTree(fs, srcAbs, dstAbs, opts = {}) {
+  const counts = { files: 0, dirs: 0, skipped: 0, failed: [], aborted: false }
+  const signal = opts.signal
   /** 记一条失败明细（有界收集，skipped 同步递增）。 */
   const noteFailed = (item, reason) => {
     counts.skipped++
@@ -46,6 +48,8 @@ export async function copyTree(fs, srcAbs, dstAbs) {
    * @param {number} depth - 当前深度。
    */
   const walk = async (srcDir, dstDir, depth = 0) => {
+    if (counts.aborted) return
+    if (signal?.aborted) { counts.aborted = true; return }
     if (depth > MAX_DEPTH) { noteFailed(srcDir, `max depth ${MAX_DEPTH} exceeded`); return }
     let entries
     try {
@@ -56,6 +60,7 @@ export async function copyTree(fs, srcAbs, dstAbs) {
       return // 不可读目录跳过，不阻断整体复制
     }
     for (const entry of entries) {
+      if (signal?.aborted) { counts.aborted = true; return }
       if (entry.type === 'directory') {
         counts.dirs++
         await walk(entry.target.displayPath, path.posix.join(dstDir, entry.name), depth + 1)
@@ -83,7 +88,7 @@ export async function copyTree(fs, srcAbs, dstAbs) {
 
 /**
  * 判断目录是否存在且非空（导入导出的覆盖保护判定依据）。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} dirAbs - 目录绝对路径。
  * @returns {Promise<boolean>} 存在且非空为 true。
  */

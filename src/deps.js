@@ -7,13 +7,17 @@
  * 索引期用 AST/导入表生成）。
  */
 
+import { scriptBlockText } from './sfc.js'
+
 /**
  * 一条模块引用记录。
  * @typedef {Object} ImportInfo
  * @property {string} specifier - 源码中的原始模块说明符（如 './foo'、'react'、'.pkg.mod'）。
  * @property {number} line - 语句所在行（1-based）。
- * @property {'import'|'export-from'|'require'} kind - 引用形态。
- * @property {boolean} relative - 是否相对引用（决定能否解析为本地文件边）。
+ * @property {'import'|'export-from'|'require'|'mod'} kind - 引用形态
+ *   （`mod` 仅 Rust：`mod foo;` 模块声明）。
+ * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
+ *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
  */
 
@@ -27,14 +31,15 @@ function isJsRelative(specifier) {
 }
 
 /**
- * 从一行 JS/TS 提取具名导入符号列表。
- * @param {string} line - 源码行。
+ * 从一条 JS/TS import/export 语句提取具名导入符号列表。
+ * @param {string} line - 源码语句（可跨行）。
  * @returns {string[]} 去重后的导入符号名（含 as 别名的原名；`* as x` 记为 '*'）。
  */
 function jsImportedNames(line) {
   const names = new Set()
+  const cleanLine = line.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, '')
   // import { a, b as c } from '...' —— 只取 from 之前的花括号段
-  const brace = /\{(?<body>[^}]*)\}/.exec(line)
+  const brace = /\{(?<body>[^}]*)\}/.exec(cleanLine)
   if (brace) {
     for (const part of brace.groups.body.split(',')) {
       const trimmed = part.trim()
@@ -43,7 +48,7 @@ function jsImportedNames(line) {
       const cleaned = trimmed.replace(/^type\s+/, '').replace(/\s+as\s+[\w$]+$/, '')
       if (cleaned) names.add(cleaned)
     }
-  } else if (/\*\s+as\s+[\w$]+/.test(line)) {
+  } else if (/\*\s+as\s+[\w$]+/.test(cleanLine)) {
     names.add('*')
   }
   return [...names]
@@ -57,7 +62,19 @@ function jsImportedNames(line) {
 function extractJsImports(lines) {
   const result = []
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+    let line = lines[i]
+    let statementEnd = i
+    // 常见的格式化多行具名导入/导出：import {\n a,\n b\n} from './x'。
+    // 只拼接以 { 结束的静态语句头，保留起始行号；避免把动态 import 或任意
+    // 后续代码吞进来。100 行上限保证畸形文件也有界。
+    if (/^\s*(?:import|export)\b/.test(line) && /\{\s*$/.test(line)) {
+      const end = Math.min(lines.length, i + 100)
+      for (let j = i + 1; j < end; j++) {
+        line += `\n${lines[j]}`
+        statementEnd = j
+        if (/\bfrom\s*['"][^'"]+['"]/.test(line) || /;/.test(lines[j])) break
+      }
+    }
     // import ... from 'mod' / import 'mod' / import type ... from 'mod'
     const im = /^\s*import\s+(?:type\s+)?(?<clause>[^;]*?)\s*from\s*['"](?<mod>[^'"]+)['"]/.exec(line)
     if (im) {
@@ -69,6 +86,7 @@ function extractJsImports(lines) {
         relative: isJsRelative(mod),
         imported: jsImportedNames(im.groups.clause.startsWith('{') ? line : im.groups.clause),
       })
+      i = statementEnd
       continue
     }
     // 副作用 import：import 'mod'
@@ -93,6 +111,7 @@ function extractJsImports(lines) {
         relative: isJsRelative(em.groups.mod),
         imported: jsImportedNames(line),
       })
+      i = statementEnd
       continue
     }
     // require('mod') 与动态 import('mod')：逐字符正则捕获字符串字面量
@@ -155,6 +174,438 @@ function extractPythonImports(lines) {
 }
 
 /**
+ * 提取 Go 的 import（单条与括号分组，支持别名/点/空白导入）。
+ * Go 的 import 路径是包路径而非文件路径；是否本地由 indexer 按 go.mod
+ * 的 module 前缀判定（此处 relative 标记为"候选"）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractGoImports(lines) {
+  const result = []
+  let inBlock = false
+  /**
+   * 登记一条 import 行。
+   * @param {string} text - 去掉首尾空白的行。
+   * @param {number} line - 行号（1-based）。
+   * @returns {void}
+   */
+  const push = (text, line) => {
+    const m = /^(?:[\w.]+\s+)?["`](?<mod>[^"`]+)["`]/.exec(text)
+    if (!m) return
+    const mod = m.groups.mod
+    const segments = mod.split('/')
+    result.push({
+      specifier: mod,
+      line,
+      kind: 'import',
+      // 候选本地包；indexer 按 go.mod module 前缀过滤
+      relative: true,
+      imported: segments[segments.length - 1] ? [segments[segments.length - 1]] : [],
+    })
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed === '' || trimmed.startsWith('//')) continue
+    if (!inBlock && /^import\s*\(\s*$/.test(trimmed)) {
+      inBlock = true
+      continue
+    }
+    if (inBlock) {
+      if (trimmed === ')') { inBlock = false; continue }
+      push(trimmed, i + 1)
+      continue
+    }
+    if (/^import\s/.test(trimmed)) push(trimmed.replace(/^import\s+/, ''), i + 1)
+  }
+  return result
+}
+
+/**
+ * 按顶层逗号切分 Rust use 分组体（忽略嵌套花括号中的逗号）。
+ * @param {string} body - 花括号内的文本。
+ * @returns {string[]} 顶层条目。
+ */
+function splitRustUseBody(body) {
+  const parts = []
+  let depth = 0
+  let current = ''
+  for (const ch of body) {
+    if (ch === '{') depth++
+    else if (ch === '}') depth--
+    if (ch === ',' && depth === 0) {
+      if (current.trim()) parts.push(current.trim())
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  if (current.trim()) parts.push(current.trim())
+  return parts
+}
+
+/**
+ * 展开 Rust use 树为完整路径列表（支持嵌套分组与 as 别名）。
+ * @param {string} prefix - 当前路径前缀（如 'crate::lexer'）。
+ * @param {string} body - 当前层条目文本（可含嵌套 `{}`）。
+ * @returns {{path:string, name:string}[]} 叶子路径与导入名。
+ */
+function expandRustUse(prefix, body) {
+  const out = []
+  for (const part of splitRustUseBody(body)) {
+    const braceAt = part.indexOf('{')
+    if (braceAt === -1) {
+      const [rawPath, alias] = part.split(/\s+as\s+/)
+      const pathPart = rawPath.trim()
+      if (!pathPart) continue
+      const path = prefix ? `${prefix}::${pathPart}` : pathPart
+      const leaf = (alias ?? pathPart.split('::').pop() ?? '').trim()
+      out.push({ path, name: leaf === 'self' || leaf === 'super' ? '' : leaf })
+      continue
+    }
+    const head = part.slice(0, braceAt).replace(/::$/, '').trim()
+    const inner = part.slice(braceAt + 1, part.lastIndexOf('}'))
+    const nextPrefix = head ? (prefix ? `${prefix}::${head}` : head) : prefix
+    out.push(...expandRustUse(nextPrefix, inner))
+  }
+  return out
+}
+
+/**
+ * 提取 Rust 的 mod 声明与 use 引用。
+ * - `mod foo;` 记为 kind='mod'，indexer 按文件所在模块目录解析；
+ * - `use crate::a::b::C;` / `use super::x;` / `use self::y;` 标记为候选，
+ *   由 indexer 从 crate 根/当前模块目录做启发式解析；
+ * - 嵌套分组（`use crate::{a, b::{C, D}}`）展开为多条叶子路径；
+ * - 外部 crate 的 use 也会尝试解析，失败即不计边（不影响正确性）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractRustImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed === '' || trimmed.startsWith('//')) continue
+    // mod foo; / pub mod foo;
+    const mm = /^(?:pub(?:\([^)]*\))?\s+)?mod\s+(?<name>[A-Za-z_]\w*)\s*;/.exec(trimmed)
+    if (mm) {
+      result.push({
+        specifier: mm.groups.name,
+        line: i + 1,
+        kind: 'mod',
+        relative: true,
+        imported: [],
+      })
+      continue
+    }
+    // use path::to::Item; / pub use path::{A, B};
+    const um = /^(?:pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(trimmed)
+    if (!um) continue
+    const raw = um.groups.path.trim()
+    const braceAt = raw.indexOf('{')
+    if (braceAt === -1) {
+      const [rawPath, alias] = raw.split(/\s+as\s+/)
+      const specifier = rawPath.trim()
+      if (!specifier) continue
+      const leaf = (alias ?? specifier.split('::').pop() ?? '').trim()
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: /^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super' ? [leaf] : [],
+      })
+      continue
+    }
+    const prefix = raw.slice(0, braceAt).replace(/::$/, '').trim()
+    const body = raw.slice(braceAt + 1, raw.lastIndexOf('}'))
+    for (const leaf of expandRustUse(prefix, body)) {
+      result.push({
+        specifier: leaf.path,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: /^[A-Za-z_]\w*$/.test(leaf.name) ? [leaf.name] : [],
+      })
+    }
+  }
+  return result
+}
+
+/**
+ * 提取 Java 的 import（含 static 与通配符）。
+ * Java 的包路径是全局命名，是否本地由 indexer 用已索引文件的包路径后缀匹配。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractJavaImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*import\s+(?<static>static\s+)?(?<spec>[\w$.*]+)\s*;/.exec(lines[i])
+    if (!m) continue
+    const segments = m.groups.spec.split('.')
+    // 通配符导入没有具体类型名；static 成员导入的类名是最后一个大写段
+    let imported = []
+    if (!segments[segments.length - 1] || segments[segments.length - 1] !== '*') {
+      const typeName = [...segments].reverse().find(s => /^[A-Z][\w$]*$/.test(s))
+      if (typeName) imported = [typeName]
+    }
+    result.push({
+      specifier: m.groups.spec,
+      line: i + 1,
+      kind: 'import',
+      relative: true,
+      imported,
+    })
+  }
+  return result
+}
+
+/**
+ * 提取 C# 的 using 指令（含 global / static / 别名）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractCSharpImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*(?:global\s+)?using\s+(?:static\s+)?(?:(?<alias>[A-Za-z_]\w*)\s*=\s*)?(?<path>[\w.]+)\s*;/.exec(lines[i])
+    if (!m) continue
+    const specifier = m.groups.path
+    const segments = specifier.split('.')
+    result.push({
+      specifier,
+      line: i + 1,
+      kind: 'import',
+      relative: true,
+      imported: [segments[segments.length - 1]],
+    })
+  }
+  return result
+}
+
+/**
+ * 提取 Kotlin 的 import（含通配符与 as 别名）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractKotlinImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*import\s+(?<path>[\w.]+(?:\.\*)?)\s*(?:as\s+\w+)?\s*$/.exec(lines[i])
+    if (!m) continue
+    const specifier = m.groups.path
+    const last = specifier.split('.').pop()
+    result.push({
+      specifier,
+      line: i + 1,
+      kind: 'import',
+      relative: true,
+      imported: last && last !== '*' ? [last] : [],
+    })
+  }
+  return result
+}
+
+/**
+ * 提取 PHP 的 use（含分组、function/const、别名）与字面量 require/include。
+ * 命名空间反斜杠统一归一为点号，供点分路径索引匹配。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractPhpImports(lines) {
+  const result = []
+  /**
+   * 登记一条 use 叶子。
+   * @param {string} prefix - 命名空间前缀（点分，可为空）。
+   * @param {string} leaf - 叶子名（可含 `as` 别名）。
+   * @param {number} line - 行号。
+   * @returns {void}
+   */
+  const push = (prefix, leaf, line) => {
+    const name = leaf.trim().split(/\s+as\s+/)[0].replace(/^\\+/, '')
+    if (!name) return
+    const specifier = (prefix ? `${prefix}.` : '') + name.replace(/\\/g, '.')
+    result.push({
+      specifier,
+      line,
+      kind: 'import',
+      relative: true,
+      imported: [name.split('\\').pop()],
+    })
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed === '' || trimmed.startsWith('//') || trimmed.startsWith('#')) continue
+    // 字面量 require/include（支持 __DIR__ . '/path' 与 ./../ 相对路径）
+    const rm = /^(?:require|require_once|include|include_once)\s*\(?\s*(?<dir>__DIR__\s*\.\s*)?['"](?<path>[^'"]+)['"]/.exec(trimmed)
+    if (rm) {
+      let specifier = rm.groups.path
+      const hasDir = Boolean(rm.groups.dir)
+      if (hasDir) specifier = specifier.startsWith('/') ? `.${specifier}` : `./${specifier}`
+      const relative = hasDir || specifier.startsWith('.')
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'require',
+        relative,
+        imported: [],
+      })
+      continue
+    }
+    const um = /^use\s+(?:(?:function|const)\s+)?(?<path>[\\\w.]+)(?<group>\\?\{[^}]*\})?\s*(?:as\s+\w+)?\s*;/.exec(trimmed)
+    if (!um) continue
+    const rawPath = um.groups.path.replace(/^\\+/, '')
+    if (um.groups.group) {
+      const prefix = rawPath.replace(/\\+$/, '').replace(/\\/g, '.')
+      for (const leaf of um.groups.group.replace(/^\\?\{|\}$/g, '').split(',')) push(prefix, leaf, i + 1)
+    } else {
+      const dotted = rawPath.replace(/\\/g, '.')
+      result.push({
+        specifier: dotted,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [dotted.split('.').pop()],
+      })
+    }
+  }
+  return result
+}
+
+/**
+ * 提取 Ruby 的 require / require_relative / load。
+ * require_relative 与 `./`/`../` 前缀按本地文件解析；其余 require 视为 gem/加载路径。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractRubyImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed === '' || trimmed.startsWith('#')) continue
+    const m = /^(?<kind>require_relative|require|load)\s*\(?\s*['"](?<mod>[^'"]+)['"]/.exec(trimmed)
+    if (!m) continue
+    const mod = m.groups.mod
+    result.push({
+      specifier: mod,
+      line: i + 1,
+      kind: 'require',
+      relative: m.groups.kind === 'require_relative' || mod.startsWith('.'),
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
+ * 提取 Swift 的 import（含 @testable 与子模块导入）。
+ * Swift 的 import 是模块级语义，这里标记为"本地候选"：indexer 按
+ * `Sources/<Target>/` 约定把首段模块名解析到目标代表文件；
+ * 外部模块（Foundation 等）解析失败即不计边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractSwiftImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*(?:@testable\s+)?import\s+(?:(?:typealias|struct|class|enum|protocol|func|var|let|operator)\s+)?(?<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/.exec(lines[i])
+    if (!m) continue
+    result.push({
+      specifier: m.groups.path,
+      line: i + 1,
+      kind: 'import',
+      relative: true,
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
+ * 展开一条 Scala import 声明为叶子路径（支持分组、重命名与 `._`/`.*` 通配）。
+ * @param {string} raw - import 后的文本（已去分号与注释）。
+ * @returns {{path:string, name:string}[]} 叶子路径与导入名（通配为空串）。
+ */
+function expandScalaImport(raw) {
+  const asMatch = /^(?<path>[\w.$]+)\s+as\s+(?<alias>\w+)$/.exec(raw)
+  if (asMatch) return [{ path: asMatch.groups.path, name: asMatch.groups.alias }]
+
+  const braceAt = raw.indexOf('{')
+  if (braceAt === -1) {
+    if (raw.endsWith('._') || raw.endsWith('.*')) {
+      const pkg = raw.slice(0, -2)
+      return pkg ? [{ path: pkg, name: '' }] : []
+    }
+    const name = raw.split('.').pop() ?? ''
+    return [{ path: raw, name: /^[A-Za-z_$][\w$]*$/.test(name) ? name : '' }]
+  }
+
+  const prefix = raw.slice(0, braceAt).replace(/\.$/, '').trim()
+  const body = raw.slice(braceAt + 1, raw.lastIndexOf('}'))
+  const out = []
+  for (const part of body.split(',')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const [origRaw, aliasRaw] = trimmed.split('=>').map(s => s.trim())
+    if (origRaw === '_' || origRaw === '*') {
+      out.push({ path: prefix, name: '' })
+      continue
+    }
+    out.push({ path: `${prefix}.${origRaw}`, name: aliasRaw || origRaw.split('.').pop() || '' })
+  }
+  return out
+}
+
+/**
+ * 提取 Scala 的 import（含分组、重命名与通配）。
+ * 路径为全局命名空间，是否本地由 indexer 的点分索引后缀匹配决定。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractScalaImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*import\s+(?<spec>[^\s;].*?)\s*;?\s*$/.exec(lines[i])
+    if (!m) continue
+    const raw = m.groups.spec.replace(/\/\/.*$/, '').trim()
+    if (!raw) continue
+    for (const leaf of expandScalaImport(raw)) {
+      result.push({
+        specifier: leaf.path,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: leaf.name ? [leaf.name] : [],
+      })
+    }
+  }
+  return result
+}
+
+/**
+ * 提取 C/C++ 的 `#include`：引号形式标记为相对（先查文件目录），
+ * 尖括号形式标记为非相对（只经 include 根查找，系统头自然不命中）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractCppImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*#\s*include\s*(?:<(?<angle>[^>]+)>|"(?<quote>[^"]+)")/.exec(lines[i])
+    if (!m) continue
+    const specifier = m.groups.quote ?? m.groups.angle
+    result.push({
+      specifier,
+      line: i + 1,
+      kind: 'import',
+      relative: m.groups.quote !== undefined,
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -162,8 +613,21 @@ function extractPythonImports(lines) {
  */
 export function extractImports(code, lang) {
   if (typeof code !== 'string' || code.length === 0) return []
+  if (lang === 'vue' || lang === 'svelte') {
+    return extractJsImports(scriptBlockText(code).replace(/\r\n?/g, '\n').split('\n'))
+  }
   const lines = code.replace(/\r\n?/g, '\n').split('\n')
   if (lang === 'python') return extractPythonImports(lines)
   if (lang === 'javascript' || lang === 'typescript') return extractJsImports(lines)
+  if (lang === 'go') return extractGoImports(lines)
+  if (lang === 'rust') return extractRustImports(lines)
+  if (lang === 'java') return extractJavaImports(lines)
+  if (lang === 'csharp') return extractCSharpImports(lines)
+  if (lang === 'kotlin') return extractKotlinImports(lines)
+  if (lang === 'php') return extractPhpImports(lines)
+  if (lang === 'ruby') return extractRubyImports(lines)
+  if (lang === 'swift') return extractSwiftImports(lines)
+  if (lang === 'scala') return extractScalaImports(lines)
+  if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

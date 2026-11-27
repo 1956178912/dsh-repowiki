@@ -3,6 +3,767 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.119.0] - 2026-11-27
+
+- **PageRank 核心文件排名**：新增纯函数 `src/graph-rank.js`，在静态 import
+  图上计算确定性 PageRank（边去重、忽略自引用、dangling 权重均分、固定
+  阻尼与收敛上限、同分按路径稳定排序）。`repowiki-status` 新增 `coreFiles`
+  （前 10，仅索引有依赖边时）并渲染 `Core files (PageRank)` 行，补上单看
+  fan-in 计数看不到的间接重要性。
+- **repo map 兜底**：`repowiki-context` 在任务未命中任何索引文件且 import
+  图有边时，用同一排名给出前 5 个文件作为仓库地图起点，逐条标 `(repo map)`，
+  结构化输出带 `fallback: 'repo-map'`，包内 Caveats 与 hint 均说明"起点
+  而非任务相关性"；任何词法/文档命中时行为不变。
+- **测试**：446 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
+## [0.118.0] - 2026-11-27
+
+- **使用点证据**：`repowiki-impact` 在符号模式扫描直接具名导入方，按标识符
+  边界定位所选符号的出现行，输出 `usages`（`path:line` + 去空白源码行，
+  超长截断）。多行 import/export 列表（JS/TS、Python `from … import (`、
+  Go `import (`、Rust/PHP `use … {`）与解构绑定、整行注释均被排除。语义
+  仍是词法出现而非解析后的调用点（字符串与行尾注释可能命中），输出中明确
+  标注。读取有界：最多 20 个导入方文件、每符号 10 条、总计 100 条；
+  读不到的文件列入 `usagesUnreadable`（未知而非无使用），因文件上限跳过
+  的计入 `usagesSkippedFiles`；`includeUsages=false` 完全跳过源码读取。
+- **测试**：438 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
+## [0.117.0] - 2026-11-27
+
+- **符号级影响面**：`repowiki-impact` 新增 `symbols`（裸名或 `path#name`）。
+  直接依赖方必须具有所选符号的具名 import 证据，排除副作用导入和只导入
+  同文件其他符号的模块；传递层仍是反向文件图的保守展开，另以
+  `conservativeImpactedTotal` 保留文件级上界。符号未解析时如实报告，绝不
+  静默扩大为文件级分析。
+- **任务上下文打包**：新增第 11 个工具 `repowiki-context`，按标识符、路径、
+  显式 anchor 与卡片/Wiki/已采信记忆 BM25 命中排序文件，一次返回相关符号、
+  带行号源码、直接 imports/dependents、相关循环和 fan-in 热点。字符预算
+  2,000–40,000（默认 12,000）为硬上限，源码/文档/关系省略分别计数；无索引、
+  空查询和无源码命中均给出可操作的降级提示。
+- **多行导入与缓存修复**：跨行 JS/TS import/export-from 现在保留起始行号、
+  完整具名符号与默认+具名混合导入；`index.json` 新增 `parserVersion`，解析
+  规则升级时即使源码 digest 未变也会重解析旧缓存，且 added/changed/removed
+  统计保持正确，同版本的下一次索引恢复增量复用。
+- **测试**：425 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准记录分别见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
+## [0.115.0] - 2026-11-27
+
+- **变更影响面工具**：新增 `repowiki-impact` —— 给定准备修改的文件，在
+  反向 import 图上返回直接/传递依赖方（1–3 跳，明细有界但总数精确）、
+  涉及变更文件的循环组（含代表路径）、变更文件 fan-in、会受影响的
+  卡片（含陈旧标记）与 Wiki 页面/章节引用；风险分由直接依赖、传递
+  依赖、循环、hub 四个显式因子计算（low–critical），并按优先级给出
+  验证建议。路径匹配支持绝对路径、后缀与唯一 basename，歧义只列候选
+  不猜；只读、确定性、无模型调用。
+- **测试**：415 例全通过（LANG=en 与 LANG=zh 双环境）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.114.0] - 2026-11-27
+
+- **文档覆盖率与健康度**：`repowiki-status` 新增 `coverage` —— 分母是
+  plan 复杂度阈值下"有资格生成卡片"的文件（而非全部文件），输出已覆盖/
+  新鲜/陈旧数与缺口最大的模块（最多 5 个）；新增 `health` 四分量加权
+  健康分（文档 40 / Wiki 25 / 架构 20 / 卫生 15，A–D 等级），同时输出
+  每个分量的得分/权重/说明与前四条待办，文本报告新增两行摘要。
+- **测试**：新增 health 纯函数与状态接线用例；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.113.0] - 2026-11-27
+
+- **跨语言资产自动回退**：`repowiki-cards`（正文检索、`includeMemory`、
+  Wiki 引用）与 `repowiki-status` 在未显式指定 locale 时，按"环境语言 →
+  实际有卡片/Wiki/记忆的另一语言"选择读取目录；显式 locale 保持严格。
+  修复了资产生成在 `zh`、宿主语言为 `en` 时检索静默为空、Wiki 陈旧
+  被误判为 0 的环境相关缺陷；输出新增 `locale`/`localeRequested`/
+  `localeSource`（以及 status 的 `availableLocales`）。面板加载卡片/Wiki/
+  记忆时也改为"目录内有 Markdown 才算有内容"，空 `en/` 不再压过有内容的 `zh/`。
+- **测试**：新增 `test/asset-locale.test.js`；全套测试在 `LANG=en` 与
+  `LANG=zh` 下均全绿（此前 3 例仅在 zh 环境通过）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.112.0] - 2026-11-27
+
+- **依赖条目可点击**：卡片详情的"依赖文件"与"依赖本文件"列表中的路径
+  改为按钮，点击打开该文件详情（同一面板、深度重置、本地化可访问名），
+  行号仍附着在路径上。沿依赖链双向浏览不再需要关闭面板。打开文件回调
+  与环路径链接共用，统一命名为 `openFile`。
+- **测试**：391 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.111.0] - 2026-11-27
+
+- **循环路径可点击**：详情循环摘要中的其他文件改为按钮（当前文件保持
+  纯文本），点击跳到该文件详情，带本地化可访问名。沿着 2–3 文件环浏览
+  不再需要关闭面板再找卡片；依赖深度与焦点行为与其他卡片打开一致。
+- **测试**：390 例全通过（hub 点击用例追加环内跳转断言）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.110.0] - 2026-11-27
+
+- **卡片详情展示循环摘要**：打开处于 import 环中的文件时，详情显示一行
+  `⟲`，包含组大小；2–3 文件环追加代表性路径（`a.js → c.js → a.js`）。
+  不必悬停列表徽章即可知道如何断环；无卡片的索引文件同样展示该行。
+- **测试**：390 例全通过（hub 点击用例追加循环摘要断言）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.109.0] - 2026-11-27
+
+- **面板循环徽章附环路径**：循环成员的 `⟲` tooltip 对 2–3 文件环追加一条
+  代表性最短闭合路径（`a.js → c.js → a.js`），与状态工具同语义。客户端
+  本地计算 SCC 与最短环（12 节点上限），徽章保留组大小提示并给出可操作的
+  断链点；更长环仍只显示组大小。
+- **测试**：390 例全通过（循环徽章用例增加路径后缀断言）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.108.0] - 2026-11-27
+
+- **代表性环路径**：每个文件级 import 环新增 `sample` 字段——从组内字典序
+  最小文件出发回到自身的最短环（并列按路径字典序，确定可复现），最多 12
+  个节点（更长的环返回空数组而非超长路径）。`repowiki-status` 对短环渲染
+  `e.g. a.ts → b.ts → a.ts`；Wiki 合成 prompt 同步列出该路径，架构章节可
+  指向具体断链边。
+- **测试**：390 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.107.0] - 2026-11-27
+
+- **状态报告 warnings 有界**：文本报告最多打印 3 条告警，其余折叠为
+  `… +N more (see the structured warnings array)`；结构化 `warnings` 数组
+  仍保留全部条目。大量 internal 违规不再淹没报告其余内容。
+- **测试**：389 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.106.0] - 2026-11-27
+
+- **internal 违规告警有界化**：索引阶段 Go `internal` 可见性告警上限 50 条，
+  其余折叠为一条汇总（`… N more … omitted (capped at 50)`），避免大量跨
+  边界导入撑大 `index.json` 与状态输出。
+- **测试**：388 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.105.0] - 2026-11-27
+
+- **mermaid 指令与渲染器对齐**：Wiki 合成 prompt 现在要求使用
+  `flowchart TD`/`flowchart LR`，把同模块/同层的节点包进 `subgraph` 块，
+  并保持节点标签简短——与面板零依赖渲染器能力一致，生成图会渲染为分组
+  框而不是降级为代码块。
+- **测试**：387 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.104.0] - 2026-11-27
+
+- **索引告警可展开**：统计行的告警计数改为按钮（`aria-expanded` /
+  `aria-controls`），点击在统计行下方展开完整告警列表，tooltip 前三条之外
+  的条目可原地阅读；悬停仍保留三条预览与展开提示，无告警时整块隐藏。
+- **测试**：386 例全通过（告警用例扩展为展开/收起闭环）；覆盖率数字见
+  `docs/coverage.md`。
+
+## [0.103.0] - 2026-11-27
+
+- **mermaid subgraph 分组**：`flowchart`/`graph` 中的 `subgraph 名称` …
+  `end` 块渲染为带组名的虚线分组框（绘制在边与节点之下）；组内节点保持
+  原形状，跨组边照常连接；空/异常的 subgraph 头部回退为普通组名。其余
+  渲染行为不变（不支持的类型仍降级为代码块）。
+- **基准复测（v0.103.0）**：1000 文件约 31ms / 69MiB、5000 文件约
+  120ms / 97MiB（串行 32 / 124ms），较 v0.91.0 无回退；`docs/benchmarks.md`
+  已更新。
+- **测试**：386 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.102.0] - 2026-11-27
+
+- **模块页新增高风险入口节**：确定性模块页（无模型调用）在末尾追加
+  "高风险入口"节，列出模块内被最多不同文件依赖的前三个文件（重复 import
+  只计一次、自引用忽略、并列按路径）；跨模块依赖方计入；模块无入边时
+  不产生该节。主题页与模块页现在共享同一风险轴。
+- **测试**：385 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.101.0] - 2026-11-27
+
+- **合成 prompt 注入 fan-in 热点**：`repowiki-generate` 把被最多文件依赖的
+  前五个文件（不同依赖方计数，与 `repowiki-status` 同口径）连同指令一起
+  注入主题 prompt：描述改动风险热点时按路径引用，列表为空时不得虚构。
+  架构章节获得可追溯的风险轴，而非泛泛而谈。
+- **测试**：384 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.100.0] - 2026-11-27
+
+- **高风险入口可点击**：单库视图的 fan-in chip 由静态文本改为按钮，点击
+  打开对应文件的卡片详情（与卡片瓦片同一个详情面板，复用行索引），风险
+  提示同时成为导航入口；chip 保留本地化可访问名 `path (N)`。
+- **测试**：383 例全通过（客户端 fixture 的卡片瓦片选择器排除新的 chip
+  形态）；覆盖率数字见 `docs/coverage.md`。
+
+## [0.99.0] - 2026-11-27
+
+- **面板展示索引告警**：`index.json` 带 `warnings` 时，单库统计行追加
+  `索引告警 N`，悬停列出前三条并提示剩余数量；Go `internal` 越界导入与
+  跳过文件提示在浏览时即可看到，无需跑 `repowiki-status`；无告警时隐藏。
+- **测试**：383 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.98.0] - 2026-11-27
+
+- **Go `internal` 可见性诊断**：索引阶段按 Go 工具链规则检查 import 边：
+  `a/b/internal/...` 下的包只能被 `a/b/` 树内导入（根 `internal/` 对全
+  仓库开放；嵌套 internal 取最内层边界）。违规导入仍建边，但去重后写入
+  `index.json` 的 `warnings`（状态工具随即可见），把编译期错误提前到
+  索引阶段暴露。
+- **测试**：382 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.97.0] - 2026-11-27
+
+- **面板展示高风险入口**：单库视图新增"高风险入口"行，列出 fan-in 前三
+  的 file（按不同依赖方文件数，并列按路径），与状态工具 `Fan-in hubs`
+  同口径；同一文件重复 import 只计一次、自引用忽略，索引无依赖边时整行
+  隐藏。
+- **测试**：381 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.96.0] - 2026-11-27
+
+- **面板渲染 mermaid 图**：Wiki 页面与卡片正文里的 ```` ```mermaid ````
+  围栏从源码文本改为内联 SVG。零依赖子集支持 `flowchart`/`graph` 的
+  `TD`/`TB`/`LR`、节点形状 `[label]`/`(label)`/`{label}`/`((label))`/
+  `[[label]]`/`{{label}}`/`[(label)]`、边 `-->`/`---`/`==>`/`-.->` 与
+  `|label|` 边标签。布局确定性分层（环最多 12 层），主题走
+  `--dsw-alias-*` 令牌；不支持的类型或无法解析的源码降级为原代码块。
+- **测试**：380 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.95.0] - 2026-11-27
+
+- **状态报告新增 fan-in hub**：`repowiki-status` 按"不同依赖方文件数"排名
+  （`topDependents`，上限 10、并列按路径），渲染 `Fan-in hubs:` 行；同一
+  文件重复 import 只计一次、自引用忽略，直接回答"改哪个文件风险最高"，
+  不依赖调用图猜测。
+- **测试**：379 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.94.0] - 2026-11-27
+
+- **反向影响面**：`repowiki-cards` 新增 `dependents=true`，返回"谁 import
+  了命中文件"（`imports=true` 的反向）；`depth=2..3` 按反向图 BFS 展开
+  间接依赖方，回答"改动这个文件会影响谁"。输出 100 条有界并带截断标记，
+  渲染用 `←`（直接）/`⇠`（间接）+ `N hops`，与正向共用 `depth` 参数。
+- **面板依赖方区块**：卡片详情在"依赖文件"之外新增文件级"依赖本文件"
+  列表；同一个 1/2/3 跳控件同时驱动两个方向（最小跳数优先、自身不列出、
+  环收敛），`←` 直接依赖方、`↔` 双向导入、`⇠` 间接依赖方。
+- **测试**：377 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.93.0] - 2026-11-27
+
+- **面板依赖深度切换**：卡片详情的"依赖文件"区块新增 1/2/3 跳选择器。
+  客户端 `importsForPath` 原先只走直接边，现与 `src/references.js` 同语义
+  做 BFS 展开（最小跳数优先、命中文件不作为自身依赖、环收敛、100 条有界）；
+  更深跳数用 `⇢` 加 `N hops` 后缀标注，直接依赖仍用 `→`，双向边仍用 `↔`；
+  重新打开卡片自动重置为 1 跳。
+- **测试**：374 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.92.0] - 2026-11-27
+
+- **传递依赖展开**：`repowiki-cards` 的 `imports=true` 支持 `depth`
+  （1–3，默认 1）。depth 2–3 按 BFS 遍历 import 图，每个可达文件只记录
+  一次并取最小跳数，命中文件自身不作为依赖返回，环不会无限展开；条目
+  新增 `depth` 字段，渲染用 `⇢` 与 `N hops` 标出更深跳数，直接依赖仍用
+  `→`；输出仍有界（100 条 + 截断标记）。
+- **测试**：373 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.91.0] - 2026-11-27
+
+- **Go 多模块仓库**：任意层级 `go.mod`（单次最多 20 个）各自贡献 module
+  前缀，子模块内部 import 解析到本子模块的包，不再被当作外部包；解析
+  按目录更深、module 更长优先，根模块行为不变。Go `internal` 可见性
+  仍未校验（已列入已知限制）。
+- **基准刷新**：`docs/benchmarks.md` 按 v0.91.0 复测（1000 文件约 31ms、
+  5000 文件约 119ms，默认 8 路读并发，附串行对照）。
+- **测试**：371 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.90.0] - 2026-11-27
+
+- **面板循环依赖徽章**：文件属于 import 环（size ≥ 2 的强连通分量）时，
+  卡片瓦片与列表行显示 `⟲` 徽章；客户端用与 `src/cycles.js` 相同的迭代
+  Tarjan 从 `index.edges` 计算，徽章带本地化可访问名与悬停提示
+  （`参与 N 个文件的循环依赖`），浏览列表即可发现环。
+- **测试**：370 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.89.0] - 2026-11-27
+
+- **面板展示跳过文件数**：单库统计行在 `index.stats.skipped > 0` 时追加
+  `跳过文件 N`，悬停提示说明原因（不可读或超过单文件上限）；为 0 时
+  统计行不变。
+- **测试**：369 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.88.0] - 2026-11-27
+
+- **Svelte 单文件组件**：`.svelte` 复用 Vue 的脚本块提取，`<script
+  context="module">` 与实例 `<script>` 均按源文件行号解析，标记与样式不产
+  符号；`src/sfc.js` 导出名泛化为 `scriptBlockText`，面板展示 `Svelte`，
+  卡片围栏用 `svelte`。
+- **测试**：368 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.87.0] - 2026-11-27
+
+- **面板搜索覆盖卡片正文**：卡片列表检索在标题/符号/标签/摘要/路径之外
+  新增正文（职责、关键符号、陷阱）打分，只出现在正文里的词也能定位文件。
+  正文与符号文本在构建行时一次小写（短字段同理），保证逐键搜索成本可控。
+- **测试**：365 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.86.0] - 2026-11-27
+
+- **跳过文件计数**：索引不再静默丢弃不可读或超大源码文件。
+  `index.json` 新增 `stats.skipped` 与 `stats.skippedTooLarge`，warnings
+  说明数量，`repowiki-index` 输出并在渲染中显示 `(N skipped)`，
+  `repowiki-status` 在 Index 行追加 `N skipped`；取消未派发的位置不计入。
+- **测试**：364 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.85.0] - 2026-11-27
+
+- **Vue 单文件组件**：`.vue` 文件进入索引。新增 `src/sfc.js`，只保留
+  `<script>` / `<script setup>` 块内容、其余行替换为空行，符号与 import
+  提取直接复用 JS/TS 解析器且行号与源文件一致（template/style 不产符号、
+  不建边）。相对导入、tsconfig 别名与工作区包名照常解析；符号规则同
+  JS（函数/类/方法与导出常量），面板展示可读名 `Vue`。
+- **测试**：362 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.84.0] - 2026-11-27
+
+- **Hatch 导入根**：`pyproject.toml` 解析新增
+  `[tool.hatch.build]` / `[tool.hatch.build.targets.wheel|sdist]` 的
+  `packages` 列表，以包目录的父目录作为 Python 导入根（`src/foo` →
+  `src`）；支持多行数组，单段包名（等于项目根）与 `..`/绝对路径忽略。
+  至此 setuptools / PDM / poetry / Hatch 四类常见构建后端齐备。
+- **测试**：359 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.83.0] - 2026-11-27
+
+- **模块页标注循环依赖**：确定性模块页新增"循环依赖"节，列出与本模块
+  双向 import 的模块；判断基于完整边计数（不受各方向前 8 条截断影响），
+  无双向依赖的页面保持原样。
+- **测试**：357 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.82.0] - 2026-11-27
+
+- **面板详情展示出边**：卡片详情新增"依赖文件（import 级）"区块，与反向
+  引用对称；有行号/符号的索引显示 `→ c.js:L3 (z)`，目标文件也反向引用
+  本文件时用 `↔` 标记，两文件成环一眼可见；最多 8 行 + `另有 N 个`。
+- **测试**：356 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.81.0] - 2026-11-27
+
+- **循环依赖检测**：`src/cycles.js` 以强连通分量口径从 `index.edges`
+  计算文件级循环依赖（迭代 Tarjan，深图不爆栈）；size ≥ 2 的组按大小
+  降序输出，组内文件排序，并有界（10 组、每组 30 文件，均如实标记截断）；
+  自引用与坏边忽略。
+- **`repowiki-status` 报告循环**：新增 `cycles` 字段并渲染
+  `Import cycles: a.ts ↔ b.ts (+N)` 或 `(none)`，不装额外工具即可看到
+  架构环。
+- **Wiki 合成注入循环上下文**：主题 prompt 携带最多 5 组循环（每组 6 个
+  文件）并要求把循环依赖作为架构风险指出，无环时不得臆造。
+- **测试**：355 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.80.0] - 2026-11-27
+
+- **`repowiki-cards` 支持文件出边查询**：`imports=true` 返回命中文件的
+  出边 `imports: [{path, line?, symbols}]`（附 `importsTruncated`，上限
+  100 条），与 `references=true` 的反向引用互补。副作用导入保留（符号
+  为空）、自引用跳过，结果按命中顺序再按边顺序输出，可复现。
+- **测试**：346 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.79.0] - 2026-11-27
+
+- **`repowiki-status` 展示模块依赖热点**：健康报告新增
+  `moduleDependencies`（最多 10 条跨模块 import 边，来自
+  `summarizeModuleRelations`），渲染为 `src → lib (3); …` 或 `(none)`，
+  不必生成 Wiki 就能看到架构热点。
+- **测试**：341 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.78.0] - 2026-11-27
+
+- **Wiki 主题合成注入模块依赖**：主题 prompt 携带跨模块 import 边摘要
+  （模块 → 模块计数，最多 15 条，由 `summarizeModuleRelations` 生成），并
+  要求模型只使用这些方向。架构与数据流章节因此以索引进图为依据，减少
+  臆造关系；同模块边忽略，按计数、路径排序，prompt 可复现。
+- **测试**：340 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.77.0] - 2026-11-27
+
+- **尖括号 include 经 include 根解析**：`#include <core/api.hpp>` 现在会被
+  提取（标记为非相对），在 `include`/`src`/`inc` 根与项目根下查找，覆盖
+  常见的 `-I include` 布局。引号形式仍先查文件目录；系统头
+  （`<vector>`、`<stdio.h>`）因无索引文件命中仍不建边。宏与注释行保持
+  忽略。
+- **测试**：337 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.76.0] - 2026-11-27
+
+- **模块页区分依赖方向**：确定性模块 Wiki 页把原来的“相关模块”拆成
+  `依赖模块`（出边）与 `被依赖模块`（入边），各自按边数、路径排序并
+  截断到 8 条，架构页可看出依赖流向。
+- **测试**：337 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.75.0] - 2026-11-27
+
+- **面板语言分布**：单库视图新增分布行（`JavaScript 12 · C++ 3 · …`），
+  使用可读语言名、按文件数降序，最多 8 个 chip 并显示 `+N` 溢出计数。
+  数据优先取 `index.stats.languages`，旧索引回退按文件行统计；只有一种
+  语言时整行隐藏。
+- **测试**：337 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.74.0] - 2026-11-27
+
+- **Python `pyproject.toml` 自定义导入根**：索引读取
+  `[tool.setuptools] package-dir`（内联表）、PDM 的字符串形式、
+  `[tool.setuptools.packages.find] where = [...]` 与 `[tool.poetry]`
+  的 `packages = [{ include = …, from = … }]`，把目录并入既有 `src`/`lib`
+  约定的导入根。绝对路径与含 `..` 的值被忽略，坏配置不会把解析指到
+  仓库外。
+- **测试**：337 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.73.0] - 2026-11-27
+
+- **面板可读语言名**：语言筛选与卡片详情展示 `JavaScript`、`C#`、`C++`
+  等展示名，不再显示原始索引 id（`javascript`/`csharp`/`cpp`）。筛选值
+  仍是原始 id，选择逻辑与读取不受影响；未知语言回退显示 id，不会消失。
+- **测试**：335 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.72.0] - 2026-11-27
+
+- **修复 Scala 多行签名**：参数列表跨多行、函数体在 `extends … {`、`=`
+  或 Scala 3 `:` 之后开始的声明，现在得到正确的 `endLine` 与 `parent`
+  归属。声明头扫描跟踪括号深度与字符串，忽略默认参数里的 `=` 与类型
+  标注里的 `:`，并跨 `extends`/`with`/行尾 `(`/`,` 继续；缩进体以签名
+  结束行（而非 `def` 行）为基准计算。
+- **测试**：335 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.71.0] - 2026-11-27
+
+- **嵌套 CMake 子项目**：参与技术栈汇总的不再只有根清单——任意层级
+  `CMakeLists.txt`（嵌套上限 50 份）都会贡献 `find_package`：依赖次数
+  累加进 `dependencyCounts.cmake`，技术条目保留各自清单来源，跨清单
+  去重；项目名只取根清单，不随遍历顺序漂移。
+- **测试**：334 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.70.0] - 2026-11-27
+
+- **CMake 技术栈识别**：`CMakeLists.txt` 成为受支持的清单；`project()`
+  提供项目名，`find_package(<Name>)`（大小写不敏感、去重）计入
+  `dependencyCounts.cmake`。常见包映射到技术（Qt、Boost、OpenCV、Eigen、
+  fmt、spdlog、Protocol Buffers、gRPC、Vulkan、SDL、SFML、GLFW、Catch2、
+  GoogleTest、nlohmann/json、OpenSSL、zlib、SQLite、libcurl、libxml2、
+  CUDA）；未知包只计数，不臆造技术名。
+- **测试**：333 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.69.0] - 2026-11-27
+
+- **C/C++ 支持（13 语言）**：`.c`、`.h`、`.cc`、`.cpp`、`.cxx`、`.hpp`、
+  `.hh`、`.hxx`、`.ipp` 进入索引。符号覆盖 class/struct/union/enum/
+  typedef（含匿名 typedef）、函数、类内方法、构造/析构、类外
+  `Foo::bar` 定义与原型；支持多行参数、`static` 可见性与 `parent` 归属。
+  引号 `#include "..."` 先按文件目录、再经 `include`/`src`/`inc` 根与
+  项目根解析；尖括号系统头不建边，宏生成的声明按已知限制跳过。
+- **测试**：332 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.68.0] - 2026-11-27
+
+- **有界并行索引**：`buildIndex` 默认以 8 路并发读取/解析源码文件
+  （`readConcurrency` 可覆盖，硬顶 16）。结果写回遍历位置，产物与串行
+  完全一致（Git diff 顺序稳定）。取消后不再派发新文件，已在飞行的读取
+  完成后仍上报 `aborted` 的部分结果。基准：本地同步 fs 上 5000 文件
+  126ms → 120ms；结构收益主要在远程 `ctx.fs`（RTT 受限）场景。带延迟的
+  fs 测试断言真实并发不超过上限，且并行输出与串行逐字段一致。
+- **测试**：329 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.67.0] - 2026-11-27
+
+- **修复 Ruby 裸 `require` 解析**：此前 `require 'billing/base'` 被当成
+  相对当前文件目录，得到 `lib/billing/billing/base.rb`。现按 Ruby 的
+  `$LOAD_PATH` 语义：先试任意层级 `lib/` 目录（按深度、字典序），再回退
+  项目根，候选为 `.rb`、原路径与 `index.rb`。`require_relative` 与
+  `./`/`../` 开头仍相对当前文件；聚合入口（`lib/billing.rb` require
+  `billing/invoice`）现在能建边，外部 gem 仍不建边。
+- **测试**：328 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.66.0] - 2026-11-27
+
+- **SwiftPM 自定义 `path:` 目标**：索引解析 `Package.swift` 的 target
+  声明（`.target` / `.executableTarget` / `.testTarget`，支持多行、字符串
+  感知并剥离注释），`import 模块` 解析到声明目录下字典序最小的 Swift
+  文件。显式声明优先于 `Sources/<Target>/` 约定（含声明目录无源码的
+  情形）；依赖数组中的 `.target(name:)` 引用不会被误认为声明。
+- **测试**：327 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.65.0] - 2026-11-27
+
+- **Python 绝对导入依赖边**：`import a.b` / `from a.b import c` 在项目根
+  与任意 `src`/`lib` 布局根下解析（候选根按深度、字典序排序，结果可复现）；
+  `from 包 import 名` 优先同名子模块文件（`包/名.py`、
+  `包/名/__init__.py`），符合 Python 导入语义；相对导入行为不变，
+  标准库与第三方 import 仍不建边。
+- **测试**：326 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.64.0] - 2026-11-27
+
+- **JS/TS 别名与工作区依赖边**：索引额外读取 `tsconfig.json` /
+  `jsconfig.json` / `tsconfig.*.json` 与嵌套 `package.json`（容忍 JSONC
+  注释与尾逗号，上限 200 份配置）。非相对 import 依次解析：
+  `compilerOptions.paths`（精确与 `*` 通配）与 `baseUrl` 绝对导入（就近
+  配置优先，monorepo 包之间不串味）；工作区包名（`@acme/ui`、
+  `@acme/ui/button`）经 `exports`（字符串/条件/数组回退/`./*` 通配）→
+  `main`/`module`/`types` → `src/index`/`index`。外部包仍不建边；入口
+  指向未索引构建产物时回退源码入口。
+- **测试**：325 例全通过；覆盖率数字见 `docs/coverage.md`。
+
+## [0.63.0] - 2026-11-27
+
+- **修复大索引读取**：面板读取资产 JSON（index 与清单）改用 120 页预算
+  （最多 60 万行），大型仓库的 index.json 不再因超过 12 页（6 万行）被
+  截断成坏 JSON 而显示"读取失败"；仍超限时报
+  `workspace-file/too-large`，而不是 JSON 解析错误。Markdown 页面保持
+  12 页上限。
+- **测试**：320 例全通过；覆盖率行 97.79%、分支 86.74%、函数 94.2%。
+
+## [0.62.0] - 2026-11-27
+
+- **卡片 prompt 注入项目上下文**：`repowiki-extract` 把项目名、技术栈
+  （≤8）与模块路径（≤20）带进卡片 prompt，并要求模型在 `relatedModules`
+  中复用这些真实模块路径，不臆造新名字。
+- **Scala 3 `extension` / `given`**：extension 方法归属被扩展类型
+  （不重复产出类型符号）；`given` 实例登记为 variable 并计算块范围，
+  given 内的方法归属该实例。
+- **测试**：319 例全通过；覆盖率行 97.84%、分支 86.84%、函数 94.2%。
+
+## [0.61.0] - 2026-11-27
+
+- **主题合成重试**：`repowiki-generate` 新增 `attempts`（1–3，默认 2）。
+  模型抛错或返回空页面列表时按 200ms/400ms（上限 1s）可取消退避重试；
+  结果报告 `attempts`/`retried`，渲染行标注重试次数。
+- **索引变更计数**：`repowiki-index` 在 `reused` 之外新增 `added` /
+  `changed` / `removed`，增量运行能看出实际变化（遍历被上限截断或取消时
+  `removed` 恒为 0，因为未扫到不等于删除）。
+- **重构**：`delayWithSignal` 收敛到 `src/util.js`，抽取与生成重试共用。
+- **测试**：318 例全通过；覆盖率行 97.83%、分支 86.92%、函数 94.15%。
+
+## [0.60.0] - 2026-11-27
+
+- **Swift 本地 target 依赖边**：`import Core` 解析到
+  `Sources/Core/`（兼容旧版 `Source/Core/`）的代表文件，SwiftPM 多 target
+  仓库因此获得文件级依赖边、反向引用与面板引用行；子模块导入
+  （`import Core.Models`）按首段解析到 `Core`；Foundation/XCTest 等外部
+  模块不建边。
+- **修复**：解析结果等于文件自身时不再产生自引用边（如 target 代表文件
+  import 自己所在模块）。
+- **测试**：317 例全通过；覆盖率行 97.8%、分支 86.7%、函数 94.14%。
+
+## [0.59.0] - 2026-11-27
+
+- **Wiki 增量合成**：`repowiki-generate` 比对 Wiki 清单里的卡片指纹与新增
+  的已采信记忆指纹；两者一致且清单页面都在磁盘上时，主题合成直接跳过
+  （不调用模型，返回 `skippedFresh: true`）；`force=true` 可强制重跑。
+  卡片、记忆或页面缺失任一变化都会走正常生成，跳过时仍报告孤儿页。
+- **记忆新鲜度告警**：`repowiki-status` 比对清单记忆指纹与当前已采信条目，
+  Wiki 落后于记忆变化时给出告警，避免 `stale=0` 掩盖下一次会重新生成。
+- **兼容**：Wiki 清单 v2 新增可选 `memoryDigest`（旧清单会重新生成一次）；
+  module/all 粒度保持确定性，不做短路。
+- **测试**：316 例全通过；覆盖率行 97.81%、分支 86.84%、函数 93.95%。
+
+## [0.58.0] - 2026-11-27
+
+- **面板符号搜索**：卡片列表搜索同时匹配索引里的符号名（权重次于标题），
+  未生成卡片的文件也能用函数/类名定位；搜索框提示更新为
+  "标题 / 路径 / 标签 / 符号"。
+- **方法归属可见**：`repowiki-cards` 的命中方法带 `parent`（所属类型），
+  输出 schema 与渲染文本都展示（如 `run (method:2, in Service)`）。
+- **修复 Scala 3 缩进语法**：无花括号的类型体与 `def` 体（`object App:` /
+  `def run(): Unit =`）按缩进推导范围，成员获得正确 `parent` 与
+  `endLine`，不再被当成顶层函数。
+- **测试**：314 例全通过；覆盖率行 97.8%、分支 86.76%、函数 94.05%。
+
+## [0.57.0] - 2026-11-27
+
+- **符号检索排序**：`repowiki-cards` 按名称匹配质量排序（精确 > 前缀 >
+  子串；同一强度内公开/导出符号优先），文件按最佳命中排序，不再沿用
+  索引顺序；无 query 时保持原有稳定顺序。
+- **按语言检索**：`repowiki-cards` 新增 `lang` 与 `exportedOnly` 过滤；
+  Repo Wiki 面板在索引含多种语言时显示语言下拉，按语言过滤卡片列表，
+  切换工作区时自动清除失效选择。
+- **测试**：311 例全通过；覆盖率行 97.8%、分支 86.83%、函数 94.02%。
+
+## [0.56.0] - 2026-11-27
+
+- **Wiki 章节 chips**：卡片详情"被 Wiki 引用"按章节渲染可点击 chip（最多
+  4 个，溢出显示 `+N`）。点击 chip 打开页面并跳到该章节；页面标题按钮
+  仍跳到首个被引章节；chip 的可访问名称带"页面 · 章节"上下文。
+- **修复 Ruby 块范围**：heredoc 内容与 `=begin/=end` 块注释不再参与块
+  配平（内容里的 `end` 不会提前截断 class/方法范围），注释掉的 def 不再
+  被索引；`list << ITEM` 追加写法不会被误判为 heredoc 起始。
+- **测试**：307 例全通过；覆盖率行 97.77%、分支 86.63%、函数 93.91%。
+
+## [0.55.0] - 2026-11-27
+
+- **Ruby 支持**：class/module/def（单例 `self.`、`?!=` 后缀、表达式体）、
+  `attr_reader/writer/accessor` 属性与常量；`require`/`require_relative`/
+  `load` 导入，本地 `.rb`/`index.rb` 建边；Gemfile 技术栈识别（Rails、
+  Sinatra、RSpec、Puma、Sidekiq 等）。
+- **Swift 支持**：class/struct/actor/enum/protocol/extension 与
+  func/init/typealias；extension 方法归属被扩展类型；模块级 `import`
+  （含 `@testable` 与子模块）只登记不臆造文件边；Package.swift 依赖识别。
+- **Scala 支持**：class/case class/trait/object/enum 与 def；分组、
+  `=>` 重命名、`as` 与 `._`/`.*` 通配导入经点分路径后缀解析；build.sbt
+  依赖识别（Spark、Akka、Cats、ZIO、http4s、ScalaTest 等）。
+- **范围变化**：索引语言 8 → 11；清单识别新增 Gemfile、Package.swift、
+  build.sbt，`.rb`/`.rake`/`.swift`/`.scala` 纳入源码索引。
+- **测试**：305 例全通过；覆盖率行 97.77%、分支 86.53%、函数 93.88%。
+
+## [0.54.1] - 2026-11-27
+
+- **面板运行快照**：单库统计行渲染知识清单里的最近一次抽取
+  （`lastExtract`，含失败与重试数）；有失败时切换错误色并加
+  `role="status"`，悬停可看本次运行时间。切换到无会话/无资产的工作区时
+  快照清零，避免展示上一次的陈旧结果。
+- **修复**：只生成过索引、尚无 `knowledge/` 目录的库此前会整页报读取
+  失败，现按空卡片集呈现。
+- **测试**：客户端用例覆盖快照行的成功态、失败态配色、清单缺失与
+  "仅有索引"分支。
+
+## [0.54.0] - 2026-11-27
+
+- **抽取运行快照**：`knowledge/<locale>/_index.json` 升至 schema v2，新增
+  `lastRun`（时间、抽取/跳过计数、孤儿、失败、重试、截断、并发、尝试次数、
+  耗时）。
+- **状态诊断**：`repowiki-status` 读取并展示 `lastExtract`，输出可读的
+  "Last extract" 行；清单缺失时显示 none 而不报错。
+
+## [0.53.2] - 2026-11-27
+
+- **章节级 Wiki 深链**：点击 Wiki 引用会打开页面并滚动到首个被引用章节。
+  客户端复用共享的标题锚点函数，Markdown 标题与滚动目标一致；手动选页/
+  返回会清空目标章节。
+
+## [0.53.1] - 2026-11-27
+
+- **Wiki 引用可点击**：卡片详情"被 Wiki 引用"中的页面标题改为按钮，点击
+  切换到 Wiki 页签并打开对应页面；按钮带 `aria-label`，兼顾键盘与读屏
+  用户。桩 React 回归覆盖完整跳转链路。
+
+## [0.53.0] - 2026-11-27
+
+- **抽取失败重试与指数退避**：每个文件最多 `attempts`（1–3，默认 2）次模型
+  调用；抛错或返回不可用结构时按 200ms/400ms（上限 1s）退避重试；模型明确
+  `skip` 视为终态不重试。退避可被取消信号打断，取消不计入文件失败。
+- **计划字段**：`repowiki-plan.json` 新增 `attempts` 并做归一化钳制；工具
+  参数优先。结果返回生效的 `attempts` 与实际 `retried` 次数。
+
+## [0.52.0] - 2026-11-27
+
+- **有界并发抽取**：`repowiki-extract` 新增 `concurrency`（1–4，默认取
+  `repowiki-plan.json` 或 1），并行派发多个文件的子代理。模型调用在资产锁
+  之外，卡片写入仍逐张进入临界区；取消后不再派发新任务。失败清单按路径
+  排序，保证并发运行输出可复现。
+- **计划字段**：`repowiki-plan.json` 新增 `concurrency`，归一化并钳制到
+  1–4；工具参数优先。
+
+## [0.51.0] - 2026-11-27
+
+- **C# / Kotlin / PHP 索引**：C#（class/interface/struct/record/enum、第一层
+  方法与构造器）、Kotlin（class/data class/enum class/object/interface、fun、
+  构造器、嵌套类型归属）、PHP（class/interface/trait/enum、方法与顶层函数）
+  符号提取与可见性；支持语言增至 8 种。
+- **本地依赖边**：C# `using`（global/static/别名）、Kotlin `import`
+  （含 `.*` 与 `as`）经点分路径索引解析；PHP `use`（分组/function/const/
+  别名）大小写不敏感匹配，字面量 `require`/`include`（含
+  `__DIR__ . '/x.php'`）按文件相对路径解析。
+- **Composer 技术栈**：`composer.json` 依赖映射到 Laravel、Symfony、PHPUnit、
+  Doctrine、Guzzle 等，支持包名前缀兜底并计入 `dependencyCounts.composer`。
+
+## [0.50.0] - 2026-11-27
+
+- **Wiki 引用反查**：`repowiki-cards wikiReferences=true` 返回命中文件被哪些
+  Wiki 页面/章节引用（`wikiReferences: [{path, slug, title, sections}]`，
+  上限 100 条）；面板详情新增"被 Wiki 引用"，展示页面与章节；两者都只读
+  `wiki/<locale>/_index.json`，不重读页面正文。
+- **Wiki 清单 v2**：每页在页面级 `sources` 之外新增
+  `sections: [{heading, sources}]`，支持章节级反查；v1 清单仍可读并降级到
+  页面级。新增纯函数模块 `src/wiki-references.js` 与单测。
+
+## [0.49.0] - 2026-11-27
+
+- **行号级反向引用**：索引边新增 `line`（import/use/require 语句行），
+  `repowiki-cards references=true` 的 `referencedBy` 升级为
+  `[{path, line}]`（按路径、行号排序）；面板详情显示 `path:Lx`。
+  schema v5 之前的旧索引自动降级为仅路径，不报错。
+- **索引 schema v5**：`edges[].line` 正式入契约；读取兼容 v2–v4 并在内存
+  补齐派生字段，下次索引写 v5。
+
+## [0.48.0] - 2026-11-27
+
+- **符号级反向引用**：`repowiki-cards` 新增 `references=true`，对每个命中符号
+  返回"哪些已索引文件 import 了它"（`references: [{path, symbol, referencedBy}]`，
+  上限 100 条并带 `referencesTruncated`）。语义为 import/use/require 级，
+  不冒充调用图；跳过副作用导入与自引用。
+- **面板反引用**：卡片详情新增"被引用（import 级）"区，直接由 `index.edges`
+  计算，无额外远端读取；新增纯函数模块 `src/references.js` 与单测。
+
+## [0.47.0] - 2026-11-27
+
+- **多语言索引**：Go（函数/接收者方法/struct/interface/别名/导出常量）、
+  Rust（fn/impl 与 trait 方法/struct/enum/type/const、`mod` 与嵌套 `use`）、
+  Java（class/interface/enum/record、构造器与第一层方法），并记录可见性。
+- **本地依赖边**：Go 按 `go.mod` module 前缀解析到包代表文件；Rust 按 crate
+  根与 `mod`/`crate::`/`self::`/`super::` 约定解析；Java 支持通配符/static
+  成员导入，经“类名索引 + 包后缀”匹配；外部或无法解析的 import 不建边。
+- **JVM 技术栈**：识别 `pom.xml`、`build.gradle(.kts)`，Maven/Gradle 坐标
+  映射到 Spring Boot、JUnit 5、Kotlin 等；artifact 未命中时按 groupId 前缀兜底。
+- **Git 溯源与多语言产物**：索引新增 `git`（分支/提交，只读 `.git/HEAD`）与
+  `stats.languages`，status 与面板展示；`repowiki-extract`/`-generate` 支持
+  `locales: ['zh','en']`，按 `byLocale` 分语言汇报；索引 schema 升到 v4
+  （v2/v3 仍可读并内存补齐）。另修复记忆 accept/reject 重写时标题重复的缺陷。
+
+## [0.46.0] - 2026-11-27
+
+- **工程门禁**：TypeScript `checkJs`（渐进式，新模块 `// @ts-check` + 公共
+  `src/types.d.ts`）、ESLint flat config、`typecheck`/`lint` 脚本全绿。
+- **CI 与安全**：Linux/macOS 阻塞 + Windows canary × Node 22/24；覆盖率门禁
+  （行 ≥95、分支 ≥85、函数 ≥85）、密钥扫描、CodeQL、Dependabot、`npm audit`
+  与 CycloneDX SBOM。
+- **发布与文档**：发布脚本（干净工作区/WITH CHANGELOG/测试/本地 commit+tag，
+  不 push）与 tag 发布工作流；CONTRIBUTING、SECURITY、runbook、兼容矩阵、
+  基准文档；基准实测 1000 文件 32ms / 5000 文件 123ms。
+- **ADR-0007**：数据版本（schema v3）与写入回读校验的契约说明。
+
+## [0.45.0] - 2026-11-27
+
+- **`.gitignore` 子集与零依赖 BM25 检索**：索引尊重根目录忽略规则并统计
+  `ignored`；`repowiki-cards` 新增 `target=symbols|docs|all` 与 `includeMemory`，
+  对卡片/Wiki/已采信记忆做排序检索并返回有界摘要。
+- **模块级 Wiki 与清单**：`repowiki-generate` 支持 `granularity=theme|module|all`，
+  模块页确定性生成（无模型调用），每次生成写 `wiki/<locale>/_index.json`。
+- **陈旧/孤儿检测与诊断**：Wiki 页携带 `inputDigest`，面板按清单分组并标记孤儿；
+  新增第 9 个只读工具 `repowiki-status` 汇总索引/卡片/Wiki/记忆/plan/锁状态。
+- **面板体验**：搜索延迟过滤、分页（120 + 加载更多）、排序、标签筛选、Wiki 搜索、
+  复制路径、页签语义与 `aria-live`、`/` 聚焦搜索。
+
+## [0.44.0] - 2026-11-27
+
+- **安全基线**：面板链接协议白名单（仅 `#`/`http(s)`/`mailto`，危险协议降级为
+  文本）；所有资产写入改为写后回读校验，截断/后端正异常立即报错。
+- **端到端取消**：索引与导入/导出接受 `AbortSignal`，取消时如实上报 `aborted`，
+  索引取消不覆盖旧索引；长任务不再只能等超时。
+- **索引 schema v3**：`module`/`modules` 正式入契约，v2 索引内存兼容读取，
+  下次索引自动升级；记忆同名 slug 不同标题哈希共存、同标题覆盖并记录 `reviewedAt`。
+- **锁范围收窄**（ADR-0005 修订）：extract/generate 的 LLM 派发在锁外，写前
+  二次判定后在临界区写盘；index/import/edit/memory 保持整段锁。
+
+## [0.43.0] - 2026-11-27
+
+- **模块层级**（对齐 Qoder Repo Wiki，ADR-0006）：索引文件条目新增 `module`
+  （目录归组，深度 ≤2），索引新增 `modules[]`（路径/父模块/直属文件数/直属符号数）。
+  `repowiki-cards` 支持 `module` 过滤（含子模块）并返回模块树；
+  `repowiki-extract` 额外写 `knowledge/<locale>/_index.json`（模块 → 卡片 slug
+  的派生清单）。
+- **可溯源引用**：卡片标注源文件与索引符号行号；Wiki 页面自动生成页级引用块、
+  目录（≥2 节）与每节"章节来源"（相对路径 + 可选 `#Lx-Ly`）。LLM 返回的引用
+  先经 `sanitizeSources`（卡片/索引白名单 + 合法行号形态）净化后渲染。
+- **面板模块分组**：卡片页签新增"按模块分组"开关，兼容网格/列表视图；
+  旧索引按文件路径实时推导模块。
+- **并发写串行化**（phase-16 评审 O5，ADR-0005）：index/extract/generate/
+  import/edit/memory 六个写路径按资产根进程内 FIFO 排队，并发工具调用或
+  同目录多会话不再交错读-改-写；只读路径（cards/export/list）不加锁。
+  已知限制（仅进程内、LLM 派发期间持锁）见 ADR。
+
 ## [0.42.0] - 2026-11-27
 
 - **空状态优化**：改进空状态消息的样式和间距，使其与整体 UI 更协调一致。

@@ -15,6 +15,8 @@ import * as path from 'node:path'
 import {
   ASSET_DIR, PLAN_FILE, MAX_CARDS_PER_RUN_DEFAULT,
   CARD_COMPLEXITY_THRESHOLD, DEFAULT_RESULT_LIMIT,
+  EXTRACT_CONCURRENCY_DEFAULT, MAX_EXTRACT_CONCURRENCY,
+  EXTRACT_ATTEMPTS_DEFAULT, MAX_EXTRACT_ATTEMPTS,
 } from './schema.js'
 
 /**
@@ -26,6 +28,8 @@ import {
  * @property {number} [cardComplexityThreshold] - 卡片复杂度阈值（最少符号数）。
  * @property {string[]} [locales] - 生成的语言（首版只用第一个；预留给多语言）。
  * @property {number} [maxResultLimit] - 检索结果上限。
+ * @property {number} [concurrency] - 卡片提取并发子代理数（1–4）。
+ * @property {number} [attempts] - 单文件提取最大尝试次数（1–3，含首次）。
  */
 
 /** 默认配置。 */
@@ -36,11 +40,35 @@ export const DEFAULT_PLAN = Object.freeze({
   cardComplexityThreshold: CARD_COMPLEXITY_THRESHOLD,
   locales: [],
   maxResultLimit: DEFAULT_RESULT_LIMIT,
+  concurrency: EXTRACT_CONCURRENCY_DEFAULT,
+  attempts: EXTRACT_ATTEMPTS_DEFAULT,
 })
 
 /**
+ * 归一提取并发数：非整数回退默认，结果钳制到 [1, MAX_EXTRACT_CONCURRENCY]。
+ * @param {unknown} value - 原始值（plan 或工具参数）。
+ * @param {number} [fallback] - 回退值。
+ * @returns {number} 合法并发数。
+ */
+export function normalizeConcurrency(value, fallback = EXTRACT_CONCURRENCY_DEFAULT) {
+  const n = typeof value === 'number' && Number.isInteger(value) ? value : fallback
+  return Math.min(MAX_EXTRACT_CONCURRENCY, Math.max(1, n))
+}
+
+/**
+ * 归一提取尝试次数：非整数回退默认，结果钳制到 [1, MAX_EXTRACT_ATTEMPTS]。
+ * @param {unknown} value - 原始值（plan 或工具参数）。
+ * @param {number} [fallback] - 回退值。
+ * @returns {number} 合法尝试次数。
+ */
+export function normalizeAttempts(value, fallback = EXTRACT_ATTEMPTS_DEFAULT) {
+  const n = typeof value === 'number' && Number.isInteger(value) ? value : fallback
+  return Math.min(MAX_EXTRACT_ATTEMPTS, Math.max(1, n))
+}
+
+/**
  * 读取并合并项目级配置。
- * @param {object} fs - ctx.fs 服务。
+ * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根。
  * @returns {Promise<{plan:RepoPlan, source:'file'|'default'|'broken', error?:string}>}
  */
@@ -51,7 +79,7 @@ export async function readPlan(fs, root) {
     const target = await fs.resolve(path.posix.join(ASSET_DIR, PLAN_FILE), { cwd: root })
     exists = (await fs.stat(target))?.type === 'file'
   } catch {
-    exists = false
+    // 不存在/不可读：按默认配置处理
   }
   if (!exists) {
     return { plan: { ...DEFAULT_PLAN }, source: 'default' }
@@ -70,6 +98,8 @@ export async function readPlan(fs, root) {
       cardComplexityThreshold: nonNegativeInt(parsed.cardComplexityThreshold, DEFAULT_PLAN.cardComplexityThreshold),
       locales: arrayOfStrings(parsed.locales),
       maxResultLimit: nonNegativeInt(parsed.maxResultLimit, DEFAULT_PLAN.maxResultLimit),
+      concurrency: normalizeConcurrency(parsed.concurrency, DEFAULT_PLAN.concurrency),
+      attempts: normalizeAttempts(parsed.attempts, DEFAULT_PLAN.attempts),
     }
     return { plan, source: 'file' }
   } catch (err) {

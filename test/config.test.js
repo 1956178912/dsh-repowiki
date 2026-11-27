@@ -8,7 +8,9 @@ import * as nodefs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
-import { readPlan, selectCandidates, DEFAULT_PLAN } from '../src/config.js'
+import {
+  readPlan, selectCandidates, normalizeConcurrency, normalizeAttempts, DEFAULT_PLAN,
+} from '../src/config.js'
 
 /**
  * 创建带 plan 文件的临时项目。
@@ -59,6 +61,39 @@ test('readPlan：字段类型错误回退默认（不抛异常）', async () => 
   assert.deepEqual(plan.exclude, [])
   assert.equal(plan.maxCardsPerRun, DEFAULT_PLAN.maxCardsPerRun)
   assert.deepEqual(plan.locales, [])
+})
+
+test('readPlan：concurrency 归一与钳制（1–4）', async () => {
+  const dir = makeProject(JSON.stringify({ concurrency: 3 }))
+  const { plan } = await readPlan(makeFakeFs(dir), dir)
+  assert.equal(plan.concurrency, 3)
+
+  const high = makeProject(JSON.stringify({ concurrency: 9 }))
+  assert.equal((await readPlan(makeFakeFs(high), high)).plan.concurrency, 4)
+
+  const low = makeProject(JSON.stringify({ concurrency: 0 }))
+  assert.equal((await readPlan(makeFakeFs(low), low)).plan.concurrency, 1)
+
+  const bad = makeProject(JSON.stringify({ concurrency: 'two' }))
+  assert.equal((await readPlan(makeFakeFs(bad), bad)).plan.concurrency, DEFAULT_PLAN.concurrency)
+})
+
+test('normalizeConcurrency：非整数回退、越界钳制', () => {
+  assert.equal(normalizeConcurrency(2), 2)
+  assert.equal(normalizeConcurrency(0), 1)
+  assert.equal(normalizeConcurrency(99), 4)
+  assert.equal(normalizeConcurrency(2.5), 1)
+  assert.equal(normalizeConcurrency('3'), 1)
+  assert.equal(normalizeConcurrency(undefined, 2), 2)
+})
+
+test('readPlan / normalizeAttempts：尝试次数 1–3 归一', async () => {
+  const dir = makeProject(JSON.stringify({ attempts: 3 }))
+  assert.equal((await readPlan(makeFakeFs(dir), dir)).plan.attempts, 3)
+  assert.equal(normalizeAttempts(9), 3)
+  assert.equal(normalizeAttempts(0), 1)
+  assert.equal(normalizeAttempts(2.5), DEFAULT_PLAN.attempts)
+  assert.equal(normalizeAttempts(undefined, 1), 1)
 })
 
 test('selectCandidates：阈值过滤 + 路径限定 + 上限截断', () => {

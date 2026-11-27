@@ -10,7 +10,7 @@
 
 /**
  * 派发一个 spawn 子代理并取回结构化结果。
- * @param {object} ctx - 插件上下文（提供 ctx.subagents）。
+ * @param {PluginContext} ctx - 插件上下文（提供 ctx.subagents）。
  * @param {{prompt:string, outputSchema:object, agent:object, signal:AbortSignal, label:string, name:string}} opts
  *   - prompt：自包含任务文本（fresh 子代理无父对话历史）。
  *   - outputSchema：ObjectJsonSchema（JsonSchemaNode 子集）。
@@ -49,7 +49,7 @@ export async function runSubagent(ctx, { prompt, outputSchema, agent, signal, la
 /**
  * 推断输出语言（方案 §5.2：只生成当前 locale 一份）。
  * Host 工具没有客户端 locale 服务；用环境变量推断，工具参数可显式覆盖。
- * @param {object} _ctx - 插件上下文（预留）。
+ * @param {PluginContext} _ctx - 插件上下文（预留）。
  * @returns {string} 'zh' 或 'en'。
  */
 export function getLocale(_ctx) {

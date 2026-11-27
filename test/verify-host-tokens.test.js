@@ -117,3 +117,16 @@ test('漂移自检：令牌只定义一次（无深色变体）→ fail 且 noDa
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('漂移自检：asar 损坏 → 可读错误并以 1 退出', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'asar-bad-'))
+  try {
+    const p = path.join(tmp, 'app.asar')
+    fs.writeFileSync(p, Buffer.from('not-an-asar'))
+    const res = runWith(p)
+    assert.equal(res.status, 1)
+    assert.match(res.stderr, /verify-host-tokens 失败/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})

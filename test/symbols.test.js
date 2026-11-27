@@ -108,7 +108,633 @@ test('Python：class/def/async def 与方法归属、缩进块范围', () => {
   assert.ok(byName.Bar.endLine >= byName.ameth.endLine, '类块覆盖其方法')
 })
 
+test('Go：func/方法接收者/type/导出常量', () => {
+  const code = [
+    'package demo',
+    '',
+    'type Server struct {',
+    '  addr string',
+    '}',
+    '',
+    'type Greeter interface {',
+    '  Greet() string',
+    '}',
+    '',
+    'type Alias = string',
+    'type Handler func(int) error',
+    '',
+    'func (s *Server) Start() error { return nil }',
+    'func NewServer() *Server { return &Server{} }',
+    'func hidden() {}',
+    '',
+    'const Version = "1"',
+    'var debug = true',
+    'const (',
+    '  MaxRetries = 3',
+    '  internal = 1',
+    ')',
+  ].join('\n')
+  const syms = extractSymbols(code, 'go')
+  const byName = Object.fromEntries(syms.map(s => [s.name, s]))
+
+  assert.equal(byName.Server.kind, 'class')
+  assert.equal(byName.Server.exported, true)
+  assert.equal(byName.Greeter.kind, 'interface')
+  assert.equal(byName.Alias.kind, 'type')
+  assert.equal(byName.Handler.kind, 'type')
+  assert.equal(byName.Start.kind, 'method')
+  assert.equal(byName.Start.parent, 'Server')
+  assert.equal(byName.NewServer.kind, 'function')
+  assert.equal(byName.hidden.kind, 'function')
+  assert.equal(byName.hidden.exported, false, 'Go 未导出函数仍索引，但标记 exported=false')
+})
+
+test('Rust：fn/impl 方法/trait/struct/enum/pub 可见性', () => {
+  const code = [
+    'use crate::a::Thing;',
+    '',
+    'pub struct Foo { x: i32 }',
+    '',
+    'enum Color { Red, Blue }',
+    '',
+    'impl Foo {',
+    '  pub fn new() -> Self { Foo { x: 0 } }',
+    '  fn hidden(&self) {}',
+    '}',
+    '',
+    'pub trait Greet {',
+    '  fn greet(&self);',
+    '  fn default_greet(&self) { }',
+    '}',
+    '',
+    'pub fn top() {}',
+    'const LIMIT: usize = 10;',
+  ].join('\n')
+  const syms = extractSymbols(code, 'rust')
+  const byName = Object.fromEntries(syms.map(s => [s.name, s]))
+
+  assert.equal(byName.Foo.kind, 'class')
+  assert.equal(byName.Foo.exported, true)
+  assert.equal(byName.Color.kind, 'type')
+  assert.equal(byName.new.kind, 'method')
+  assert.equal(byName.new.parent, 'Foo')
+  assert.equal(byName.new.exported, true)
+  assert.equal(byName.hidden.parent, 'Foo')
+  assert.equal(byName.hidden.exported, false)
+  assert.equal(byName.Greet.kind, 'interface')
+  assert.equal(byName.greet.parent, 'Greet')
+  assert.equal(byName.greet.endLine, byName.greet.line, 'trait 无方法体声明止于本行')
+  assert.equal(byName.top.kind, 'function')
+  assert.equal(byName.LIMIT.kind, 'variable')
+})
+
+test('Java：class/interface/enum/record、构造器与成员方法', () => {
+  const code = [
+    'package com.acme;',
+    '',
+    'public class Demo {',
+    '  private int x;',
+    '  public Demo() { this.x = 0; }',
+    '  public int add(int a, int b) { return a + b; }',
+    '  private static void helper() { }',
+    '  static { System.out.println("init"); }',
+    '  class Inner {',
+    '    void innerMethod() {}',
+    '  }',
+    '}',
+    '',
+    'interface Shape {',
+    '  double area();',
+    '}',
+    '',
+    'enum Color { RED, BLUE }',
+    'record Point(int x, int y) {}',
+  ].join('\n')
+  const syms = extractSymbols(code, 'java')
+  const classSym = syms.find(s => s.name === 'Demo' && s.kind === 'class')
+  assert.ok(classSym?.exported)
+
+  const methods = syms.filter(s => s.kind === 'method' && s.parent === 'Demo')
+  assert.deepEqual(methods.map(m => m.name).sort(), ['Demo', 'add', 'helper'], '构造器与方法，不含 static 初始化块')
+  assert.ok(syms.find(s => s.name === 'add')?.exported)
+  assert.equal(syms.find(s => s.name === 'helper')?.exported, false)
+  assert.equal(syms.find(s => s.name === 'Inner')?.kind, 'class')
+  assert.ok(syms.find(s => s.name === 'innerMethod' && s.parent === 'Inner'), '嵌套类方法归属自身')
+  assert.equal(syms.find(s => s.name === 'Shape')?.kind, 'interface')
+  assert.equal(syms.find(s => s.name === 'Color')?.kind, 'type')
+  assert.equal(syms.find(s => s.name === 'Point')?.kind, 'class')
+})
+
+test('C#：class/interface/record/enum、构造器与第一层方法', () => {
+  const code = [
+    'using System;',
+    'namespace Demo {',
+    '  public class UserService {',
+    '    private int count;',
+    '    public UserService() {}',
+    '    public int Add(int a, int b) {',
+    '      return a + b;',
+    '    }',
+    '    private static void Helper() { }',
+    '    public class Nested {',
+    '      public void Inner() { }',
+    '    }',
+    '  }',
+    '  public interface IRepo { }',
+    '  public record Point(int X, int Y);',
+    '  public enum Color { Red }',
+    '  internal class Hidden { }',
+    '}',
+  ].join('\n')
+  const syms = extractSymbols(code, 'csharp')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.UserService.kind, 'class')
+  assert.equal(byName.UserService.exported, true)
+  assert.equal(byName.IRepo.kind, 'interface')
+  assert.equal(byName.Point.kind, 'class')
+  assert.equal(byName.Color.kind, 'type')
+  assert.equal(byName.Hidden.exported, false)
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'UserService' && m.parent === 'UserService'), '构造器')
+  assert.ok(methods.some(m => m.name === 'Add' && m.parent === 'UserService' && m.exported))
+  assert.ok(methods.some(m => m.name === 'Helper' && m.parent === 'UserService' && !m.exported))
+  assert.ok(methods.some(m => m.name === 'Inner' && m.parent === 'Nested'), '嵌套类方法归属自身')
+})
+
+test('Kotlin：data/enum class、object、fun 与嵌套方法归属', () => {
+  const code = [
+    'package demo',
+    'import demo.util.Helper',
+    'data class User(val name: String)',
+    'class Service {',
+    '  fun run() {}',
+    '  private fun hidden() {}',
+    '  object Nested {',
+    '    fun inner() {}',
+    '  }',
+    '}',
+    'interface Repo {',
+    '  fun save()',
+    '}',
+    'enum class Color { RED }',
+    'fun top() = 1',
+  ].join('\n')
+  const syms = extractSymbols(code, 'kotlin')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.User.kind, 'class')
+  assert.equal(byName.Service.kind, 'class')
+  assert.equal(byName.Nested.kind, 'class')
+  assert.equal(byName.Repo.kind, 'interface')
+  assert.equal(byName.Color.kind, 'type')
+  assert.equal(byName.top.kind, 'function')
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'run' && m.parent === 'Service' && m.exported))
+  assert.ok(methods.some(m => m.name === 'hidden' && m.parent === 'Service' && !m.exported))
+  assert.ok(methods.some(m => m.name === 'inner' && m.parent === 'Nested'))
+  assert.ok(methods.some(m => m.name === 'save' && m.parent === 'Repo'))
+})
+
+test('PHP：class/interface/trait/enum、方法可见性与顶层函数', () => {
+  const code = [
+    '<?php',
+    'namespace App\\Services;',
+    'use App\\Models\\User;',
+    'abstract class Service {',
+    '  public function __construct() {}',
+    '  public function run(): void {',
+    '    return;',
+    '  }',
+    '  private function hidden(): void {}',
+    '}',
+    'interface Repo {',
+    '  public function save(): void;',
+    '}',
+    'trait Loggable {',
+    '  public function log(): void {}',
+    '}',
+    'enum Status {',
+    '  case On;',
+    '}',
+    'function top_level() {}',
+  ].join('\n')
+  const syms = extractSymbols(code, 'php')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.Service.kind, 'class')
+  assert.equal(byName.Repo.kind, 'interface')
+  assert.equal(byName.Loggable.kind, 'class', 'trait 归为 class')
+  assert.equal(byName.Status.kind, 'type')
+  assert.equal(byName.top_level.kind, 'function')
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === '__construct' && m.parent === 'Service'))
+  assert.ok(methods.some(m => m.name === 'run' && m.parent === 'Service' && m.exported))
+  assert.ok(methods.some(m => m.name === 'hidden' && m.parent === 'Service' && !m.exported))
+  assert.ok(methods.some(m => m.name === 'save' && m.parent === 'Repo'))
+  assert.ok(methods.some(m => m.name === 'log' && m.parent === 'Loggable'))
+})
+
+test('Ruby：class/module/def（含 self 与 ?!=）、attr_* 与常量', () => {
+  const code = [
+    'module Billing',
+    '  VERSION = "1.0"',
+    '',
+    '  class Invoice < Base',
+    '    attr_reader :id, :total',
+    '    attr_accessor :status',
+    '',
+    '    def initialize(id)',
+    '      @id = id',
+    '    end',
+    '',
+    '    def self.build(attrs)',
+    '      new(attrs)',
+    '    end',
+    '',
+    '    def paid?',
+    '      status == :paid',
+    '    end',
+    '',
+    '    def summary(items)',
+    '      items.map do |item|',
+    '        item.to_s',
+    '      end',
+    '    end',
+    '',
+    '    def total = items.sum',
+    '  end',
+    'end',
+  ].join('\n')
+  const syms = extractSymbols(code, 'ruby')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.Billing.kind, 'type', 'module 记为命名空间')
+  assert.equal(byName.Invoice.kind, 'class')
+  assert.equal(byName.VERSION.kind, 'variable')
+  assert.equal(byName.id.kind, 'variable', 'attr_reader 生成读属性')
+  assert.equal(byName.status.kind, 'variable', 'attr_accessor 生成属性')
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'initialize' && m.parent === 'Invoice'))
+  assert.ok(methods.some(m => m.name === 'build' && m.parent === 'Invoice'), 'def self.x 归属类')
+  assert.ok(methods.some(m => m.name === 'paid?' && m.parent === 'Invoice'), '? 后缀方法名')
+  assert.ok(methods.some(m => m.name === 'summary' && m.parent === 'Invoice'))
+  assert.ok(methods.some(m => m.name === 'total' && m.parent === 'Invoice'), '表达式体 def 也提取')
+  assert.equal(methods.find(m => m.name === 'total').endLine, 26, '表达式体 def 不吞后续块')
+  assert.equal(byName.Invoice.endLine, 27, 'class 块结束行停在自身 end（嵌套 do/end 配平）')
+  assert.equal(byName.Billing.endLine, 28, 'module 块覆盖到自身 end')
+})
+
+test('Ruby：单行定义、setter、||= 常量与未闭合块降级', () => {
+  const lines = [
+    'class Empty; end',
+    'class Open',
+    '  def name=(value)',
+    '    @name = value',
+    '  end',
+    '  MAX ||= 10',
+    '  attr_writer :token',
+  ]
+  const syms = extractSymbols(lines.join('\n'), 'ruby')
+
+  assert.equal(syms.find(s => s.name === 'Empty').endLine, 1, '单行 class ...; end 止于本行')
+  assert.equal(syms.find(s => s.name === 'Open').endLine, lines.length, '未闭合块降级到文件尾')
+  assert.ok(syms.some(s => s.name === 'name=' && s.kind === 'method'), 'setter 方法名带 =')
+  assert.ok(syms.some(s => s.name === 'MAX' && s.kind === 'variable'), '||= 常量')
+  assert.ok(syms.some(s => s.name === 'token' && s.kind === 'variable'), 'attr_writer')
+})
+
+test('Ruby：heredoc 与 =begin 块注释不干扰块范围', () => {
+  const code = [
+    'class Report',
+    '  SQL = <<~SQL',
+    "    SELECT 'end' FROM t",
+    '  SQL',
+    '',
+    '  ITEMS = []',
+    '',
+    '  def append(items)',
+    '    items << ITEM',
+    '    items',
+    '  end',
+    '',
+    '=begin',
+    'def commented_out',
+    'end',
+    '=end',
+    '',
+    '  def render',
+    '    puts SQL',
+    '  end',
+    'end',
+  ].join('\n')
+  const syms = extractSymbols(code, 'ruby')
+
+  assert.ok(!syms.some(s => s.name === 'commented_out'), '块注释内不提取符号')
+  assert.equal(syms.find(s => s.name === 'Report').endLine, 21, 'heredoc 内的 end 不参与配平')
+  assert.equal(syms.find(s => s.name === 'append').endLine, 11, '`list << ITEM` 不被误判为 heredoc')
+  assert.equal(syms.find(s => s.name === 'render').parent, 'Report')
+  assert.equal(syms.find(s => s.name === 'SQL').kind, 'variable')
+})
+
+test('Swift：class/struct/enum/protocol/extension 与 func/init/typealias', () => {
+  const code = [
+    'import Foundation',
+    '',
+    'public protocol Repository {',
+    '  func find(id: Int) -> User?',
+    '}',
+    '',
+    'public final class UserService: Repository {',
+    '  private let store: Store',
+    '',
+    '  public init(store: Store) {',
+    '    self.store = store',
+    '  }',
+    '',
+    '  public func find(id: Int) -> User? {',
+    '    return store.find(id)',
+    '  }',
+    '',
+    '  private func cache() {}',
+    '}',
+    '',
+    'struct User {',
+    '  let id: Int',
+    '}',
+    '',
+    'extension UserService {',
+    '  func reload() {}',
+    '}',
+    '',
+    'enum Role { case admin }',
+    'typealias Handler = (User) -> Void',
+    'func topLevel() {}',
+  ].join('\n')
+  const syms = extractSymbols(code, 'swift')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.Repository.kind, 'interface')
+  assert.equal(byName.UserService.kind, 'class')
+  assert.equal(byName.User.kind, 'class')
+  assert.equal(byName.Role.kind, 'type')
+  assert.equal(byName.Handler.kind, 'type')
+  assert.equal(byName.topLevel.kind, 'function')
+  assert.equal(syms.filter(s => s.name === 'UserService').length, 1, 'extension 不重复产出类型符号')
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'init' && m.parent === 'UserService'))
+  assert.ok(methods.some(m => m.name === 'find' && m.parent === 'UserService' && m.exported))
+  assert.ok(methods.some(m => m.name === 'cache' && m.parent === 'UserService' && !m.exported))
+  assert.ok(methods.some(m => m.name === 'find' && m.parent === 'Repository'), '协议方法有归属')
+  assert.ok(methods.some(m => m.name === 'reload' && m.parent === 'UserService'), 'extension 方法归属被扩展类型')
+})
+
+test('Scala：class/case class/trait/object/enum 与 def 归属', () => {
+  const code = [
+    'package com.acme',
+    '',
+    'trait Repository {',
+    '  def find(id: Int): Option[String]',
+    '}',
+    '',
+    'case class User(id: Int, name: String)',
+    '',
+    'object UserService extends Repository {',
+    '  private val cache = Map.empty[Int, String]',
+    '',
+    '  override def find(id: Int): Option[String] = cache.get(id)',
+    '',
+    '  def save(user: User): Unit = {',
+    '    cache.updated(user.id, user.name)',
+    '  }',
+    '}',
+    '',
+    'enum Role {',
+    '  case Admin',
+    '}',
+    'private[acme] def topLevel(x: Int): Int = x + 1',
+  ].join('\n')
+  const syms = extractSymbols(code, 'scala')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.Repository.kind, 'interface')
+  assert.equal(byName.User.kind, 'class')
+  assert.equal(byName.UserService.kind, 'class', 'object 记为单例容器')
+  assert.equal(byName.Role.kind, 'type')
+  assert.equal(byName.topLevel.kind, 'function')
+  assert.equal(byName.topLevel.exported, false, 'private[acme] 视为非公开')
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'find' && m.parent === 'Repository'))
+  assert.ok(methods.some(m => m.name === 'find' && m.parent === 'UserService'), 'override def 归属 object')
+  assert.ok(methods.some(m => m.name === 'save' && m.parent === 'UserService'))
+})
+
+test('Scala 3：缩进语法（无花括号）的类型体与 def 归属', () => {
+  const code = [
+    'object App:',
+    '  def run(): Unit =',
+    '    println("hi")',
+    '',
+    '  private def helper(): Unit = ()',
+    '',
+    'trait Service:',
+    '  def find(id: Int): Option[String]',
+    '',
+    'extension (s: String)',
+    '  def shout: String = s.toUpperCase',
+    '',
+    'given UserOrdering: Ordering[User] with',
+    '  def compare(a: User, b: User): Int = 0',
+    '',
+    'def top(): Unit = ()',
+  ].join('\n')
+  const syms = extractSymbols(code, 'scala')
+  const byName = Object.fromEntries(syms.filter(s => s.kind !== 'method').map(s => [s.name, s]))
+
+  assert.equal(byName.App.endLine, 6, 'object 缩进体覆盖到同级声明前')
+  assert.equal(byName.Service.kind, 'interface')
+  assert.equal(byName.UserOrdering.kind, 'variable', 'given 实例登记为 variable')
+  assert.equal(byName.UserOrdering.endLine, 15, 'given 缩进体覆盖到同级声明前')
+  assert.equal(byName.top.kind, 'function', '顶层 def 无 parent')
+  assert.equal(byName.top.parent, undefined)
+
+  const methods = syms.filter(s => s.kind === 'method')
+  assert.ok(methods.some(m => m.name === 'run' && m.parent === 'App'), '缩进体 def 归属 object')
+  assert.ok(methods.some(m => m.name === 'helper' && m.parent === 'App'))
+  assert.ok(methods.some(m => m.name === 'find' && m.parent === 'Service'), 'trait 缩进体成员有归属')
+  assert.ok(methods.some(m => m.name === 'shout' && m.parent === 'String'), 'extension 方法归属被扩展类型')
+  assert.ok(methods.some(m => m.name === 'compare' && m.parent === 'UserOrdering'), 'given 内方法归属 given')
+  assert.ok(methods.every(m => m.endLine >= m.line), '缩进体 def 的结束行不早于起始行')
+})
+
 test('边界：空字符串与不支持的语言返回空数组', () => {
   assert.deepEqual(extractSymbols('', 'typescript'), [])
-  assert.deepEqual(extractSymbols('x = 1', 'ruby'), [])
+  assert.deepEqual(extractSymbols('x = 1', 'lua'), [])
+})
+
+test('C/C++：类型、函数、方法、构造/析构、多行签名与 static 可见性', () => {
+  const code = [
+    '// 注释里的 class Ghost {',
+    'struct Point {',
+    '  int x;',
+    '  int y;',
+    '};',
+    'class Widget final : public Base {',
+    'public:',
+    '  Widget(int size);',
+    '  ~Widget();',
+    '  void draw(int w,',
+    '            int h) {',
+    '    return;',
+    '  }',
+    '  static int count() { return 0; }',
+    '};',
+    'typedef struct {',
+    '  int a;',
+    '} Handle;',
+    'enum class Color : int { Red, Green };',
+    'int main(int argc, char **argv) {',
+    '  if (argc > 1) { return 1; }',
+    '  return 0;',
+    '}',
+    'void Widget::draw(int w, int h) {',
+    '}',
+    'static void helper() {}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'cpp')
+  const byName = (name) => symbols.filter(s => s.name === name)
+  const point = byName('Point')[0]
+  assert.equal(point?.kind, 'class')
+  assert.equal(point?.endLine, 5, 'struct 块范围到闭合行')
+  const widget = byName('Widget')[0]
+  assert.equal(widget?.kind, 'class')
+  assert.equal(widget?.endLine, 15)
+  const ctor = byName('Widget')[1]
+  assert.equal(ctor?.kind, 'method')
+  assert.equal(ctor?.parent, 'Widget')
+  assert.equal(ctor?.line, 8)
+  const dtor = byName('~Widget')[0]
+  assert.equal(dtor?.kind, 'method')
+  assert.equal(dtor?.parent, 'Widget', '析构函数名保留 ~，归属类')
+  const draw = byName('draw')[0]
+  assert.equal(draw?.parent, 'Widget')
+  assert.equal(draw?.line, 10)
+  assert.equal(draw?.endLine, 13, '多行参数列表后的函数体范围')
+  const count = byName('count')[0]
+  assert.equal(count?.exported, false, 'static 方法不是导出符号')
+  const handle = byName('Handle')[0]
+  assert.equal(handle?.kind, 'class', '匿名 typedef 取别名')
+  assert.equal(handle?.endLine, 18)
+  const color = byName('Color')[0]
+  assert.equal(color?.kind, 'type')
+  assert.equal(byName('main')[0]?.kind, 'function')
+  assert.equal(byName('main')[0]?.endLine, 23)
+  assert.equal(byName('if').length, 0, '控制流关键字不产出符号')
+  assert.equal(byName('return').length, 0)
+  assert.equal(byName('draw')[1]?.parent, 'Widget', '类外定义按限定名归属')
+  assert.equal(byName('draw')[1]?.line, 24)
+  assert.equal(byName('helper')[0]?.exported, false)
+})
+
+test('Scala：多行参数子句/继承/表达式体获得正确范围与归属', () => {
+  const code = [
+    'class Service(',
+    '  dep: Dep,',
+    '  other: Other',
+    ') extends Base {',
+    '  def handle(',
+    '    req: Request',
+    '  ): Response = {',
+    '    respond(req)',
+    '  }',
+    '  def pure(',
+    '    x: Int',
+    '  ): Int =',
+    '    x + 1',
+    '}',
+    'def topLevel(',
+    '  a: Int',
+    ') = a * 2',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'scala')
+  const byName = (name) => symbols.filter(s => s.name === name)
+  const service = byName('Service')[0]
+  assert.equal(service?.kind, 'class')
+  assert.equal(service?.endLine, 14, '多行构造参数后的类体范围')
+  const handle = byName('handle')[0]
+  assert.equal(handle?.parent, 'Service')
+  assert.equal(handle?.endLine, 9, '表达式块体到闭合花括号')
+  const pure = byName('pure')[0]
+  assert.equal(pure?.parent, 'Service')
+  assert.equal(pure?.endLine, 13, '多行参数 + 换行表达式体的缩进范围')
+  const top = byName('topLevel')[0]
+  assert.equal(top?.kind, 'function')
+  assert.equal(top?.endLine, 17, '顶层多行参数的单行表达式体')
+})
+
+test('Vue SFC：只提取 script 块内符号，行号保持源文件位置', () => {
+  const code = [
+    '<template>',
+    '  <div>{{ label }}</div>',
+    '</template>',
+    '',
+    '<script setup lang="ts">',
+    "import { ref } from 'vue'",
+    'const label = ref("x")',
+    'const inc = () => label.value + 1',
+    'export function greet() {',
+    '  return inc()',
+    '}',
+    '</script>',
+    '',
+    '<style scoped>',
+    '.a { color: red }',
+    '</style>',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'vue')
+  assert.deepEqual(symbols.map(s => [s.name, s.kind, s.line]), [
+    ['inc', 'function', 8],
+    ['greet', 'function', 9],
+  ])
+  assert.equal(symbols[1].exported, true)
+  // 多个 script 块分别保留原始行号
+  const multi = [
+    '<script>',
+    'function a() {}',
+    '</script>',
+    '<script setup>',
+    'const b = () => 1',
+    '</script>',
+  ].join('\n')
+  assert.deepEqual(extractSymbols(multi, 'vue').map(s => [s.name, s.line]), [['a', 2], ['b', 5]])
+  // template/style 中的文本不产生额外符号
+  assert.equal(symbols.filter(s => s.name === 'label').length, 0, '非导出常量不产符号（与 JS 规则一致）')
+  assert.ok(!symbols.some(s => s.name === 'a'), '.a 样式选择器不产符号')
+})
+
+test('Svelte：模块脚本与实例脚本分别保留行号', () => {
+  const code = [
+    '<script context="module" lang="ts">',
+    'export function loadData() { return 1 }',
+    '</script>',
+    '',
+    '<script lang="ts">',
+    'export let count = 0',
+    'const increment = () => { count += 1 }',
+    '</script>',
+    '',
+    '<button on:click={increment}>{count}</button>',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'svelte')
+  assert.deepEqual(symbols.map(s => [s.name, s.kind, s.line]), [
+    ['loadData', 'function', 2],
+    ['count', 'variable', 6],
+    ['increment', 'function', 7],
+  ])
+  assert.ok(symbols.every(s => typeof s.endLine === 'number' && s.endLine >= s.line))
 })

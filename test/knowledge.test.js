@@ -9,7 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import {
-  cardSlug, cardPath, wikiPath, wikiSlug, writeCard, writeWikiPage, parseCard, readExistingCards,
+  cardSlug, cardPath, wikiPath, wikiSlug, wikiSlugPath, writeCard, writeWikiPage, parseCard, readExistingCards,
 } from '../src/knowledge.js'
 
 test('cardSlug：路径 slug 化', () => {
@@ -60,7 +60,7 @@ test('writeCard + parseCard + readExistingCards：往返一致', async () => {
     '- (none)',
     '',
   ].join('\n')
-  const written = await writeCard(fs, dir, 'src/indexer.js', 'zh', md)
+  await writeCard(fs, dir, 'src/indexer.js', 'zh', md)
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/knowledge/zh/src-indexer.md')))
 
   const parsed = parseCard(nodefs.readFileSync(path.join(dir, '.dsh-repowiki/knowledge/zh/src-indexer.md'), 'utf8'))
@@ -95,7 +95,14 @@ test('wikiSlug：LLM 的 slug 净化后必落在 wiki/<locale>/ 内（路径穿�
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-wiki-'))
   const fs = makeFakeFs(dir)
   await writeWikiPage(fs, dir, '../../../../tmp/evil', 'zh', '# evil\n')
-  assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/tmp-evil.md')))
+  const written = path.join(dir, rel)
+  assert.ok(nodefs.existsSync(written), `应写入净化后的安全路径：${rel}`)
+  assert.ok(written.startsWith(path.join(dir, '.dsh-repowiki/wiki/zh/')))
+
+  // 分层 slug：模块页保留目录层级，逐段净化
+  assert.equal(wikiSlugPath('modules/src'), 'modules/src')
+  assert.equal(wikiSlugPath('modules/../x'), 'modules/page/x')
+  assert.equal(wikiPath('modules/src', 'zh'), '.dsh-repowiki/wiki/zh/modules/src.md')
 })
 
 test('parseCard：坏 frontmatter 与版本不符返回 null', () => {

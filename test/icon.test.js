@@ -37,7 +37,7 @@ test('icon.svg 满足官方 artwork 约定', () => {
 
 test('client.js 侧栏图标使用 currentColor 且无背景 tile', () => {
   const src = fs.readFileSync(path.join(ROOT, 'client.js'), 'utf8')
-  const m = src.match(/function RepoWikiIcon\(\{ size \}\)[\s\S]*?\n    \}/)
+  const m = src.match(/function RepoWikiIcon\(\{ size \}\)[\s\S]*?\n {4}\}/)
   assert.ok(m, '应存在 RepoWikiIcon 组件')
   const body = m[0]
   assert.ok(body.includes("stroke: 'currentColor'"), '侧栏图标应用 currentColor 随主题适配')

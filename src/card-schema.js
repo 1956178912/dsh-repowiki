@@ -7,8 +7,6 @@
  * output.schema 同一规则：顶层 required 数组；见 ADR-0002 运行时教训）。
  */
 
-import { CARD_SCHEMA_VERSION } from './schema.js'
-
 /**
  * 单张知识卡片的结构化输出。
  * @typedef {Object} CardData
@@ -77,7 +75,8 @@ export function cardOutputSchema() {
  * @property {string} title - 页面标题。
  * @property {string} slug - ASCII kebab 文件名（不含扩展名）。
  * @property {string} overview - 页面概述。
- * @property {{heading:string, body:string}[]} sections - 章节（body 为 Markdown）。
+ * @property {{heading:string, body:string, sources?:string[]}[]} sections - 章节
+ *   （body 为 Markdown；sources 为该节依据的卡片文件相对路径，可带 #Lx-Ly）。
  * @property {string} mermaid - 可选 mermaid 图代码（无则空字符串）。
  */
 
@@ -108,6 +107,11 @@ export function wikiOutputSchema() {
                 properties: {
                   heading: { type: 'string' },
                   body: { type: 'string', description: 'Markdown body of the section.' },
+                  sources: {
+                    type: 'array',
+                    description: 'Relative paths of the knowledge-card files that ground this section, optionally with a line range (e.g. "src/indexer.js#L12-L40"). Use only paths from the provided card list; empty when the section is synthesized.',
+                    items: { type: 'string' },
+                  },
                 },
                 required: ['heading', 'body'],
               },
