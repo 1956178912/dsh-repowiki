@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.264.0] - 2026-11-28
+
+### Fixed
+
+- **`export * as ns` re-exports**: `export * as ns from './a'` creates only a
+  namespace object on the barrel, but it was recorded as a star re-export,
+  so downstream named imports could be attributed to `./a`'s symbols. It now
+  records no symbol names; `export * from './a'` keeps expanding exports.
+  Parser v20 re-parses cached imports.
+
+### Tests
+
+- 817 cases pass (LANG=en); new extraction and barrel-attribution tests for
+  namespace re-exports.
+
 ## [0.263.0] - 2026-11-28
 
 ### Added

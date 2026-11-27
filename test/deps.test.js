@@ -15,6 +15,7 @@ test('JS：各类 import 形态均可提取', () => {
     "import type { T } from './types';",
     "export { x } from './re-export';",
     "export * from './star';",
+    "export * as ns from './ns-barrel';",
     "const r = require('./cjs');",
     "const d = await import('./dyn');",
     "// import 'not-a-line'",
@@ -33,6 +34,9 @@ test('JS：各类 import 形态均可提取', () => {
   assert.equal(bySpec.get('./types').imported[0], 'T', 'type 导入保留符号名')
   assert.deepEqual(bySpec.get('../pkg/mod').imported, ['*'], '命名空间导入记为通配符')
   assert.deepEqual(bySpec.get('./star').imported, ['*'], 'export * 再导出全部符号')
+  assert.deepEqual(bySpec.get('./ns-barrel').imported, [],
+    'export * as ns 只导出命名空间对象，不展开目标符号')
+  assert.equal(bySpec.get('./ns-barrel').kind, 'export-from')
   assert.equal(bySpec.get('./re-export').kind, 'export-from', 're-export 形态')
   assert.equal(bySpec.get('./cjs').kind, 'require', 'require 形态')
   assert.equal(bySpec.get('./dyn').kind, 'require', '动态 import 形态')

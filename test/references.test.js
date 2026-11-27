@@ -141,6 +141,23 @@ test('buildReferenceIndex：barrel 本地导出遮蔽星号、歧义来源不下
   assert.equal(ambiguous.get('src/b.ts').get('foo'), undefined)
 })
 
+test('buildReferenceIndex：export * as ns 不展开为星号再导出', () => {
+  const edges = [
+    { from: 'src/barrel.ts', to: 'src/a.ts', kind: 'export-from', line: 1, symbols: [] },
+    { from: 'src/app.ts', to: 'src/barrel.ts', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'src/barrel.ts', symbols: [] },
+    { path: 'src/a.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/barrel.ts').get('parse'), [{ path: 'src/app.ts', line: 1 }],
+    '下游具名导入仍归到 barrel 自身')
+  assert.equal(refs.get('src/a.ts'), undefined,
+    'export * as ns 只导出命名空间对象，不把 parse 归到目标文件')
+})
+
 test('buildReferenceIndex：Python 包 __init__ 具名导入作为 barrel', () => {
   const edges = [
     { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['parse'] },

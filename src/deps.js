@@ -152,18 +152,21 @@ function extractJsImports(lines) {
       })
       continue
     }
-    // export { x } from 'mod' / export * from 'mod'
+    // export { x } from 'mod' / export * from 'mod' / export * as ns from 'mod'
     const em = /^\s*export\s+(?:(?:type\s+)?\{[^}]*\}|\*)\s*(?:as\s+[\w$]+\s*)?from\s*['"](?<mod>[^'"]+)['"]/.exec(line)
     if (em) {
-      // `export * from` 再导出目标文件的全部符号（无 as 别名时记为通配符）
-      const reexportAll = /^\s*export\s+\*\s*from\b/.test(line)
-      const aliases = reexportAll ? [] : jsBraceAliases(line)
+      // `export * from` 再导出目标文件的全部符号；`export * as ns from`
+      // 只导出一个命名空间对象（ns 是 barrel 自身的新绑定），不展开目标
+      // 符号，因此不记通配符（避免下游具名导入误归到目标文件）。
+      const starNamespace = /^\s*export\s+\*\s+as\s+[\w$]+\s+from\b/.test(line)
+      const reexportAll = !starNamespace && /^\s*export\s+\*\s*from\b/.test(line)
+      const aliases = reexportAll || starNamespace ? [] : jsBraceAliases(line)
       result.push({
         specifier: em.groups.mod,
         line: i + 1,
         kind: 'export-from',
         relative: isJsRelative(em.groups.mod),
-        imported: reexportAll ? ['*'] : jsImportedNames(line),
+        imported: starNamespace ? [] : (reexportAll ? ['*'] : jsImportedNames(line)),
         ...(aliases.length > 0 ? { aliases } : {}),
       })
       i = statementEnd
