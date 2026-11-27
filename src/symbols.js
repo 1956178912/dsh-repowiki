@@ -1936,6 +1936,156 @@ function extractZig(lines) {
 }
 
 /**
+ * 提取 Gleam 的可解析代码行：去掉 `//`（含 `////` 文档）注释，并把字符串
+ * 字面量内容替换为空格（跨行字符串状态延续到下一行），避免其中的
+ * `//`/`{`/`}` 干扰块配平。Gleam 没有块注释。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长的可解析代码行。
+ */
+function gleamCodeLines(lines) {
+  const out = []
+  let inString = false
+  for (const raw of lines) {
+    let code = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (inString) {
+        if (ch === '\\') { i++; code += '  '; continue }
+        if (ch === '"') { inString = false; code += '"'; continue }
+        code += ' '
+        continue
+      }
+      if (ch === '/' && raw[i + 1] === '/') break
+      if (ch === '"') { inString = true; code += '"'; continue }
+      code += ch
+    }
+    out.push(code)
+  }
+  return out
+}
+
+/**
+ * 计算一行 Gleam 代码的花括号增量（字符串内容已清空）。
+ * @param {string} code - 已去注释的代码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function gleamBraceDelta(code) {
+  let delta = 0
+  for (const ch of code) {
+    if (ch === '{') delta++
+    else if (ch === '}') delta--
+  }
+  return delta
+}
+
+/**
+ * 计算 Gleam 声明的结束行。函数体/类型体按花括号配平；无块体的类型别名
+ * 与 `external` 声明由调用方标记为单行；单行闭合块返回声明行。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {boolean} singleLine - 是否无块体（类型别名 / external）。
+ * @returns {number} 结束行（1-based）。
+ */
+function gleamBlockEnd(codeLines, startIdx, singleLine) {
+  if (singleLine) return startIdx + 1
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < codeLines.length; i++) {
+    depth += gleamBraceDelta(codeLines[i])
+    if (depth > 0) opened = true
+    if (!opened && codeLines[i].includes('{')) return i + 1
+    if (opened && depth <= 0) return i + 1
+  }
+  return codeLines.length
+}
+
+/**
+ * 提取 Gleam 符号：`type` / `opaque type` / `external type`（类型体）、
+ * `type Name = ...`（别名，kind type）、`fn` / `external fn`、顶层 `const`。
+ * Gleam 的类型体不能定义函数，因此只在花括号深度 0 识别顶层声明；
+ * 函数体与 `case` 块内的 `let`/`fn` 不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractGleam(lines) {
+  const codeLines = gleamCodeLines(lines)
+  const symbols = []
+  const externalTypeRe = /^(?:pub\s+)?external\s+type\s+([A-Z][\w]*)\b/
+  const typeRe = /^(?:pub\s+)?(?:opaque\s+)?type\s+([A-Z][\w]*)\b/
+  const externalFnRe = /^(?:pub\s+)?external\s+fn\s+([a-z_][\w]*)\s*\(/
+  const fnRe = /^(?:pub\s+)?fn\s+([a-z_][\w]*)\s*\(/
+  const constRe = /^(?:pub\s+)?const\s+([a-z_][\w]*)\b/
+  let depth = 0
+  for (let i = 0; i < codeLines.length; i++) {
+    const line = codeLines[i].trim()
+    if (depth === 0 && line !== '') {
+      const exported = /^pub\s+/.test(line)
+      const externalType = externalTypeRe.exec(line)
+      if (externalType) {
+        symbols.push({
+          name: externalType[1],
+          kind: 'class',
+          line: i + 1,
+          endLine: i + 1,
+          exported,
+        })
+        depth += gleamBraceDelta(codeLines[i])
+        continue
+      }
+      const type = typeRe.exec(line)
+      if (type) {
+        const alias = !line.includes('{')
+        symbols.push({
+          name: type[1],
+          kind: alias ? 'type' : 'class',
+          line: i + 1,
+          endLine: gleamBlockEnd(codeLines, i, alias),
+          exported,
+        })
+        depth += gleamBraceDelta(codeLines[i])
+        continue
+      }
+      const externalFn = externalFnRe.exec(line)
+      if (externalFn) {
+        symbols.push({
+          name: externalFn[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: i + 1,
+          exported,
+        })
+        depth += gleamBraceDelta(codeLines[i])
+        continue
+      }
+      const fn = fnRe.exec(line)
+      if (fn) {
+        symbols.push({
+          name: fn[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: gleamBlockEnd(codeLines, i, false),
+          exported,
+        })
+        depth += gleamBraceDelta(codeLines[i])
+        continue
+      }
+      const constant = constRe.exec(line)
+      if (constant) {
+        symbols.push({
+          name: constant[1],
+          kind: 'variable',
+          line: i + 1,
+          endLine: i + 1,
+          exported,
+        })
+      }
+    }
+    depth += gleamBraceDelta(codeLines[i])
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -2065,6 +2215,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'elixir') return extractElixir(lines)
   if (lang === 'lua') return extractLua(lines)
   if (lang === 'zig') return extractZig(lines)
+  if (lang === 'gleam') return extractGleam(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

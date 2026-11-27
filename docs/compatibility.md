@@ -44,6 +44,7 @@
 | Elixir | `defmodule`（嵌套记录完整 `Outer.Inner`）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`；私有形式标记非导出 | `alias` / `import` / `require` / `use` 经 `defmodule` 模块名映射到声明文件（含 `alias A.{B, C}` 与 `as:`）；外部模块不建边；根与 `apps/*/mix.exs` 的 `app: :name` / 依赖元组计入 mix 项目名（根清单）、依赖计数与技术栈（嵌套清单合并，来源可追溯）；`.exs`（测试/脚本/config）作为源码索引，`mix.exs` 仅作清单 |
 | Lua | `local M = {}` 模块表、`function` / `local function`、`M.foo` / `M:foo`（归一为 method + parent）、`M.foo = function` 赋值；`local` 形式非导出，函数体内局部变量不登记 | `require "a.b"` / `require([[a.b]])` 不支持（仅引号形式）→ 点分名换算路径，经每个 `lua/` 根与项目根匹配 `a/b.lua` / `a/b/init.lua`；外部模块不建边 |
 | Zig | `const Foo = struct/enum/union/opaque`（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn` / `extern fn` / `export fn`、具名 `test "…"` 块、顶层常量与变量；容器成员带 `parent`，`pub` 决定导出；`@import`/`@cImport`/`@This` 模块别名不登记 | `@import("x.zig")` 相对引用文件所在目录归一解析并限制在项目内；`std`/`builtin`/`root` 与构建注入的模块名不建边；`@cImport`/`@cInclude` 不提取 |
+| Gleam | `type` / `opaque type` / `external type` 容器、`type Name = …` 别名（kind type）、`fn` / `external fn`（跨行签名与单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记 | `import package/module`（含 `as` 别名与 `.{type Foo, Foo as F}` 未限定导入）经每个 `src/`/`test/` 源根与项目根解析 `<module>.gleam`；`gleam/io` 等外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -83,7 +84,13 @@ Dart 约定标记私有。Lua 为轻量行级解析：块范围按 `function/if/
 `comptime` 块与函数体内的声明不登记，匿名 `test {` 不产符号，
 `@import` 绑定（`const std = @import("std")`）视为模块别名而非常量；
 `@import` 参数必须是字符串字面量，构建期生成的模块名与外部包不建边；
-`build.zig.zon` 只统计 `dependencies` 的直接子键，不解析嵌套依赖图。
+`build.zig.zon` 只统计 `dependencies` 的直接子键，不解析嵌套依赖图。Gleam
+为轻量行级解析：字符串内容（含跨行字符串）在配平前屏蔽，`//`/`////`
+注释不产符号；函数体内 `let`、匿名函数与 `case` 分支不登记；类型别名与
+`external` 声明按单行处理（跨行别名只给首行范围），多行 `import` 的
+未限定符号名单只取首行（模块边仍建立）；`gleam.toml` 只读根级
+`name`/`version` 与 `[dependencies]`/`[dev-dependencies]` 的键，不解析
+版本约束与嵌套包。
 
 ## 升级检查清单
 

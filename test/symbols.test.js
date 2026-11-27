@@ -972,6 +972,69 @@ test('Zig：容器类型、成员方法、测试块与注释/字符串屏蔽', (
   assert.ok(!byName.has('x') && !byName.has('y'), '结构体字段不登记为变量')
 })
 
+test('Gleam：类型/别名/opaque/external、函数与常量', () => {
+  const code = [
+    'import gleam/io',
+    'import my_app/user.{type User, User as U}',
+    '',
+    'pub type Person {',
+    '  Person(name: String, age: Int)',
+    '}',
+    '',
+    'pub type Alias = String',
+    '',
+    'pub opaque type Counter {',
+    '  Counter(value: Int)',
+    '}',
+    '',
+    'pub external type Handle',
+    'pub external fn open(path: String) -> Handle = "os" "open"',
+    '',
+    '// fn commented() { }',
+    '/// doc',
+    'pub fn greet(person: Person) -> String {',
+    '  let name = person.name',
+    '  "Hello " <> name',
+    '}',
+    '',
+    'fn helper(x: Int) -> Int { x + 1 }',
+    '',
+    'pub const version = "1.0.0"',
+    '',
+    'fn multiline(',
+    '  a: Int,',
+    '  b: Int,',
+    ') -> Int {',
+    '  a + b',
+    '}',
+    '',
+    'const secret = "fake // not a comment"',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'gleam')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Person').kind, 'class')
+  assert.equal(byName.get('Person').exported, true)
+  assert.equal(byName.get('Person').endLine, 6)
+  assert.equal(byName.get('Alias').kind, 'type', '类型别名不当作容器类型')
+  assert.equal(byName.get('Alias').endLine, 8)
+  assert.equal(byName.get('Counter').kind, 'class')
+  assert.equal(byName.get('Counter').endLine, 12)
+  assert.equal(byName.get('Handle').kind, 'class', 'external type 识别为类型')
+  assert.equal(byName.get('Handle').endLine, 14)
+  assert.equal(byName.get('open').endLine, 15, 'external fn 为单行符号')
+  assert.equal(byName.get('greet').kind, 'function')
+  assert.equal(byName.get('greet').endLine, 22)
+  assert.equal(byName.get('helper').exported, false)
+  assert.equal(byName.get('helper').endLine, 24, '单行块体范围正确')
+  assert.equal(byName.get('version').kind, 'variable')
+  assert.equal(byName.get('version').exported, true)
+  assert.equal(byName.get('multiline').endLine, 33, '跨行签名按块体配平')
+  assert.equal(byName.get('secret').line, 35, '字符串内 // 不截断')
+  assert.ok(!byName.has('commented'), '注释不产出符号')
+  assert.ok(!byName.has('name'), '函数体内 let 不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

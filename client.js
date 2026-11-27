@@ -339,6 +339,7 @@ const LANGUAGE_LABELS = {
   elixir: 'Elixir',
   lua: 'Lua',
   zig: 'Zig',
+  gleam: 'Gleam',
   c: 'C',
   cpp: 'C++',
 }

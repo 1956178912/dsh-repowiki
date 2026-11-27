@@ -587,6 +587,42 @@ function zigZonInfo(text) {
   }
 }
 
+/** Gleam 包名 → 技术展示名（只收录框架/运行时，stdlib 只计数）。 */
+const GLEAM_TECH = {
+  gleam_http: 'gleam_http',
+  gleam_json: 'gleam_json',
+  gleam_erlang: 'gleam_erlang',
+  gleam_otp: 'gleam_otp',
+  wisp: 'Wisp',
+  lustre: 'Lustre',
+  mist: 'Mist',
+  gleeunit: 'gleeunit',
+}
+
+/**
+ * 从 gleam.toml 读取项目名、版本与依赖名。
+ * 只读取根级 `name`/`version` 与 `[dependencies]`/`[dev-dependencies]`
+ * 段的键（版本约束不解析），依赖按出现顺序去重。
+ * @param {string} text - gleam.toml 内容。
+ * @returns {{name:string|undefined, version:string|undefined, dependencies:string[]}} 元数据。
+ */
+function gleamTomlInfo(text) {
+  const name = /^\s*name\s*=\s*"([^"]+)"/m.exec(text)?.[1]
+  const version = /^\s*version\s*=\s*"([^"]+)"/m.exec(text)?.[1]
+  const dependencies = []
+  let section = ''
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim()
+    if (line === '') continue
+    const header = /^\[([^\]]+)\]$/.exec(line)
+    if (header) { section = header[1].trim(); continue }
+    if (section !== 'dependencies' && section !== 'dev-dependencies') continue
+    const key = /^([A-Za-z0-9_-]+)\s*=/.exec(line)
+    if (key && !dependencies.includes(key[1])) dependencies.push(key[1])
+  }
+  return { name, version, dependencies }
+}
+
 /**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
@@ -756,6 +792,15 @@ export function detectStack(manifests) {
       info.dependencyCounts.zig = zon.dependencies.length
       if (!info.projectName && zon.name) info.projectName = zon.name
       if (!info.projectVersion && zon.version) info.projectVersion = zon.version
+    } else if (path === 'gleam.toml') {
+      const gleam = gleamTomlInfo(text)
+      info.dependencyCounts.gleam = gleam.dependencies.length
+      if (!info.projectName && gleam.name) info.projectName = gleam.name
+      if (!info.projectVersion && gleam.version) info.projectVersion = gleam.version
+      for (const dep of gleam.dependencies) {
+        const name = GLEAM_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'gleam', source: path })
+      }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)
       // 根清单 + 嵌套子项目清单：依赖按出现次数累加，技术名在末尾统一去重

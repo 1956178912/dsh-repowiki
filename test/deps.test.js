@@ -395,6 +395,25 @@ test('Zig：@import 字符串、注释与字符串内伪引用', () => {
   assert.ok(!imports.some(i => i.specifier.endsWith('.h')), '@cImport/@cInclude 不提取')
 })
 
+test('Gleam：模块 import、别名与未限定导入', () => {
+  const code = [
+    'import gleam/io',
+    'import my_app/user',
+    'import my_app/user.{type User, User as U}',
+    'import my_app/config as cfg',
+    '// import commented',
+    'const text = "import fake/mod"',
+  ].join('\n')
+  const imports = extractImports(code, 'gleam')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.imported]), [
+    ['gleam/io', 1, []],
+    ['my_app/user', 2, []],
+    ['my_app/user', 3, ['User']],
+    ['my_app/config', 4, []],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

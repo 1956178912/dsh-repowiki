@@ -716,6 +716,57 @@ function extractZigImports(lines) {
 }
 
 /**
+ * 去除 Gleam 行注释（`//`；字符串内的 `//` 不截断）。
+ * @param {string} line - 源码行。
+ * @returns {string} 去注释后的行。
+ */
+function stripGleamComment(line) {
+  let inString = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inString) {
+      if (ch === '\\') { i++; continue }
+      if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') { inString = true; continue }
+    if (ch === '/' && line[i + 1] === '/') return line.slice(0, i)
+  }
+  return line
+}
+
+/**
+ * 提取 Gleam 的 `import package/module` 引用。
+ * 支持 `as` 别名与 `.{type Foo, Bar as B}` 未限定导入；模块路径原样
+ * 保留，由解析层按 `src/`/`test/` 源根换算为 `.gleam` 文件。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractGleamImports(lines) {
+  const result = []
+  const re = /^\s*import\s+([a-z][\w]*(?:\/[\w]+)*)(?:\s+as\s+[\w]+)?(?:\s*\.\{([^}]*)\})?/
+  for (let i = 0; i < lines.length; i++) {
+    const m = re.exec(stripGleamComment(lines[i]))
+    if (!m) continue
+    const imported = new Set()
+    if (m[2]) {
+      for (const part of m[2].split(',')) {
+        const name = part.trim().replace(/^type\s+/, '').replace(/\s+as\s+[\w]+$/, '')
+        if (name) imported.add(name)
+      }
+    }
+    result.push({
+      specifier: m[1],
+      line: i + 1,
+      kind: 'import',
+      relative: true,
+      imported: [...imported],
+    })
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -837,6 +888,7 @@ export function extractImports(code, lang) {
   if (lang === 'elixir') return extractElixirImports(lines)
   if (lang === 'lua') return extractLuaImports(lines)
   if (lang === 'zig') return extractZigImports(lines)
+  if (lang === 'gleam') return extractGleamImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

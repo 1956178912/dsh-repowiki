@@ -3,6 +3,23 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.185.0] - 2026-11-28
+
+- **Gleam 支持（第 19 种语言）**：`.gleam` 提取 `type`/`opaque type`/
+  `external type` 容器、`type Name = …` 别名（kind `type`）、`fn`/
+  `external fn`（跨行签名与单行块体）与顶层 `const`，`pub` 决定导出；
+  注释（`//`、`////`）与字符串内容（含跨行字符串）在花括号配平前屏蔽，
+  函数体内的 `let`/匿名函数不登记。`import package/module`（含 `as`
+  别名与 `.{type Foo, Foo as F}` 未限定导入）经每个 `src/`/`test/` 源根
+  与项目根解析到 `<module>.gleam`，`gleam/io` 等外部包不建边；
+  `gleam.toml` 提供项目名、版本与 `[dependencies]`/`[dev-dependencies]`
+  的去重依赖名，Wisp/Lustre/Mist/gleam_http 等框架技术保留清单来源。
+  Prompt 围栏与面板语言筛选识别 `gleam`。
+- **测试**：574 例在 LANG=en 与 LANG=zh 下全通过；新增用例覆盖容器/别名
+  范围、opaque/external 形态、`external fn` 单行符号、跨行签名、字符串/
+  注释屏蔽、`let` 排除、import 别名与未限定导入去重、`gleam.toml` 分段
+  计数，以及索引端到端夹具（`src/`、`test/` 与项目根解析，外部包不建边）。
+
 ## [0.184.0] - 2026-11-28
 
 - **status 结构化不可信索引计数**：`repowiki-status` 在净化过被篡改索引时

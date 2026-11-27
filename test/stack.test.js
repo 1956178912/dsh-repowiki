@@ -264,6 +264,31 @@ test('build.zig.zon：旧版字符串项目名', () => {
   assert.equal(info.dependencyCounts.zig, 1)
 })
 
+test('gleam.toml：项目名/版本与依赖段计数', () => {
+  const toml = [
+    'name = "demo"',
+    'version = "1.2.0"',
+    '',
+    '[dependencies]',
+    'gleam_stdlib = ">= 0.44.0"',
+    'wisp = "~> 1.0"',
+    '',
+    '[dev-dependencies]',
+    'gleeunit = "~> 1.0"',
+    'wisp = "~> 1.0"',
+    '',
+    '[erlang]',
+    'extra_applications = ["logger"]',
+  ].join('\n')
+  const info = detectStack({ 'gleam.toml': toml })
+  assert.equal(info.projectName, 'demo')
+  assert.equal(info.projectVersion, '1.2.0')
+  assert.equal(info.dependencyCounts.gleam, 3, '依赖去重且不跨段误计')
+  assert.ok(info.technologies.some(t => t.name === 'Wisp' && t.ecosystem === 'gleam'))
+  assert.ok(info.technologies.some(t => t.name === 'gleeunit'))
+  assert.ok(!info.technologies.some(t => t.name === 'gleam_stdlib'), 'stdlib 只计数不列技术')
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

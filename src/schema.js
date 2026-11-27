@@ -124,6 +124,7 @@ export const MANIFEST_FILES = {
   'pubspec.yaml': 'pub',
   'mix.exs': 'mix',
   'build.zig.zon': 'zig',
+  'gleam.toml': 'gleam',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -159,6 +160,7 @@ export const EXTENSION_LANGS = {
   exs: 'elixir',
   lua: 'lua',
   zig: 'zig',
+  gleam: 'gleam',
   c: 'c',
   h: 'c',
   cc: 'cpp',

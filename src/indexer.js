@@ -709,6 +709,50 @@ function resolveZigSpecifier(fromRel, specifier, indexed) {
 }
 
 /**
+ * 建立 Gleam 模块的源根：任意层级名为 `src`/`test` 的目录（monorepo
+ * 子包亦可），最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 源根（末项为项目根 ''）。
+ */
+function buildGleamRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!rel.endsWith('.gleam')) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'src' || segments[i] === 'test') {
+        roots.add(segments.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+  return [
+    ...[...roots].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Gleam `import package/module`：模块路径在 `src/`/`test/` 源根与
+ * 项目根下映射为 `<module>.gleam`；外部包（如 `gleam/io`）返回 null。
+ * @param {string} specifier - 模块路径（`my_app/user`）。
+ * @param {string[]} roots - 源根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveGleamSpecifier(specifier, roots, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '' || raw.startsWith('/') || raw.includes('..') || raw.includes('\\')) return null
+  if (!/^[a-z][\w/]*$/.test(raw)) return null
+  for (const root of roots) {
+    const base = root === '' ? raw : `${root}/${raw}`
+    const candidate = path.posix.normalize(`${base}.gleam`)
+    if (indexed.has(candidate)) return candidate
+  }
+  return null
+}
+
+/**
  * 解析 Elixir 模块引用：alias/import/require/use 的点分模块名精确匹配
  * 仓库内 defmodule 或 `lib/` 布局文件；外部依赖返回 null。
  * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
@@ -1573,6 +1617,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
  *   luaRoots:string[],
+ *   gleamRoots:string[],
  *   phpPsr4:Array<{prefix:string, dir:string}>, phpPaths:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1613,6 +1658,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }
@@ -1837,6 +1883,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
     luaRoots: buildLuaRoots(indexed),
+    gleamRoots: buildGleamRoots(indexed),
     phpPsr4: buildPhpPsr4(manifestTexts),
     phpPaths: buildPhpPaths(indexed),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),

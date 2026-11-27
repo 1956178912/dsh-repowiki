@@ -5,6 +5,35 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.185.0] - 2026-11-28
+
+### Added
+
+- **Gleam indexing (19th language)**: `.gleam` files produce `type` /
+  `opaque type` / `external type` containers, `type Name = …` aliases
+  (kind `type`), `fn` / `external fn` definitions with multi-line signatures
+  and single-line bodies, and top-level `const` values; `pub` decides
+  export. Comments (`//`, `////`) and string contents (including multi-line
+  strings) are masked before brace matching, so braces inside text never
+  shift ranges, and `let`/anonymous functions inside bodies stay out of the
+  symbol table. `import package/module` (with `as` aliases and
+  `.{type Foo, Foo as F}` unqualified imports) resolves through every
+  `src/` or `test/` source root and the project root to `<module>.gleam`;
+  external packages such as `gleam/io` stay edge-free. `gleam.toml`
+  supplies the project name, version and distinct dependency names from
+  `[dependencies]` / `[dev-dependencies]`, with framework technologies
+  (Wisp, Lustre, Mist, gleam_http, …) keeping their manifest source. Prompt
+  fences and the panel language filter know `gleam`.
+
+### Tests
+
+- 574 cases pass (LANG=en and LANG=zh); new coverage pins container and
+  alias ranges, opaque/external forms, `external fn` as a single-line
+  symbol, multi-line signatures, string/comment shielding, `let`
+  exclusion, import aliases with deduplicated unqualified names,
+  `gleam.toml` section scoping and an indexer fixture proving `src/`,
+  `test/` and project-root resolution with `gleam/io` staying edge-free.
+
 ## [0.184.0] - 2026-11-28
 
 ### Changed

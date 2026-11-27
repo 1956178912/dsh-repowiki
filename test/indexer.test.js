@@ -1290,6 +1290,51 @@ test('Zig：@import 相对当前文件解析与 build.zig.zon 技术栈', async 
   assert.ok(model.symbols.some(s => s.name === 'Model' && s.kind === 'class'))
 })
 
+test('Gleam：src/test 源根解析、未限定导入与技术栈', async () => {
+  const dir = makeProject({
+    'gleam.toml': [
+      'name = "demo"',
+      'version = "1.2.0"',
+      '',
+      '[dependencies]',
+      'gleam_stdlib = ">= 0.44.0"',
+      'wisp = "~> 1.0"',
+      '',
+      '[dev-dependencies]',
+      'gleeunit = "~> 1.0"',
+    ].join('\n'),
+    'src/demo.gleam': 'pub fn main() { Nil }\n',
+    'src/demo/user.gleam': [
+      'pub type User { User(name: String) }',
+      'pub fn name(user: User) -> String { user.name }',
+    ].join('\n'),
+    'src/demo/web.gleam': [
+      'import demo/user.{type User, User}',
+      'import gleam/io',
+      'pub fn show(user: User) { io.println(user.name) }',
+    ].join('\n'),
+    'test/demo_test.gleam': 'import demo/user\nimport demo/web\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { gleam: 4 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/demo/web.gleam', 'src/demo/user.gleam')?.line, 1)
+  assert.equal(edge('test/demo_test.gleam', 'src/demo/user.gleam')?.line, 1, 'test 源根解析 src 模块')
+  assert.equal(edge('test/demo_test.gleam', 'src/demo/web.gleam')?.line, 2)
+  assert.equal(doc.edges.filter(e => e.from === 'src/demo/web.gleam').length, 1, '外部 gleam/io 不建边')
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.projectVersion, '1.2.0')
+  assert.equal(doc.stack.dependencyCounts.gleam, 3)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Wisp' && t.source === 'gleam.toml'))
+
+  const web = doc.files.find(f => f.path === 'src/demo/web.gleam')
+  assert.deepEqual(web.imports[0].imported, ['User'], '未限定导入去重（type User + User）')
+  const user = doc.files.find(f => f.path === 'src/demo/user.gleam')
+  assert.ok(user.symbols.some(s => s.name === 'User' && s.kind === 'class'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',
