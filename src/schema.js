@@ -76,6 +76,8 @@ export const MAX_FILE_BYTES = 4 * 1024 * 1024
  */
 export const EXCLUDE_DIRS = new Set([
   'node_modules',
+  'vendor', // PHP Composer 依赖目录（Go 的 vendor 同样为第三方代码）
+  '.dart_tool', // Dart/Flutter 生成的包配置与构建缓存
   '.git',
   '.hg',
   '.svn',

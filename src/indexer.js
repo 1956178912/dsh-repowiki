@@ -66,6 +66,12 @@ const MAX_GO_MODS = 20
 const MAX_INTERNAL_WARNINGS = 50
 
 /**
+ * 单次索引最多读取的嵌套 `composer.json` 数（PHP 多包仓库）。
+ * 根清单不受此上限影响；嵌套清单提供各包的 PSR-4 自动加载映射。
+ */
+const MAX_COMPOSER_MANIFESTS = 50
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -76,14 +82,15 @@ function isJsConfigName(name) {
 }
 
 /**
- * 判断文件是否参与依赖解析/技术栈识别（含嵌套 CMake 与 Go module 清单）。
+ * 判断文件是否参与依赖解析/技术栈识别（含嵌套 CMake、Go module 与
+ * composer 清单）。
  * @param {string} rel - 文件相对路径。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
  */
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
-    || name === 'pubspec.yaml'
+    || name === 'pubspec.yaml' || name === 'composer.json'
 }
 
 /**
@@ -850,6 +857,105 @@ function resolveDottedSpecifier(specifier, dottedPaths, opts = {}) {
 }
 
 /**
+ * 归一 composer PSR-4 目录：相对 composer.json 所在目录解析，拒绝绝对
+ * 路径、盘符与向上越界；空字符串表示清单所在目录。
+ * @param {string} baseDir - composer.json 所在目录（根为 ''）。
+ * @param {string} value - `psr-4` 的目录值。
+ * @returns {string|null} 归一后的相对目录；非法值返回 null。
+ */
+function normalizeComposerDir(baseDir, value) {
+  const base = baseDir === '.' ? '' : baseDir
+  const raw = value.trim().replace(/\\/g, '/')
+  if (raw === '') return base
+  if (raw.startsWith('/') || /^[A-Za-z]:/.test(raw)) return null
+  const joined = path.posix.normalize(path.posix.join(base || '.', raw))
+  if (joined.startsWith('..')) return null
+  return joined === '.' ? '' : joined.replace(/\/+$/, '')
+}
+
+/**
+ * 从根与嵌套 composer.json 构建 PSR-4 自动加载前缀映射。
+ * `autoload` 与 `autoload-dev` 都参与（测试夹具类同样需要解析）；
+ * 最长前缀优先，其次目录更浅、字典序，保证确定性。
+ * @param {Record<string, string>} manifestTexts - 相对路径 → 文本。
+ * @returns {Array<{prefix:string, dir:string}>} 前缀（小写、点分）与目录。
+ */
+function buildPhpPsr4(manifestTexts) {
+  const mappings = []
+  const seen = new Set()
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (path.posix.basename(rel) !== 'composer.json' || typeof text !== 'string') continue
+    let pkg
+    try { pkg = JSON.parse(text) } catch { continue }
+    if (!pkg || typeof pkg !== 'object') continue
+    const baseDir = path.posix.dirname(rel)
+    for (const sectionName of ['autoload', 'autoload-dev']) {
+      const section = pkg[sectionName]
+      const psr4 = section && typeof section === 'object' ? section['psr-4'] : null
+      if (!psr4 || typeof psr4 !== 'object' || Array.isArray(psr4)) continue
+      for (const [rawPrefix, rawDirs] of Object.entries(psr4)) {
+        if (typeof rawPrefix !== 'string') continue
+        const prefix = rawPrefix.replace(/^\\+/, '').replace(/\\+$/, '')
+          .replace(/\\/g, '.').toLowerCase()
+        for (const rawDir of (Array.isArray(rawDirs) ? rawDirs : [rawDirs])) {
+          if (typeof rawDir !== 'string') continue
+          const dir = normalizeComposerDir(baseDir, rawDir)
+          if (dir === null) continue
+          const key = `${prefix}::${dir}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          mappings.push({ prefix, dir })
+        }
+      }
+    }
+  }
+  return mappings.sort((a, b) =>
+    b.prefix.length - a.prefix.length
+    || dirDepth(a.dir) - dirDepth(b.dir)
+    || a.dir.localeCompare(b.dir))
+}
+
+/**
+ * 建立 PHP 文件的小写路径索引（PHP 类名与命名空间大小写不敏感，
+ * 与点分索引一致）。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {Map<string, string>} 小写相对路径 → 实际相对路径。
+ */
+function buildPhpPaths(paths) {
+  const map = new Map()
+  for (const rel of paths) {
+    if (!rel.endsWith('.php')) continue
+    const key = rel.toLowerCase()
+    const existing = map.get(key)
+    if (!existing || rel < existing) map.set(key, rel)
+  }
+  return map
+}
+
+/**
+ * 解析 PHP `use`：先按 composer.json 的 PSR-4 前缀映射（命名空间前缀 →
+ * 目录，类名余段 → 子路径.php），未命中返回 null 交给点分后缀匹配兜底。
+ * @param {string} specifier - 点分引用（如 App.Models.User）。
+ * @param {Array<{prefix:string, dir:string}>} mappings - PSR-4 映射（最长前缀优先）。
+ * @param {Map<string, string>} phpPaths - 小写路径索引。
+ * @returns {string|null} 命中文件；未命中返回 null。
+ */
+function resolvePhpSpecifier(specifier, mappings, phpPaths) {
+  const key = specifier.toLowerCase()
+  for (const { prefix, dir } of mappings) {
+    // 命名空间边界：前缀必须整段命中（App 不匹配 Application）
+    if (prefix && key !== prefix && !key.startsWith(prefix + '.')) continue
+    const remainder = (prefix ? key.slice(prefix.length) : key).replace(/^\.+/, '')
+    if (!remainder) continue
+    const sub = remainder.replace(/\./g, '/') + '.php'
+    const candidate = dir === '' ? sub : `${dir}/${sub}`
+    const hit = phpPaths.get(candidate.toLowerCase())
+    if (hit) return hit
+  }
+  return null
+}
+
+/**
  * 解析显式相对文件引用（PHP require/include 字面量路径）。
  * @param {string} fromRel - 引用方文件。
  * @param {string} specifier - 以 ./ 或 ../ 开头的路径。
@@ -1272,6 +1378,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   swiftTargets:Map<string,string>,
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
+ *   phpPsr4:Array<{prefix:string, dir:string}>, phpPaths:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     kotlin:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1292,9 +1399,10 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'csharp') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.csharp)
   if (lang === 'kotlin') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.kotlin)
   if (lang === 'php') {
-    return imp.kind === 'require'
-      ? resolveRelativeFile(fromRel, imp.specifier, ctx.indexed)
-      : resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.php, { lowercase: true })
+    if (imp.kind === 'require') return resolveRelativeFile(fromRel, imp.specifier, ctx.indexed)
+    // composer PSR-4 映射优先（支持任意目录布局），点分后缀匹配兜底
+    return resolvePhpSpecifier(imp.specifier, ctx.phpPsr4, ctx.phpPaths)
+      ?? resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.php, { lowercase: true })
   }
   if (lang === 'ruby') {
     return resolveRubySpecifier(fromRel, imp.specifier, ctx.indexed, ctx.rubyRoots, imp.relative)
@@ -1447,6 +1555,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let jsConfigsRead = 0
   let cmakeManifestsRead = 0
   let goModsRead = 0
+  let composerManifestsRead = 0
   for (const { abs, rel } of manifests) {
     const baseName = path.posix.basename(rel)
     const nestedConfig = !MANIFEST_FILES[rel] && isJsConfigName(baseName)
@@ -1463,6 +1572,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedGoMod) {
       if (goModsRead >= MAX_GO_MODS) continue
       goModsRead++
+    }
+    const nestedComposer = !MANIFEST_FILES[rel] && baseName === 'composer.json'
+    if (nestedComposer) {
+      if (composerManifestsRead >= MAX_COMPOSER_MANIFESTS) continue
+      composerManifestsRead++
     }
     try {
       const target = await fs.resolve(abs)
@@ -1494,6 +1608,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     jsAliases,
     workspacePackages: buildWorkspacePackages(manifestTexts),
     dartPackages: buildDartPackages(manifestTexts),
+    phpPsr4: buildPhpPsr4(manifestTexts),
+    phpPaths: buildPhpPaths(indexed),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),
     rubyRoots: buildRubyRoots(indexed),
     cppRoots: buildCppRoots(indexed),

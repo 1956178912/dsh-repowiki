@@ -261,6 +261,69 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
   assert.equal(doc.stack.dependencyCounts.composer, 2)
 })
 
+test('PHP：composer PSR-4 映射解析 use（最长前缀、autoload-dev、嵌套包）', async () => {
+  const dir = makeProject({
+    'composer.json': JSON.stringify({
+      name: 'acme/app',
+      require: { 'laravel/framework': '^10' },
+      autoload: {
+        'psr-4': {
+          'App\\': 'src/',
+          'App\\Models\\': 'models/',
+          'Legacy\\': ['legacy/src/', 'legacy/generated/'],
+          '': 'fallback/',
+        },
+      },
+      'autoload-dev': { 'psr-4': { 'Tests\\': 'tests/' } },
+    }),
+    'src/Http/Controller.php': [
+      '<?php',
+      'namespace App\\Http;',
+      'use App\\Models\\User;',
+      'use Legacy\\Thing;',
+      'use Tests\\Fixtures\\PostFactory;',
+      'use Misc\\Helper;',
+      'use Monolog\\Logger;',
+      'class Controller {}',
+    ].join('\n'),
+    'models/User.php': '<?php\nnamespace App\\Models;\nclass User {}\n',
+    'legacy/src/Thing.php': '<?php\nnamespace Legacy;\nclass Thing {}\n',
+    'tests/Fixtures/PostFactory.php': '<?php\nnamespace Tests\\Fixtures;\nclass PostFactory {}\n',
+    'fallback/Misc/Helper.php': '<?php\nnamespace Misc;\nclass Helper {}\n',
+    'packages/admin/composer.json': JSON.stringify({
+      autoload: { 'psr-4': { 'Admin\\': 'lib/' } },
+    }),
+    'packages/admin/lib/Dashboard.php': '<?php\nnamespace Admin;\nclass Dashboard {}\n',
+    'packages/admin/lib/Panel.php': [
+      '<?php',
+      'namespace Admin;',
+      'use Admin\\Dashboard;',
+      'class Panel {}',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+
+  assert.equal(edge('src/Http/Controller.php', 'models/User.php')?.line, 3, '最长前缀 App\\Models\\ 胜出')
+  assert.equal(edge('src/Http/Controller.php', 'legacy/src/Thing.php')?.line, 4, 'PSR-4 数组目录')
+  assert.equal(edge('src/Http/Controller.php', 'tests/Fixtures/PostFactory.php')?.line, 5, 'autoload-dev 参与解析')
+  assert.equal(edge('src/Http/Controller.php', 'fallback/Misc/Helper.php')?.line, 6, '空前缀兜底映射')
+  assert.equal(edge('src/Http/Controller.php', 'vendor/monolog/Logger.php'), undefined, '外部包不建边')
+  assert.equal(edge('packages/admin/lib/Panel.php', 'packages/admin/lib/Dashboard.php')?.line, 3, '嵌套 composer.json 以自身目录为基准')
+  assert.equal(doc.stack.dependencyCounts.composer, 1, '技术栈仍只统计根清单')
+})
+
+test('默认排除依赖目录：vendor 与 .dart_tool 不参与索引', async () => {
+  const dir = makeProject({
+    'app/Http/Controller.php': '<?php\nclass Controller {}\n',
+    'vendor/acme/pkg/src/Lib.php': '<?php\nclass Lib {}\n',
+    'lib/main.dart': 'class Main {}\n',
+    '.dart_tool/build/generated.dart': 'class Generated {}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.files.map(f => f.path).sort(), ['app/Http/Controller.php', 'lib/main.dart'])
+})
+
 test('Ruby/Swift/Scala：符号、本地依赖边与三生态技术栈', async () => {
   const dir = makeProject({
     Gemfile: "source 'https://rubygems.org'\ngem 'rails', '~> 7.1'\n",

@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.169.0] - 2026-11-28
+
+### Added
+
+- **PHP PSR-4 autoload resolution**: root and nested `composer.json` files now
+  feed `autoload` / `autoload-dev` `psr-4` mappings (string or array
+  directories, empty-prefix fallback) into PHP `use` resolution. Namespace
+  prefixes map to arbitrary directories instead of relying on path suffixes,
+  so Symfony/Laravel-style layouts (`App\` → `src/`) get real dependency
+  edges; the longest prefix wins and class-name matching stays
+  case-insensitive. Absolute or escaping directories are ignored, and
+  external packages still produce no edges. The Composer stack count keeps
+  using only the root manifest.
+
+### Changed
+
+- **Dependency directories excluded by default**: `vendor/` (Composer, and
+  Go's vendored third-party code) and `.dart_tool/` (Dart/Flutter generated
+  package config and build cache) no longer enter the index, so installed
+  dependencies cannot crowd out project files against the 5,000-file budget.
+
+### Tests
+
+- 540 cases pass (LANG=en and LANG=zh); the new PHP fixture asserts longest
+  prefix, array directories, `autoload-dev`, empty-prefix fallback, nested
+  package bases and the untouched Composer dependency count, while a second
+  fixture proves `vendor/` and `.dart_tool/` are skipped.
+
 ## [0.168.0] - 2026-11-28
 
 ### Fixed

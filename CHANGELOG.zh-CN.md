@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.169.0] - 2026-11-28
+
+- **PHP PSR-4 自动加载解析**：根与嵌套 `composer.json` 的 `autoload` /
+  `autoload-dev` `psr-4` 映射（目录可为字符串或数组、支持空前缀兜底）参与
+  `use` 解析。命名空间前缀映射到任意目录，不再依赖路径后缀，Symfony/
+  Laravel 风格布局（`App\` → `src/`）开始建立真实依赖边；最长前缀优先，
+  类名匹配保持大小写不敏感。绝对路径/向上越界目录被忽略，外部包仍不建边；
+  Composer 依赖计数仍只统计根清单。
+- **默认排除依赖目录**：`vendor/`（Composer 与 Go 的第三方 vendored 代码）
+  与 `.dart_tool/`（Dart/Flutter 生成的包配置与构建缓存）不再进入索引，
+  避免已安装依赖挤占 5,000 文件预算、把项目自身文件挤出索引。
+- **测试**：540 例在 LANG=en 与 LANG=zh 下全通过；新增 PHP 夹具断言最长
+  前缀、数组目录、`autoload-dev`、空前缀兜底、嵌套包基准目录与技术栈计数
+  不变，另有夹具证明 `vendor/` 与 `.dart_tool/` 被跳过。
+
 ## [0.168.0] - 2026-11-28
 
 - **导入不再复制清单外文件**：快照含 `_snapshot.json` 时，`repowiki-import`
