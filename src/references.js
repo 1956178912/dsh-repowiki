@@ -8,6 +8,9 @@
  *
  * 语义边界：这是 import/use/require 级引用，不是调用图或类型使用分析；
  * 未经 import 的同文件使用、反射/动态加载不会出现在结果中（不猜测）。
+ * 命名空间导入（`import * as ns`）与 `export * from` 记为 `*` 通配符：
+ * 它们可能引用目标文件的任意符号，因此按"潜在引用"合并到每个符号，
+ * 但不声称具体使用了哪一个。
  */
 
 /** 单次检索返回的反向引用条目上限（与其它有界输出一致）。 */
@@ -254,10 +257,20 @@ export function referencesFor(referenceIndex, matches = [], limit = MAX_REFERENC
     if (truncated) break
     const byName = referenceIndex.get(match.path)
     if (!byName) continue
+    // `*` 边代表命名空间导入/`export *`：目标文件里的任意符号都可能被使用，
+    // 按潜在引用合并；具体使用点由 repowiki-cards usages=true 的词法扫描确认。
+    const wildcard = byName.get('*')
     for (const symbol of match.symbols ?? []) {
       if (typeof symbol?.name !== 'string') continue
-      const referencedBy = byName.get(symbol.name)
-      if (!referencedBy || referencedBy.length === 0) continue
+      const direct = byName.get(symbol.name)
+      if ((!direct || direct.length === 0) && (!wildcard || wildcard.length === 0)) continue
+      /** @type {Map<string, ReferenceSite>} */
+      const sites = new Map()
+      for (const site of [...(direct ?? []), ...(wildcard ?? [])]) {
+        sites.set(`${site.path}\u0000${site.line ?? 0}`, site)
+      }
+      const referencedBy = [...sites.values()]
+        .sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0))
       if (references.length >= limit) {
         truncated = true
         break

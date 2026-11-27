@@ -143,6 +143,11 @@ test('usages：usageImporters 只认具名导入、排除自引用并聚合行�
   assert.deepEqual(usageImporters([], { path: 'a.ts', name: 'a1' }), [])
   assert.deepEqual(usageImporters(edges, { path: 'a.ts', name: '' }), [])
   assert.deepEqual(usageImporters(edges, null), [])
+  assert.deepEqual(
+    usageImporters([{ from: 'ns.ts', to: 'a.ts', line: 1, symbols: ['*'] }], { path: 'a.ts', name: 'a1' }),
+    [{ path: 'ns.ts', importLines: [1] }],
+    '命名空间导入作为潜在导入方参与词法扫描',
+  )
 })
 
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {

@@ -109,12 +109,14 @@ function extractJsImports(lines) {
     // export { x } from 'mod' / export * from 'mod'
     const em = /^\s*export\s+(?:(?:type\s+)?\{[^}]*\}|\*)\s*(?:as\s+[\w$]+\s*)?from\s*['"](?<mod>[^'"]+)['"]/.exec(line)
     if (em) {
+      // `export * from` 再导出目标文件的全部符号（无 as 别名时记为通配符）
+      const reexportAll = /^\s*export\s+\*\s*from\b/.test(line)
       result.push({
         specifier: em.groups.mod,
         line: i + 1,
         kind: 'export-from',
         relative: isJsRelative(em.groups.mod),
-        imported: jsImportedNames(line),
+        imported: reexportAll ? ['*'] : jsImportedNames(line),
       })
       i = statementEnd
       continue

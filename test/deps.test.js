@@ -29,6 +29,8 @@ test('JS：各类 import 形态均可提取', () => {
   assert.ok(bySpec.get('./foo').imported.includes('a'))
   assert.ok(bySpec.get('./foo').imported.includes('b'), 'as 别名归一为原名')
   assert.equal(bySpec.get('./types').imported[0], 'T', 'type 导入保留符号名')
+  assert.deepEqual(bySpec.get('../pkg/mod').imported, ['*'], '命名空间导入记为通配符')
+  assert.deepEqual(bySpec.get('./star').imported, ['*'], 'export * 再导出全部符号')
   assert.equal(bySpec.get('./re-export').kind, 'export-from', 're-export 形态')
   assert.equal(bySpec.get('./cjs').kind, 'require', 'require 形态')
   assert.equal(bySpec.get('./dyn').kind, 'require', '动态 import 形态')

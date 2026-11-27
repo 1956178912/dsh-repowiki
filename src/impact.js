@@ -333,8 +333,12 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
     else byTo.set(edge.to, [edge])
     const names = selected.get(edge.to)
     if (!names) continue
-    const imported = (Array.isArray(edge.symbols) ? edge.symbols : [])
-      .filter(name => typeof name === 'string' && names.has(name))
+    const edgeSymbols = (Array.isArray(edge.symbols) ? edge.symbols : [])
+      .filter(name => typeof name === 'string')
+    // 命名空间导入/`export *` 通配符：目标文件里被选中的符号都可能受影响
+    const imported = edgeSymbols.includes('*')
+      ? [...names]
+      : edgeSymbols.filter(name => names.has(name))
     if (imported.length === 0) continue
     let direct = directSymbolsByPath.get(edge.from)
     if (!direct) {

@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.243.0] - 2026-11-28
+
+### Added
+
+- **Wildcard reference evidence**: `import * as ns from './a'` and
+  `export * from './a'` now record `*` in `edge.symbols` instead of being
+  dropped as side-effect imports. `repowiki-cards references=true` merges `*`
+  into every symbol of the target as a potential reference (sorted with named
+  references), `repowiki-cards usages=true` scans namespace importers
+  lexically (so `ns.parse()` is confirmed while an unused namespace import
+  stays silent), and symbol-scoped `repowiki-impact` counts namespace
+  importers as direct impact for the selected symbols. Default imports remain
+  file-level only (no name guessing).
+
+### Tests
+
+- 768 cases pass (LANG=en and LANG=zh); new coverage for `export *` symbol
+  extraction, wildcard reference merging, wildcard importer selection,
+  namespace-import direct impact and the cards end-to-end chain.
+
 ## [0.242.0] - 2026-11-28
 
 ### Added

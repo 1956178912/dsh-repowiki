@@ -814,3 +814,28 @@ test('repowiki-cards execute：usages 的导入方文件数有界并标记截断
   assert.equal(out.symbolUsages[0].truncated, true)
   assert.equal(out.symbolUsagesTruncated, true)
 })
+
+test('repowiki-cards execute：命名空间导入作为潜在引用与使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ns-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'ns.ts'), "import * as a from './a'\nexport const value = a.parse()\n")
+  nodefs.writeFileSync(path.join(dir, 'barrel.ts'), "export * from './a'\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'a.ts',
+    symbol: 'parse',
+    referencedBy: [{ path: 'barrel.ts', line: 1 }, { path: 'ns.ts', line: 1 }],
+  }], '命名空间导入与 export * 都作为潜在引用')
+  assert.deepEqual(out.symbolUsages[0].importers, [
+    { path: 'barrel.ts', line: 1 },
+    { path: 'ns.ts', line: 1 },
+  ])
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'ns.ts', line: 2, text: 'export const value = a.parse()' },
+  ], '通配符导入方仍要经词法扫描确认实际使用')
+  assert.equal(out.symbolUsages[0].filesScanned, 3, '定义文件 + 两个通配符导入方')
+})

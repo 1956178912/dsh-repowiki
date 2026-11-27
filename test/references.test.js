@@ -59,6 +59,27 @@ test('referencesFor：只返回命中符号的引用，并按上限截断', () =
   assert.equal(limited.truncated, true, '达到上限时如实标记截断')
 })
 
+test('referencesFor：命名空间/再导出通配符作为潜在引用合并', () => {
+  const refIndex = buildReferenceIndex([
+    { from: 'src/ns.ts', to: 'src/a.ts', line: 1, symbols: ['*'] },
+    { from: 'src/b.ts', to: 'src/a.ts', line: 2, symbols: ['parse'] },
+  ])
+  const matches = [{ path: 'src/a.ts', symbols: [{ name: 'parse' }, { name: 'other' }] }]
+  const result = referencesFor(refIndex, matches)
+  assert.deepEqual(result.references, [
+    {
+      path: 'src/a.ts',
+      symbol: 'parse',
+      referencedBy: [{ path: 'src/b.ts', line: 2 }, { path: 'src/ns.ts', line: 1 }],
+    },
+    {
+      path: 'src/a.ts',
+      symbol: 'other',
+      referencedBy: [{ path: 'src/ns.ts', line: 1 }],
+    },
+  ])
+})
+
 test('referencesFor：无命中/无引用/坏符号返回空且不抛错', () => {
   const refIndex = buildReferenceIndex([{ from: 'b.ts', to: 'a.ts', symbols: ['x'] }])
   assert.deepEqual(referencesFor(refIndex, []), { references: [], truncated: false })

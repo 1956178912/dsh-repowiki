@@ -119,6 +119,23 @@ test('impact：符号过滤只保留具名导入证据，传递层保持保守�
   assert.equal(empty.total, 0, '未解析符号不能静默放大为文件级影响')
 })
 
+test('impact：命名空间导入按通配符纳入符号级影响', () => {
+  const index = indexWith(['src/a.ts'])
+  index.files[0].symbols = [
+    { name: 'a1', kind: 'function', line: 1 },
+    { name: 'a2', kind: 'function', line: 2 },
+  ]
+  const resolved = resolveSymbolChanges(index, ['src/a.ts'], ['a1'])
+  const edges = [
+    { from: 'ns.ts', to: 'src/a.ts', line: 1, symbols: ['*'] },
+    { from: 'b.ts', to: 'src/a.ts', line: 2, symbols: ['a2'] },
+  ]
+  const result = computeSymbolImpact(edges, resolved.resolved, 1, 10)
+  assert.equal(result.direct, 1, '通配符导入计入 a1 的直接影响')
+  assert.deepEqual(result.impacted, [{ path: 'ns.ts', depth: 1, symbols: ['a1'] }])
+  assert.deepEqual(result.references, [{ path: 'ns.ts', line: 1, symbols: ['a1'] }])
+})
+
 test('impact：循环组按变更成员过滤并给出代表路径', () => {
   const edges = [
     { from: 'a.ts', to: 'b.ts' },

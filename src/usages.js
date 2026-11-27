@@ -172,7 +172,9 @@ export function usageImporters(edges = [], symbol) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.to !== symbol.path || edge.from === symbol.path) continue
     const names = Array.isArray(edge.symbols) ? edge.symbols : []
-    if (!names.includes(symbol.name)) continue
+    // `*`（命名空间导入/`export *`）可能引用任意符号：作为潜在导入方参与
+    // 词法扫描，是否真的使用由扫描结果决定
+    if (!names.includes(symbol.name) && !names.includes('*')) continue
     let lines = byPath.get(edge.from)
     if (!lines) {
       lines = new Set()
