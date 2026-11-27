@@ -38,10 +38,10 @@ const DESCRIPTION = [
   'transitive dependencies (bounded, nearest hop wins). Set dependents=true for the reverse view:',
   'which files import each matched file, and with depth=2..3 which files transitively depend on it',
   '(the impact surface of a change). Set usages=true to locate lexical usage sites of matched',
-  'symbols inside their direct named importers and the defining file itself (identifier-boundary',
-  'matches; import lines, import blocks, whole-line comments and the definition range are skipped;',
-  'bounded by 5 symbols, 20 importer files and 100 sites; unreadable files are reported as unknown,',
-  'never as unused).',
+  'symbols inside their direct named importers, the defining file and up to 10 same-library Dart',
+  'part files (identifier-boundary matches; import lines, import blocks, whole-line comments and the',
+  'definition range are skipped; bounded by 5 symbols, 20 importer files and 100 sites; unreadable',
+  'files are reported as unknown, never as unused).',
 ].join(' ')
 
 /**
@@ -145,7 +145,7 @@ export function repowikiCardsTool(ctx) {
       },
       usages: {
         type: 'boolean',
-        description: 'Also locate lexical usage sites of matched symbols inside their direct named importers and the defining file (the definition range is excluded). Evidence is lexical (same-name entities and trailing comments cannot be distinguished), covers only languages whose import edges carry named symbols, and is bounded to 5 symbols / 20 importer files / 100 sites. Default false.',
+        description: 'Also locate lexical usage sites of matched symbols inside their direct named importers, the defining file, and up to 10 same-library Dart part files (the definition range is excluded). Evidence is lexical (same-name entities and trailing comments cannot be distinguished), covers only languages whose import edges carry named symbols, and is bounded to 5 symbols / 20 importer files / 100 sites. Default false.',
       },
       locale: {
         type: 'string',

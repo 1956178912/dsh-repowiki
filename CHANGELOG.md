@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.271.0] - 2026-11-28
+
+### Added
+
+- **Dart same-library usage scans**: the main library file and its `part`
+  files are one library and can use each other's declarations without any
+  import edge. Usage evidence now scans those siblings too: querying a
+  symbol declared in a generated `*.g.dart` part finds calls made from the
+  library file (and vice versa), while the sibling files stay out of the
+  reported importer list because `part` is not an import.
+- Sibling scans have their own budget (`MAX_LIBRARY_FILES = 10`, path-sorted)
+  and never consume the 20-importer cap; overflow marks the symbol as
+  truncated. `repowiki-cards`, `repowiki-context` and `repowiki-impact`
+  share the behavior.
+
+### Tests
+
+- 825 cases pass (LANG=en); new grouping/importer-purity unit tests and an
+  end-to-end cards usage test for a Dart part library.
+
 ## [0.270.0] - 2026-11-28
 
 ### Added

@@ -10,13 +10,19 @@
  * 明显噪声而不假装精确。
  */
 
-import { reexportImportSites, starExportedNamesByFile } from './reexports.js'
+import { dartLibrarySiblings, reexportImportSites, starExportedNamesByFile } from './reexports.js'
 
 /** 单次影响面分析返回的使用点条目上限。 */
 export const MAX_USAGE_ENTRIES = 100
 
 /** 单次分析最多读取的依赖方文件数（按路径排序后的前 N 个）。 */
 export const MAX_USAGE_FILES = 20
+
+/**
+ * Dart 同库文件（主库 + `part` 文件）的额外扫描上限。同库文件不通过
+ * import 引用彼此，因此不占依赖方名额，单独设上限避免大库撑爆读取预算。
+ */
+export const MAX_LIBRARY_FILES = 10
 
 /** 每个符号在单个依赖方文件中最多返回的使用点。 */
 export const MAX_USAGES_PER_SYMBOL = 10
@@ -263,12 +269,14 @@ export const MAX_USAGE_TARGETS = 5
 /**
  * 收集命中符号的词法使用点。
  *
- * 在**直接具名导入方**与**符号定义文件**里定位：依赖边必须显式列出该
- * 符号，副作用导入与引用同文件其他符号的边不算证据；定义文件用于发现
- * 同文件内的局部调用，定义所在行范围通过 `skipRanges` 排除。导入方文件
- * 数、每符号站点数与总站点数均有上限（定义文件不计入导入方上限）；读取
- * 失败的文件逐个披露（unknown，不是未使用），因文件上限未扫描的导入方
- * 计入 `skippedFiles` 并把相关符号标记为 truncated。
+ * 在**直接具名导入方**、**符号定义文件**与 **Dart 同库文件（主库 + part）**
+ * 里定位：依赖边必须显式列出该符号，副作用导入与引用同文件其他符号的边
+ * 不算证据；定义文件用于发现同文件内的局部调用，定义所在行范围通过
+ * `skipRanges` 排除；同库文件之间没有 import 边，作为额外扫描目标单独
+ * 限额（`MAX_LIBRARY_FILES`），不计入导入方名额。导入方文件数、每符号
+ * 站点数与总站点数均有上限；读取失败的文件逐个披露（unknown，不是未
+ * 使用），因文件上限未扫描的导入方计入 `skippedFiles` 并把相关符号标记
+ * 为 truncated。
  * @param {any} fs - ctx.fs 服务。
  * @param {string} root - 项目根。
  * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[],
@@ -353,14 +361,38 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
       planScan(importer.path, target.name, { lines: importer.importLines, aliases: importer.names })
     }
   }
+  // Dart 同库文件（主库 + part）：组内可以直接使用彼此声明的符号，没有
+  // import 边。作为额外扫描目标单独限额，不占依赖方名额，也不伪造成
+  // importer 输出（`part` 不是 import）。
+  const siblingsByPath = dartLibrarySiblings(edges)
+  /** @type {Map<string, Set<string>>} */
+  const libraryNames = new Map()
+  for (const target of selected) {
+    for (const path of siblingsByPath.get(target.path) ?? []) {
+      const names = libraryNames.get(path) ?? new Set()
+      names.add(target.name)
+      libraryNames.set(path, names)
+    }
+  }
+  const libraryPaths = [...libraryNames.keys()].sort()
+  const scannedLibrary = libraryPaths.slice(0, MAX_LIBRARY_FILES)
+  /** 超出上限未扫描的同库文件涉及的符号（用于标记截断）。 */
+  const libraryOverflow = new Set()
+  for (const path of libraryPaths.slice(MAX_LIBRARY_FILES)) {
+    for (const name of libraryNames.get(path)) libraryOverflow.add(name)
+  }
+  const libraryScannedSet = new Set(scannedLibrary)
+  for (const path of scannedLibrary) {
+    for (const name of libraryNames.get(path)) planScan(path, name)
+  }
   /** @type {Set<string>} */
   const importerPaths = new Set()
   for (const importers of importersByTarget.values()) {
     for (const importer of importers) importerPaths.add(importer.path)
   }
   const selection = selectUsageFiles([...importerPaths].map(path => ({ path })))
-  // 定义文件不计入 20 个导入方文件上限（最多 5 个，单独读取）
-  const selectedFiles = new Set([...definitionFiles, ...selection.scanned])
+  // 定义文件与同库文件不计入 20 个导入方文件上限（各自单独限额）
+  const selectedFiles = new Set([...definitionFiles, ...scannedLibrary, ...selection.scanned])
   const skippedFiles = new Set([...importerPaths].filter(path => !selectedFiles.has(path)))
   /** @type {Map<string, Array<{path:string, line:number, text:string}>>} */
   const sitesByName = new Map()
@@ -370,12 +402,14 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
   const unreadableByName = new Map()
   /** @type {Set<string>} */
   const truncatedNames = new Set()
+  for (const name of libraryOverflow) truncatedNames.add(name)
   let budget = MAX_USAGE_ENTRIES
 
-  // 定义文件优先，其次按路径排序的具名导入方
+  // 定义文件优先，其次同库文件，最后按路径排序的具名导入方
   const scanOrder = [
     ...[...definitionFiles].sort(),
-    ...selection.scanned.filter(path => !definitionFiles.has(path)),
+    ...scannedLibrary,
+    ...selection.scanned.filter(path => !definitionFiles.has(path) && !libraryScannedSet.has(path)),
   ]
   for (const path of scanOrder) {
     const names = scanPlan.get(path)

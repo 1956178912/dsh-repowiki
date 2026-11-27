@@ -305,6 +305,63 @@ export function barrelFiles(maps) {
 }
 
 /**
+ * Dart 同库文件分组：主库文件与它的 `part` 文件属于同一库，组内文件可以
+ * 互相使用对方声明的符号（不需要 import）。从 `kind: 'part'` 边构建无向
+ * 连通分量；只返回有同伴的文件。
+ * @param {ReexportEdge[]} [edges] - 索引边。
+ * @returns {Map<string, string[]>} 文件 → 同库其他文件（排序、去重）。
+ */
+export function dartLibrarySiblings(edges = []) {
+  /** @type {Map<string, string>} */
+  const parent = new Map()
+  /**
+   * 查找并压缩并查集路径。
+   * @param {string} start - 起始节点。
+   * @returns {string} 根节点。
+   */
+  const find = (start) => {
+    let root = start
+    while (parent.get(root) !== root) root = parent.get(root)
+    let node = start
+    while (parent.get(node) !== root) {
+      const next = parent.get(node)
+      parent.set(node, root)
+      node = next
+    }
+    return root
+  }
+  for (const edge of edges) {
+    if (!edge || edge.kind !== 'part') continue
+    if (typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+    if (edge.from === edge.to) continue
+    if (!parent.has(edge.from)) parent.set(edge.from, edge.from)
+    if (!parent.has(edge.to)) parent.set(edge.to, edge.to)
+    const fromRoot = find(edge.from)
+    const toRoot = find(edge.to)
+    if (fromRoot !== toRoot) parent.set(toRoot, fromRoot)
+  }
+  /** @type {Map<string, Set<string>>} */
+  const groups = new Map()
+  for (const node of parent.keys()) {
+    const root = find(node)
+    let members = groups.get(root)
+    if (!members) {
+      members = new Set()
+      groups.set(root, members)
+    }
+    members.add(node)
+  }
+  /** @type {Map<string, string[]>} */
+  const siblings = new Map()
+  for (const members of groups.values()) {
+    if (members.size < 2) continue
+    const sorted = [...members].sort()
+    for (const node of sorted) siblings.set(node, sorted.filter(other => other !== node))
+  }
+  return siblings
+}
+
+/**
  * 找出经由 barrel 再导出 `targetPath#name` 的导入边。默认跳过再导出边
  * 本身（它只说明符号继续下传，不构成使用证据）；影响面分析可开启
  * `includeReexports` 把中间 barrel 也视为直接受影响文件。

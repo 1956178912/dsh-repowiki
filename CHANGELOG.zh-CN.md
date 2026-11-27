@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.271.0] - 2026-11-28
+
+- **Dart 同库使用点扫描**：主库文件与 `part` 文件属于同一库，可以直接
+  使用彼此的声明而不产生 import 边。使用点证据现在会扫描这些同库文件：
+  查询声明在生成 `*.g.dart` 里的符号时，能找到主库文件中的调用（反向亦
+  然）；同库文件不会出现在 importer 列表中（`part` 不是 import）。
+- 同库扫描单独限额（`MAX_LIBRARY_FILES = 10`，按路径排序），不占用
+  20 个导入方名额；超出上限的符号标记 `truncated`。`repowiki-cards`、
+  `repowiki-context`、`repowiki-impact` 行为一致。
+- **测试**：825 例通过（LANG=en）；新增分组/导入方纯净性单测与 Dart part
+  库的 cards 使用点端到端用例。
+
 ## [0.270.0] - 2026-11-28
 
 - **Dart `part` 库合并**：`part 'x.dart';` 记为独立 `part` 边，主库文件

@@ -765,6 +765,36 @@ test('repowiki-cards execute：usages=true 返回具名导入方的词法使用�
   assert.deepEqual(docs.symbolUsages, [], 'docs 检索无符号命中时返回空数组')
 })
 
+test('repowiki-cards execute：Dart part 同库文件的使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-dart-part-'))
+  nodefs.mkdirSync(path.join(dir, 'lib'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'pubspec.yaml'), 'name: demo\n')
+  nodefs.writeFileSync(path.join(dir, 'lib/widgets.dart'), [
+    "part 'widgets.g.dart';",
+    'class Widget {',
+    '  void build() { helper(); }',
+    '}',
+  ].join('\n'))
+  nodefs.writeFileSync(path.join(dir, 'lib/widgets.g.dart'), [
+    "part of 'widgets.dart';",
+    'void helper() {}',
+  ].join('\n'))
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'helper', usages: true }, fakeExec)
+  assert.deepEqual(out.symbolUsages, [{
+    path: 'lib/widgets.g.dart',
+    symbol: 'helper',
+    importers: [],
+    usages: [{ path: 'lib/widgets.dart', line: 3, text: 'void build() { helper(); }' }],
+    filesScanned: 2,
+    unreadable: [],
+    truncated: false,
+  }], 'part 文件无导入方，主库同库使用点仍被发现')
+})
+
 test('repowiki-cards execute：usages 的目标数与站点数有界', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-usages-cap-'))
   const names = ['fn1', 'fn2', 'fn3', 'fn4', 'fn5', 'fn6']

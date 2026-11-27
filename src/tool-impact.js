@@ -20,8 +20,9 @@ import {
 } from './impact.js'
 import {
   findSymbolUsages, usageImporters, selectUsageFiles,
-  MAX_USAGE_ENTRIES, MAX_USAGES_PER_SYMBOL, MAX_USAGE_FILES,
+  MAX_USAGE_ENTRIES, MAX_USAGES_PER_SYMBOL, MAX_USAGE_FILES, MAX_LIBRARY_FILES,
 } from './usages.js'
+import { dartLibrarySiblings } from './reexports.js'
 import { readPlan } from './config.js'
 import { architectureImpact } from './impact-architecture.js'
 
@@ -128,7 +129,7 @@ export function repowikiImpactTool(ctx) {
       },
       includeUsages: {
         type: 'boolean',
-        description: `In symbol scope, scan direct importers for lexical usage sites (default true; at most ${MAX_USAGE_FILES} files, ${MAX_USAGES_PER_SYMBOL} per symbol, ${MAX_USAGE_ENTRIES} total). These are identifier occurrences, not resolved call sites.`,
+        description: `In symbol scope, scan direct importers for lexical usage sites (default true; at most ${MAX_USAGE_FILES} files, ${MAX_USAGES_PER_SYMBOL} per symbol, ${MAX_USAGE_ENTRIES} total, plus up to ${MAX_LIBRARY_FILES} same-library Dart part files). These are identifier occurrences, not resolved call sites.`,
       },
     },
     output: {
@@ -600,11 +601,14 @@ export function repowikiImpactTool(ctx) {
             for (const line of importer.importLines) entry.importLines.add(line)
           }
         }
-        const selection = selectUsageFiles([...byFile.keys()].map(path => ({ path })))
-        usagesSkippedFiles += selection.skipped
-        for (const path of selection.scanned) {
-          const entry = byFile.get(path)
-          if (!entry) continue
+        /**
+         * 扫描一个候选文件里的若干符号并追加使用点。
+         * @param {string} path - 候选文件。
+         * @param {Iterable<string>} names - 待扫描符号名。
+         * @param {Set<number>} [skipLines] - 导入行（同库扫描无导入行）。
+         * @returns {Promise<boolean>} 是否成功读取。
+         */
+        const scanUsageFile = async (path, names, skipLines) => {
           let source
           try {
             source = await fs.readText(await fs.resolve(path, { cwd: root }))
@@ -612,22 +616,46 @@ export function repowikiImpactTool(ctx) {
             // 读取失败：明确列为缺口，不静默当作零使用。
             usagesUnreadable.push(path)
             usagesSkippedFiles++
-            continue
+            return false
           }
-          usagesScanned++
-          for (const name of [...entry.symbols].sort()) {
+          for (const name of [...names].sort()) {
             const remaining = MAX_USAGE_ENTRIES - usages.length
             if (remaining <= 0) {
               usagesTruncated = true
               break
             }
             const found = findSymbolUsages(source, name, {
-              skipLines: entry.importLines,
+              ...(skipLines ? { skipLines } : {}),
               limit: Math.min(MAX_USAGES_PER_SYMBOL, remaining),
             })
             for (const site of found.usages) usages.push({ path, symbol: name, ...site })
             if (found.truncated) usagesTruncated = true
           }
+          return true
+        }
+        const selection = selectUsageFiles([...byFile.keys()].map(path => ({ path })))
+        usagesSkippedFiles += selection.skipped
+        for (const path of selection.scanned) {
+          const entry = byFile.get(path)
+          if (!entry) continue
+          if (await scanUsageFile(path, entry.symbols, entry.importLines)) usagesScanned++
+        }
+        // Dart 同库文件（主库 + part）：组内可直接使用彼此符号且没有 import
+        // 边；单独限额扫描，不占依赖方名额，也不计入 importer 文件计数。
+        const siblingsByPath = dartLibrarySiblings(index.edges ?? [])
+        /** @type {Map<string, Set<string>>} */
+        const libraryNames = new Map()
+        for (const symbol of symbolChanges.resolved) {
+          for (const path of siblingsByPath.get(symbol.path) ?? []) {
+            const names = libraryNames.get(path) ?? new Set()
+            names.add(symbol.name)
+            libraryNames.set(path, names)
+          }
+        }
+        const libraryPaths = [...libraryNames.keys()].sort()
+        if (libraryPaths.length > MAX_LIBRARY_FILES) usagesTruncated = true
+        for (const path of libraryPaths.slice(0, MAX_LIBRARY_FILES)) {
+          await scanUsageFile(path, libraryNames.get(path))
         }
       }
       const cycleResult = cyclesForChanged(index.edges ?? [], match.matched, {

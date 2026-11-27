@@ -6,8 +6,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   findSymbolUsages, usageImporters, selectUsageFiles,
-  MAX_USAGES_PER_SYMBOL, MAX_USAGE_FILES,
+  MAX_USAGES_PER_SYMBOL, MAX_USAGE_FILES, MAX_LIBRARY_FILES,
 } from '../src/usages.js'
+import { dartLibrarySiblings } from '../src/reexports.js'
 
 test('usages：标识符边界与大小写敏感', () => {
   const source = [
@@ -268,6 +269,37 @@ test('usages：Dart part 符号的导入方经主库归因', () => {
     { path: 'lib/app.dart', importLines: [1] },
     { path: 'lib/other.dart', importLines: [1] },
   ], 'part 边本身不算使用点，导入方经主库 barrel 归因')
+})
+
+test('usages：Dart part 分组只由 part 边构建', () => {
+  const siblings = dartLibrarySiblings([
+    { from: 'lib/a.dart', to: 'lib/a.g.dart', kind: 'part' },
+    { from: 'lib/a.dart', to: 'lib/a.freezed.dart', kind: 'part' },
+    { from: 'lib/b.dart', to: 'lib/c.dart', kind: 'import' },
+    { from: 'lib/d.dart', to: 'lib/e.dart', kind: 'export-from' },
+  ])
+  assert.deepEqual(siblings.get('lib/a.dart'), ['lib/a.freezed.dart', 'lib/a.g.dart'])
+  assert.deepEqual(siblings.get('lib/a.g.dart'), ['lib/a.dart', 'lib/a.freezed.dart'],
+    '分组无向：part 文件能看到主库与同级 part')
+  assert.equal(siblings.has('lib/b.dart'), false, '普通 import 不构成同库分组')
+  assert.equal(siblings.has('lib/d.dart'), false, '再导出不构成同库分组')
+  assert.equal(MAX_LIBRARY_FILES, 10)
+})
+
+test('usages：part 边不产生 importer 输出', () => {
+  const edges = [
+    { from: 'lib/a.dart', to: 'lib/a.g.dart', kind: 'part', line: 1, symbols: [] },
+    { from: 'lib/app.dart', to: 'lib/a.dart', kind: 'import', line: 1, symbols: ['Helper'] },
+    { from: 'lib/app2.dart', to: 'lib/a.dart', kind: 'import', line: 1, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'lib/a.dart', lang: 'dart', symbols: [{ name: 'Main', kind: 'class', exported: true }] },
+    { path: 'lib/a.g.dart', lang: 'dart', symbols: [{ name: 'Helper', kind: 'function', exported: true }] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'lib/a.g.dart', name: 'Helper' }, files), [
+    { path: 'lib/app.dart', importLines: [1] },
+    { path: 'lib/app2.dart', importLines: [1] },
+  ], 'part 指令不算导入方；同库扫描由 collectSymbolUsages 单独承担')
 })
 
 test('usages：Python __all__ 收窄星号导入方', () => {

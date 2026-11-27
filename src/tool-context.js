@@ -86,7 +86,7 @@ export function repowikiContextTool(ctx) {
       includeDocs: { type: 'boolean', description: 'Include cards, wiki and accepted memory via BM25 (default true).' },
       usages: {
         type: 'boolean',
-        description: 'Also scan lexical usage sites for resolved symbol anchors (direct named/namespace importers and the defining file, definition range excluded). Bounded to 5 symbols and 20 importer files; unreadable files are reported as unknown. Default false.',
+        description: 'Also scan lexical usage sites for resolved symbol anchors (direct named/namespace importers, the defining file, and up to 10 same-library Dart part files; definition range excluded). Bounded to 5 symbols and 20 importer files; unreadable files are reported as unknown. Default false.',
       },
     },
     output: {
