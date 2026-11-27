@@ -341,6 +341,7 @@ const LANGUAGE_LABELS = {
   zig: 'Zig',
   gleam: 'Gleam',
   shell: 'Shell',
+  r: 'R',
   c: 'C',
   cpp: 'C++',
 }

@@ -129,6 +129,7 @@ export const MANIFEST_FILES = {
   'mix.exs': 'mix',
   'build.zig.zon': 'zig',
   'gleam.toml': 'gleam',
+  'DESCRIPTION': 'r',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -168,6 +169,9 @@ export const EXTENSION_LANGS = {
   sh: 'shell',
   bash: 'shell',
   zsh: 'shell',
+  bats: 'shell',
+  R: 'r',
+  r: 'r',
   c: 'c',
   h: 'c',
   cc: 'cpp',

@@ -814,6 +814,68 @@ function extractShellImports(lines) {
 }
 
 /**
+ * 扫描一行 R 代码：返回保留字符串内容的 `code` 与字符串内容替换为空格的
+ * `masked`（两者列位置对齐），`#` 注释截断。
+ * @param {string} raw - 源码行。
+ * @returns {{code:string, masked:string}} 代码行与掩码行。
+ */
+function rScan(raw) {
+  let code = ''
+  let masked = ''
+  let quote = null
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (quote) {
+      code += ch
+      if (ch === '\\' && i + 1 < raw.length) {
+        code += raw[i + 1]
+        masked += '  '
+        i++
+        continue
+      }
+      if (ch === quote) { quote = null; masked += ch; continue }
+      masked += ' '
+      continue
+    }
+    if (ch === '#') break
+    if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+    code += ch
+    masked += ch
+  }
+  return { code, masked }
+}
+
+/**
+ * 提取 R 的 `source("path")` / `sys.source("path")` 引用。
+ * 路径必须能静态确定（含变量/反引号的参数跳过）；`library()`/`require()`
+ * 指向已安装包，不产生本地文件边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractRImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const { code, masked } = rScan(lines[i])
+    const re = /\b(?:source|sys\.source)\s*\(\s*(?:file\s*=\s*)?/g
+    let m
+    while ((m = re.exec(masked)) !== null) {
+      const arg = /^(["'])([^"']+)\1/.exec(code.slice(m.index + m[0].length))
+      if (!arg) continue
+      const specifier = arg[2]
+      if (/\$|`/.test(specifier)) continue
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -937,6 +999,7 @@ export function extractImports(code, lang) {
   if (lang === 'zig') return extractZigImports(lines)
   if (lang === 'gleam') return extractGleamImports(lines)
   if (lang === 'shell') return extractShellImports(lines)
+  if (lang === 'r') return extractRImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.191.0）；测试 580/580（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.08%、分支 87.01%、函数 95.44%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.192.0）；测试 584/584（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.13%、分支 87.02%、函数 95.48%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（580/580，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、20 语言提取（含 Elixir/Lua/Zig/Gleam/Shell）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（584/584，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、21 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -239,4 +239,5 @@
 | 不可信索引状态 | `readIndex` 净化被篡改索引（绝对/越界文件路径与指向它们的边）时，`repowiki-status` 结构化返回 `index.untrusted.files`/`edges` 并在 `Index:` 行展示，JSON/CI 无需解析告警文案；原始路径不回显，原告警保留 | v0.170.0 / v0.184.0 |
 | Gleam 支持 | 19 语言：`type`/`opaque type`/`external type` 容器、`type` 别名（kind type）、`fn`/`external fn`（跨行签名、单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记；注释与字符串（含跨行）屏蔽后配平；`import package/module`（`as` 与 `.{type Foo, Foo as F}`，跨行列表拼接到闭合 `}`）经 `src/`/`test/` 源根与项目根解析 `<module>.gleam`，外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数与技术映射，嵌套 monorepo 清单（上限 20）合并依赖且项目名只取根 | v0.185.0 / v0.187.0 |
 | Shell 支持 | 20 语言：`function foo`/`function foo()`/`foo() {`（含分行 `{`）与单行函数体、`export`/`readonly`/`declare`/`typeset` 显式变量；普通赋值/`local` 不登记；`#` 注释、引号（含跨行）与 heredoc 屏蔽，`${…}` 不参与配平；`source`/`.` 先脚本目录再项目根，尝试 `.sh`/`.bash`，动态参数不建边 | v0.191.0 |
+| R 支持 | 21 语言：`name <- function(...)`/`name = function(...)`（含 `<<-`）跨行签名、分行 `{`、单行表达式体；`setClass`/`R6Class` 类（R6 内部跳过、`.` 前缀私有）；注释/字符串屏蔽；`source`/`sys.source` 先文件目录再项目根（`.R`/`.r`），动态参数不建边；`DESCRIPTION`（DCF）提供包名/版本/依赖计数与技术映射；`.bats` 并入 Shell | v0.192.0 |
 | Wiki 陈旧原因 | `repowiki-status` 输出 `wiki.staleReasons`（`cards`/`graph`/`memory`，值域与顺序同 `verify:wiki`）并在 `Wiki:` 行展示；页面级 stale 计数为 0 时也能区分依赖图/已采信记忆导致的陈旧 | v0.186.0 |

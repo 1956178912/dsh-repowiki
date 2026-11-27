@@ -2237,6 +2237,169 @@ function extractShell(lines) {
 }
 
 /**
+ * 提取 R 的可解析代码行：去掉 `#` 注释（字符串内的 `#` 不截断），并把
+ * 字符串内容替换为空格。R 字符串不允许跨行（未闭合即语法错误），逐行即可。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长的可解析代码行。
+ */
+function rCodeLines(lines) {
+  const out = []
+  for (const raw of lines) {
+    let code = ''
+    let quote = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        if (ch === '\\' && i + 1 < raw.length) { code += '  '; i++; continue }
+        if (ch === quote) { quote = null; code += ch; continue }
+        code += ' '
+        continue
+      }
+      if (ch === '#') break
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; continue }
+      code += ch
+    }
+    out.push(code)
+  }
+  return out
+}
+
+/**
+ * 计算一行 R 代码的花括号增量（字符串内容已清空）。
+ * @param {string} code - 已去注释的代码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function rBraceDelta(code) {
+  let delta = 0
+  for (const ch of code) {
+    if (ch === '{') delta++
+    else if (ch === '}') delta--
+  }
+  return delta
+}
+
+/**
+ * 计算 R 花括号块的结束行（函数体/控制流块）。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 起始行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function rBlockEnd(codeLines, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < codeLines.length; i++) {
+    depth += rBraceDelta(codeLines[i])
+    if (depth > 0) opened = true
+    if (!opened && codeLines[i].includes('{')) return i + 1
+    if (opened && depth <= 0) return i + 1
+  }
+  return opened ? codeLines.length : startIdx + 1
+}
+
+/**
+ * 计算 R 函数声明的结束行：先定位参数列表的闭合 `)`，再看其后（或下一
+ * 非空行）是否有块体 `{`；没有块体时按单行表达式体返回 `)` 所在行。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function rFunctionEnd(codeLines, startIdx) {
+  if (codeLines[startIdx].includes('{')) return rBlockEnd(codeLines, startIdx)
+  let depth = 0
+  let opened = false
+  let closeLine = startIdx
+  const limit = Math.min(codeLines.length, startIdx + 50)
+  for (let i = startIdx; i < limit; i++) {
+    for (const ch of codeLines[i]) {
+      if (ch === '(') { depth++; opened = true }
+      else if (ch === ')') depth--
+    }
+    closeLine = i
+    if (opened && depth <= 0) break
+  }
+  if (codeLines[closeLine].includes('{')) return rBlockEnd(codeLines, closeLine)
+  let next = closeLine + 1
+  while (next < codeLines.length && codeLines[next].trim() === '') next++
+  if (next < codeLines.length && codeLines[next].trim().startsWith('{')) {
+    return rBlockEnd(codeLines, next)
+  }
+  return closeLine + 1
+}
+
+/**
+ * 计算 R 调用（`R6Class(...)` / `setClass(...)`）的圆括号结束行。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function rParenEnd(codeLines, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < codeLines.length; i++) {
+    for (const ch of codeLines[i]) {
+      if (ch === '(') { depth++; opened = true }
+      else if (ch === ')') depth--
+    }
+    if (opened && depth <= 0) return i + 1
+  }
+  return opened ? codeLines.length : startIdx + 1
+}
+
+/**
+ * 提取 R 符号：`name <- function(...)` / `name = function(...)`（含
+ * `<<-`）与 `setClass("Name", ...)` / `R6Class("Name", ...)` 类声明。
+ * 函数体与类调用内部的嵌套函数不登记；普通赋值不登记（R 脚本顶层
+ * 常量数量大，登记会淹没符号表）；`.` 前缀按 R 约定标记非导出。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractR(lines) {
+  const codeLines = rCodeLines(lines)
+  const symbols = []
+  const fnRe = /^([A-Za-z_.][\w.]*)\s*(?:<<-|<-|=)\s*function\s*\(/
+  const classRe = /(?:setClass|R6Class)\s*\(\s*["']([A-Za-z_.][\w.]*)["']/
+  let depth = 0
+  let skipUntil = 0
+  for (let i = 0; i < codeLines.length; i++) {
+    if (i >= skipUntil) {
+      const line = codeLines[i].trim()
+      if (depth === 0 && line !== '') {
+        const fn = fnRe.exec(line)
+        if (fn) {
+          symbols.push({
+            name: fn[1],
+            kind: 'function',
+            line: i + 1,
+            endLine: rFunctionEnd(codeLines, i),
+            exported: !fn[1].startsWith('.'),
+          })
+          depth += rBraceDelta(codeLines[i])
+          continue
+        }
+        // 类名在字符串字面量里：codeLines 已清空字符串内容，这里读原始行
+        // （注释行 codeLines 为空，不会进入本分支）
+        const cls = classRe.exec(lines[i])
+        if (cls) {
+          symbols.push({
+            name: cls[1],
+            kind: 'class',
+            line: i + 1,
+            endLine: rParenEnd(codeLines, i),
+            exported: !cls[1].startsWith('.'),
+          })
+          // 类调用内部的方法（R6 `initialize = function...`）不作为顶层符号
+          skipUntil = rParenEnd(codeLines, i)
+          depth += rBraceDelta(codeLines[i])
+          continue
+        }
+      }
+    }
+    depth += rBraceDelta(codeLines[i])
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -2368,6 +2531,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'zig') return extractZig(lines)
   if (lang === 'gleam') return extractGleam(lines)
   if (lang === 'shell') return extractShell(lines)
+  if (lang === 'r') return extractR(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

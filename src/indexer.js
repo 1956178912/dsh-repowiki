@@ -789,6 +789,28 @@ function resolveShellSpecifier(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 R 的 `source("path")`：先按引用文件目录、再按项目根尝试原路径与
+ * `.R`/`.r` 后缀；绝对路径与越界路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - source 的参数（已去引号）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveRSpecifier(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '' || raw.startsWith('/') || raw.includes('\\')) return null
+  for (const base of [path.posix.dirname(fromRel), '']) {
+    const joined = path.posix.normalize(path.posix.join(base, raw))
+    if (joined.startsWith('..') || joined === '..') continue
+    for (const candidate of [joined, `${joined}.R`, `${joined}.r`]) {
+      if (indexed.has(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+/**
  * 解析 Elixir 模块引用：alias/import/require/use 的点分模块名精确匹配
  * 仓库内 defmodule 或 `lib/` 布局文件；外部依赖返回 null。
  * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
@@ -1696,6 +1718,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
   if (lang === 'shell') return resolveShellSpecifier(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'r') return resolveRSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }

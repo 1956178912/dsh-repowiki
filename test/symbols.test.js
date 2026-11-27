@@ -1088,6 +1088,62 @@ test('Shell：函数三种写法、公开变量与注释/heredoc 屏蔽', () => 
   assert.equal(byName.get('run').endLine, 29, '单行函数块')
 })
 
+test('R：函数/类声明、无块体函数与注释/字符串屏蔽', () => {
+  const code = [
+    '# f <- function() { 1 }',
+    "msg <- 'source(\"fake.R\")'",
+    'add <- function(x, y) {',
+    '  x + y',
+    '}',
+    '',
+    '.helper <- function(x) x + 1',
+    '',
+    'multi <- function(',
+    '  a,',
+    '  b',
+    ') {',
+    '  a * b',
+    '}',
+    '',
+    'block <- function(x)',
+    '{',
+    '  x',
+    '}',
+    '',
+    'setClass("Person", representation(name = "character"))',
+    '',
+    'R6Class("Counter",',
+    '  public = list(',
+    '    initialize = function(value = 0) {',
+    '      private$value <- value',
+    '    }',
+    '  )',
+    ')',
+    '',
+    'outer <- function() {',
+    '  inner <- function() 1',
+    '  inner()',
+    '}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'r')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('add').kind, 'function')
+  assert.equal(byName.get('add').endLine, 5)
+  assert.equal(byName.get('add').exported, true)
+  assert.equal(byName.get('.helper').exported, false, '. 前缀按 R 约定私有')
+  assert.equal(byName.get('.helper').endLine, 7, '无块体单行函数')
+  assert.equal(byName.get('multi').endLine, 14, '跨行签名后的块体')
+  assert.equal(byName.get('block').endLine, 19, '块体 { 写在下一行')
+  assert.equal(byName.get('Person').kind, 'class')
+  assert.equal(byName.get('Counter').kind, 'class')
+  assert.equal(byName.get('Counter').endLine, 29)
+  assert.ok(!byName.has('initialize'), 'R6 类方法不登记为顶层函数')
+  assert.ok(!byName.has('inner'), '函数体内嵌套函数不登记')
+  assert.ok(!byName.has('f'), '注释不产符号')
+  assert.ok(!byName.has('msg'), '普通赋值不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

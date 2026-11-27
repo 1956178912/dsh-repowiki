@@ -311,6 +311,29 @@ test('build.zig.zon：monorepo 子包依赖累加、根元数据优先', () => {
   assert.deepEqual(info.technologies, [], 'zon 依赖键是自定义别名，不臆造技术名')
 })
 
+test('DESCRIPTION：DCF 续行、依赖去重与版本约束剥离', () => {
+  const text = [
+    'Package: demo',
+    'Version: 0.2.0',
+    'Depends:',
+    '    R (>= 4.0),',
+    '    methods',
+    'Imports:',
+    '    dplyr (>= 1.0.0),',
+    '    ggplot2,',
+    '    dplyr',
+    'Suggests: testthat (>= 3.0.0)',
+    'LinkingTo: Rcpp',
+    'Description: A demo package.',
+  ].join('\n')
+  const info = detectStack({ DESCRIPTION: text })
+  assert.equal(info.projectName, 'demo')
+  assert.equal(info.projectVersion, '0.2.0')
+  assert.equal(info.dependencyCounts.r, 5, 'R 本身剔除、重复依赖去重')
+  assert.ok(info.technologies.some(t => t.name === 'ggplot2' && t.ecosystem === 'r'))
+  assert.ok(info.technologies.some(t => t.name === 'Rcpp'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

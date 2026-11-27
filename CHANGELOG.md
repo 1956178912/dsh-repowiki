@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.192.0] - 2026-11-28
+
+### Added
+
+- **R indexing (21st language)**: `.R`/`.r` files produce function symbols
+  from `name <- function(...)` / `name = function(...)` (including `<<-`),
+  with multi-line signatures, a `{` on the following line and single-line
+  expression bodies, plus `setClass("Name", …)` / `R6Class("Name", …)`
+  class symbols. Class-call interiors are skipped so R6 methods are not
+  misread as top-level functions, nested functions stay out of the symbol
+  table, `.`-prefixed names follow the R private convention, and comments
+  and string contents are masked before matching. `source("path")` /
+  `sys.source("path")` resolve relative to the file then the project root,
+  trying `.R`/`.r`; dynamic arguments stay edge-free. `DESCRIPTION` (DCF)
+  supplies package name, version and deduplicated dependencies from
+  `Depends`/`Imports`/`Suggests`/`LinkingTo`, with `R` itself and version
+  constraints stripped. `.bats` files join Shell indexing (Bats tests).
+  Prompt fences and the panel language filter know `r`.
+
+### Tests
+
+- 584 cases pass (LANG=en and LANG=zh); new coverage pins function forms
+  and ranges, single-line bodies, split `{`, private `.` names, R6 method
+  exclusion, comment/string shielding, `source` variants with dynamic
+  arguments skipped, DCF continuation lines and dependency deduplication,
+  and an indexer fixture proving project-root/`../` resolution plus
+  `DESCRIPTION` metadata.
+
 ## [0.191.0] - 2026-11-28
 
 ### Added

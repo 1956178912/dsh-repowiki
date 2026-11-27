@@ -623,6 +623,72 @@ function gleamTomlInfo(text) {
   return { name, version, dependencies }
 }
 
+/** R 包名 → 技术展示名（只收录常用框架/工具，其余只计数）。 */
+const R_TECH = {
+  ggplot2: 'ggplot2',
+  dplyr: 'dplyr',
+  tidyr: 'tidyr',
+  'data.table': 'data.table',
+  shiny: 'Shiny',
+  rmarkdown: 'R Markdown',
+  knitr: 'knitr',
+  testthat: 'testthat',
+  roxygen2: 'roxygen2',
+  devtools: 'devtools',
+  Rcpp: 'Rcpp',
+  sf: 'sf',
+  lme4: 'lme4',
+  caret: 'caret',
+  tidymodels: 'tidymodels',
+  targets: 'targets',
+}
+
+/**
+ * 解析 R DESCRIPTION（DCF 格式）：`Field: value`，续行以空白开头并与
+ * 上一字段以空格拼接；只有顶格行开启新字段。
+ * @param {string} text - DESCRIPTION 内容。
+ * @returns {Map<string,string>} 字段名 → 值。
+ */
+function dcfFields(text) {
+  const fields = new Map()
+  let current = null
+  for (const raw of text.split('\n')) {
+    if (current && /^\s/.test(raw)) {
+      fields.set(current, `${fields.get(current)} ${raw.trim()}`.trim())
+      continue
+    }
+    const m = /^([A-Za-z][\w.-]*):\s*(.*)$/.exec(raw)
+    if (!m) continue
+    current = m[1]
+    fields.set(current, m[2].trim())
+  }
+  return fields
+}
+
+/**
+ * 从 DESCRIPTION 读取包名、版本与依赖名（Depends/Imports/Suggests/
+ * LinkingTo；剔除 `R` 本身与版本约束，按出现顺序去重）。
+ * @param {string} text - DESCRIPTION 内容。
+ * @returns {{name:string|undefined, version:string|undefined, dependencies:string[]}} 元数据。
+ */
+function rDescriptionInfo(text) {
+  const fields = dcfFields(text)
+  const dependencies = []
+  for (const key of ['Depends', 'Imports', 'Suggests', 'LinkingTo']) {
+    const value = fields.get(key)
+    if (!value) continue
+    for (const part of value.split(',')) {
+      const name = part.trim().replace(/\s*\(.*$/, '').trim()
+      if (name && name !== 'R' && !dependencies.includes(name)) dependencies.push(name)
+    }
+  }
+  return {
+    name: fields.get('Package'),
+    version: fields.get('Version'),
+    dependencies,
+  }
+}
+
 /**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
@@ -803,6 +869,15 @@ export function detectStack(manifests) {
       for (const dep of gleam.dependencies) {
         const name = GLEAM_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'gleam', source: path })
+      }
+    } else if (path === 'DESCRIPTION') {
+      const r = rDescriptionInfo(text)
+      info.dependencyCounts.r = r.dependencies.length
+      if (!info.projectName && r.name) info.projectName = r.name
+      if (!info.projectVersion && r.version) info.projectVersion = r.version
+      for (const dep of r.dependencies) {
+        const name = R_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'r', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

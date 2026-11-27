@@ -1367,6 +1367,29 @@ test('Shell：source 相对脚本目录与项目根解析', async () => {
   assert.ok(deploy.symbols.some(s => s.name === 'deploy' && s.kind === 'function'))
 })
 
+test('R：source 相对脚本目录与项目根解析、DESCRIPTION 技术栈', async () => {
+  const dir = makeProject({
+    'DESCRIPTION': 'Package: demo\nVersion: 0.2.0\nImports:\n    dplyr,\n    ggplot2\n',
+    'R/util.R': 'util_fun <- function(x) x + 1\n',
+    'R/main.R': 'source("R/util.R")\nmain <- function() util_fun(1)\n',
+    'tests/testthat/test-main.R': 'source("../../R/main.R")\ntest_that("works", { expect_true(TRUE) })\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { r: 3 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('R/main.R', 'R/util.R')?.line, 1, '项目根回退')
+  assert.equal(edge('tests/testthat/test-main.R', 'R/main.R')?.line, 1, '上跳相对路径归一')
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.projectVersion, '0.2.0')
+  assert.equal(doc.stack.dependencyCounts.r, 2)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'ggplot2' && t.source === 'DESCRIPTION'))
+
+  const main = doc.files.find(f => f.path === 'R/main.R')
+  assert.ok(main.symbols.some(s => s.name === 'main' && s.kind === 'function'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

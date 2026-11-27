@@ -450,6 +450,25 @@ test('Shell：source/点命令、动态路径与 heredoc 跳过', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
 })
 
+test('R：source 引号路径、动态参数与字符串内伪引用', () => {
+  const code = [
+    'source("R/util.R")',
+    "source('R/config.R', local = TRUE)",
+    'source(file = "R/model.R")',
+    'source(paste0("R/", name, ".R"))',
+    '# source("R/commented.R")',
+    'msg <- "source(\\"R/fake.R\\")"',
+    'library(dplyr)',
+  ].join('\n')
+  const imports = extractImports(code, 'r')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['R/util.R', 1],
+    ['R/config.R', 2],
+    ['R/model.R', 3],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',
