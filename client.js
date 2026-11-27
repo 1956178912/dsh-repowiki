@@ -158,7 +158,7 @@ const DICTS = {
     wikiFailedHint: '失败页：{pages}',
     wikiMissingSummary: '清单中 {n} 页在磁盘缺失',
     wikiMissingHint: '缺失页：{pages}',
-    wikiStaleCards: 'Wiki 落后于当前卡片：生成后卡片已变化，请重新生成',
+    wikiStaleCards: 'Wiki 落后于当前输入：生成后卡片或依赖图已变化，请重新生成',
     wikiStaleMemory: 'Wiki 落后于已采信记忆：生成后记忆已变化，请重新生成',
     wikiInvalidSummary: '清单中 {n} 页路径非法或与文件位置不符',
     wikiInvalidHint: '非法页：{pages}',
@@ -282,7 +282,7 @@ const DICTS = {
     wikiFailedHint: 'Failed pages: {pages}',
     wikiMissingSummary: '{n} manifest page(s) missing from disk',
     wikiMissingHint: 'Missing pages: {pages}',
-    wikiStaleCards: 'Wiki is behind the current cards: cards changed after generation, run repowiki-generate',
+    wikiStaleCards: 'Wiki is behind the current inputs: cards or the dependency graph changed after generation, run repowiki-generate',
     wikiStaleMemory: 'Wiki is behind the accepted memory: memory changed after generation, run repowiki-generate',
     wikiInvalidSummary: '{n} manifest page path(s) are invalid or do not match their file',
     wikiInvalidHint: 'Invalid pages: {pages}',
@@ -1435,6 +1435,25 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Wiki 结构签名（与 src/wiki-graph.js 逐字节同构）：索引文件集合 +
+     * 依赖边。面板不读源码，但能读 index.json，因此配置清单驱动的边变化
+     * 也能判定 Wiki 落后。
+     * @param {object|null} index - 索引文档。
+     * @returns {string} 规范化文本。
+     */
+    function wikiGraphTextClient(index) {
+      const files = (Array.isArray(index?.files) ? index.files : [])
+        .map(file => (typeof file?.path === 'string' ? file.path : ''))
+        .filter(Boolean)
+        .sort()
+      const edges = (Array.isArray(index?.edges) ? index.edges : [])
+        .filter(edge => typeof edge?.from === 'string' && typeof edge?.to === 'string')
+        .map(edge => `${edge.from}>${edge.to}`)
+        .sort()
+      return `files:\n${files.join('\n')}\nedges:\n${edges.join('\n')}`
+    }
+
+    /**
      * 计算卡片集合的输入指纹（与 repowiki-generate 的 inputDigest 同口径）。
      * @param {object[]} cards - 面板已加载的卡片（path/sourceDigest）。
      * @returns {Promise<string>} sha256-16；Web Crypto 不可用时为空串。
@@ -1450,6 +1469,28 @@ window.__ModuleLoader__.load({
           .sort()
           .join('\n'),
       )
+    }
+
+    /**
+     * Wiki 输入是否落后：卡片指纹或结构指纹任一不匹配即落后；
+     * 两者都无法核对时返回 null（不展示提示）。
+     * @param {object|null} manifest - Wiki 清单。
+     * @param {string} cardDigest - 当前卡片指纹（空串表示不可用）。
+     * @param {string} graphDigest - 当前结构指纹（空串表示不可用）。
+     * @returns {boolean|null} 落后/不落后/无法判定。
+     */
+    function wikiInputsStale(manifest, cardDigest, graphDigest) {
+      if (!manifest || typeof manifest !== 'object') return null
+      let checked = false
+      if (typeof manifest.inputDigest === 'string' && manifest.inputDigest && cardDigest) {
+        checked = true
+        if (cardDigest !== manifest.inputDigest) return true
+      }
+      if (typeof manifest.graphDigest === 'string' && manifest.graphDigest && graphDigest) {
+        checked = true
+        if (graphDigest !== manifest.graphDigest) return true
+      }
+      return checked ? false : null
     }
 
     /**
@@ -1757,15 +1798,16 @@ window.__ModuleLoader__.load({
             : null)
           const memoryEntries = await loadMemoryEntries(wf, sessionId, localeName(t), signal)
           if (signal.aborted || requestId !== latestRequest.current) return
-          const [cardDigest, memoryDigest] = await Promise.all([
+          const [cardDigest, graphDigest, memoryDigest] = await Promise.all([
             cardsInputDigest(loaded),
+            digestHex(wikiGraphTextClient(parsedIndex)),
             memoriesInputDigest(memoryEntries),
           ])
           setWikiMeta({
             ...wikiDiagnostics(wikiPages, manifest, wikiResult.locale),
-            cardsStale: manifest && typeof manifest.inputDigest === 'string' && cardDigest
-              ? cardDigest !== manifest.inputDigest
-              : null,
+            // 卡片或结构（文件集合/依赖边）任一变化都提示落后；旧清单
+            // 无 graphDigest 时只看卡片指纹（保持兼容）。
+            cardsStale: wikiInputsStale(manifest, cardDigest, graphDigest),
             memoryStale: manifest && typeof manifest.memoryDigest === 'string' && memoryDigest
               ? memoryDigest !== manifest.memoryDigest
               : null,

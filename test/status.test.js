@@ -12,7 +12,7 @@ import { repowikiStatusTool } from '../src/tool-status.js'
 import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiGenerateTool } from '../src/tool-generate.js'
 import { repowikiMemoryTool } from '../src/tool-memory.js'
-import { writeCard } from '../src/knowledge.js'
+import { writeCard, writeWikiManifest } from '../src/knowledge.js'
 import { encodeFrontmatter } from '../src/util.js'
 import { citationDigest } from '../src/citation-digest.js'
 
@@ -40,6 +40,23 @@ test('repowiki-status：空目录降级（不抛错、index missing）', async (
   assert.match(rendered[0].text, /Module dependencies: \(none\)/)
   assert.deepEqual(out.topDependents, [])
   assert.match(rendered[0].text, /Fan-in hubs: \(none\)/)
+})
+
+test('repowiki-status：结构指纹不一致时提示 Wiki 落后', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-graph-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  await writeWikiManifest(ctx.fs, dir, 'zh', {
+    schemaVersion: 3,
+    generatedAt: 'now',
+    inputDigest: '',
+    memoryDigest: '',
+    graphDigest: 'deadbeefdeadbeef',
+    pages: [],
+  })
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.ok(out.warnings.some(w => /dependency graph changed/.test(w)), '结构指纹不一致应告警')
 })
 
 test('repowiki-status：索引中的越界路径被忽略并进入告警', async () => {

@@ -39,6 +39,7 @@ import { parseCard } from '../src/knowledge.js'
 import { parseMemoryText } from '../src/memory.js'
 import { MEMORY_DIR } from '../src/schema.js'
 import { digestText, parseFrontmatter } from '../src/util.js'
+import { wikiGraphText } from '../src/wiki-graph.js'
 
 const ASSET_DIR = '.dsh-repowiki'
 const WIKI_DIR = 'wiki'
@@ -553,6 +554,11 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   const cardStale = typeof manifest.inputDigest === 'string' && manifest.inputDigest
     ? cardsDigest(cards) !== manifest.inputDigest
     : null
+  // 结构陈旧：文件集合/依赖边变化（配置解析驱动的边变化也会命中）。
+  // 旧清单无 graphDigest 时跳过，避免升级即失败；下次生成会写入。
+  const graphStale = typeof manifest.graphDigest === 'string' && manifest.graphDigest
+    ? digestText(wikiGraphText(index), 16) !== manifest.graphDigest
+    : null
   const memories = await readMemories(root, locale)
   const memoryStale = typeof manifest.memoryDigest === 'string' && manifest.memoryDigest
     ? memoriesDigest(memories) !== manifest.memoryDigest
@@ -562,13 +568,17 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
     staleReasons.push('cards')
     addIssue('wiki/stale-cards', 'wiki is stale: cards changed since generation (run repowiki-generate)')
   }
+  if (graphStale === true) {
+    staleReasons.push('graph')
+    addIssue('wiki/stale-graph', 'wiki is stale: the indexed file set or dependency graph changed since generation (run repowiki-generate)')
+  }
   if (memoryStale === true) {
     staleReasons.push('memory')
     addIssue('wiki/stale-memory', 'wiki is stale: accepted memory changed since generation (run repowiki-generate)')
   }
   const stale = staleReasons.length > 0
     ? true
-    : cardStale === null && memoryStale === null ? null : false
+    : cardStale === null && memoryStale === null && graphStale === null ? null : false
   const missingDigests = []
   if (cardStale === null) missingDigests.push('inputDigest')
   if (memoryStale === null) missingDigests.push('memoryDigest')

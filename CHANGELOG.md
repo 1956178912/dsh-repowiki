@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.176.0] - 2026-11-28
+
+### Added
+
+- **Graph-aware wiki freshness**: the wiki manifest now records a
+  `graphDigest` over the indexed file set and dependency edges. Generation's
+  incremental skip requires it to match, so a change that only affects
+  resolution — a new `tsconfig` alias, composer PSR-4 mapping, `go.mod`
+  module path, pubspec package, or a file added/removed without a card —
+  re-synthesizes instead of leaving architecture pages silently stale.
+  `verify:wiki` reports `wiki/stale-graph` with `staleReasons: ['graph']`,
+  `repowiki-status` warns, and the panel folds graph mismatch into its
+  existing "wiki is behind" notice (computed from the loaded `index.json`).
+  Manifests without `graphDigest` keep the previous card/memory checks; the
+  next generation writes the new field.
+
+### Tests
+
+- 558 cases pass (LANG=en and LANG=zh); new coverage pins the signature
+  (order-independent, invalid entries ignored), proves a generate re-run is
+  forced by an index-edge change with unchanged cards, the gate's graph stale
+  reason/issue, the status warning, and the panel notice when only the graph
+  digest differs.
+
 ## [0.175.0] - 2026-11-28
 
 ### Fixed

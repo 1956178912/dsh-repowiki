@@ -28,6 +28,7 @@ import { topDependents } from './references.js'
 import { buildModulePages } from './module-doc.js'
 import { cwdOf, digestText, resolveLocales, delayWithSignal } from './util.js'
 import { normalizeAttempts } from './config.js'
+import { wikiGraphText } from './wiki-graph.js'
 import { parseWikiSource } from './wiki-references.js'
 import { citationDigest } from './citation-digest.js'
 import { checkCitationDrift, summarizeCitationCoverage } from './citation-drift.js'
@@ -308,6 +309,9 @@ export function repowikiGenerateTool(ctx) {
         [...cardsMap.entries()].map(([path, card]) => `${path}:${card.meta.sourceDigest ?? ''}`).sort().join('\n'),
         16,
       )
+      // 结构指纹：索引文件集合 + 依赖边。配置清单驱动的边变化或
+      // 新增/删除无卡片文件时，卡片指纹不变但 Wiki 内容已过期。
+      const graphDigest = digestText(wikiGraphText(index), 16)
 
       // 组装卡片摘要喂给子代理（裁剪到 MAX_CARDS_IN_PROMPT）；
       // 符号行号与模块归属来自索引，作为章节 sources 与分组依据（ADR-0006）
@@ -358,6 +362,9 @@ export function repowikiGenerateTool(ctx) {
         const manifestSlugSet = new Set(manifestSlugs)
         if (manifest && manifest.inputDigest === inputDigest
           && manifest.memoryDigest === memoryDigest
+          // 结构指纹缺失（旧清单）不短路：重新生成一次并记录，避免
+          // 配置驱动的边变化在下一次生成前被静默忽略。
+          && manifest.graphDigest === graphDigest
           && manifestSlugs.length > 0
           && manifestSlugs.every(slug => existingSlugs.has(slug))) {
           // 卡片/记忆未变时再核对引用内容指纹：被引用代码已变或无法验证时
@@ -618,6 +625,8 @@ export function repowikiGenerateTool(ctx) {
             inputDigest,
             // 记忆指纹：面板/状态只读卡片指纹判陈旧，生成侧用它做增量短路
             memoryDigest,
+            // 结构指纹：文件集合 + 依赖边（配置驱动边变化也能判定 Wiki 过期）
+            graphDigest,
             // 生成失败页持久化：写页面失败后清单仍会更新输入指纹，
             // 不记录就会让 verify 把一次不完整的生成当成新鲜 Wiki。
             failed: failed.slice(0, MAX_MANIFEST_FAILED),

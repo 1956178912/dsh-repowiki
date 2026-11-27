@@ -13,6 +13,7 @@ import { verifyWiki, parseArgs, formatReport, main } from '../scripts/verify-wik
 import { citationDigest } from '../src/citation-digest.js'
 import { MEMORY_SCHEMA_VERSION } from '../src/schema.js'
 import { digestText, encodeFrontmatter } from '../src/util.js'
+import { wikiGraphText } from '../src/wiki-graph.js'
 
 /** 建临时项目根。 */
 function makeRoot() {
@@ -32,8 +33,8 @@ function writeText(file, value) {
 }
 
 /** 写索引（默认 v6；可指定旧版本以测试行号校验降级）。 */
-function writeIndex(root, files, schemaVersion = 6) {
-  writeJson(path.join(root, '.dsh-repowiki/index.json'), { schemaVersion, files })
+function writeIndex(root, files, schemaVersion = 6, edges = []) {
+  writeJson(path.join(root, '.dsh-repowiki/index.json'), { schemaVersion, files, edges })
 }
 
 /** 写 Wiki 清单，并为清单页落盘占位 Markdown（与 generate 产物一致）。 */
@@ -173,6 +174,46 @@ test('verify-wiki：卡片变化导致 Wiki 陈旧', async () => {
   assert.ok(stale.problems.some(problem => problem.code === 'wiki/stale-cards'
     && problem.severity === 'error'))
   assert.match(formatReport(stale), /\(stale: cards\)/)
+})
+
+test('verify-wiki：索引结构变化导致 Wiki 陈旧', async () => {
+  const root = makeRoot()
+  const text = 'one\ntwo\n'
+  writeText(path.join(root, 'a.ts'), text)
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  writeText(path.join(root, '.dsh-repowiki/knowledge/zh/a.md'), `${encodeFrontmatter({
+    schemaVersion: 1,
+    path: 'a.ts',
+    lang: 'typescript',
+    locale: 'zh',
+    sourceDigest: 'd1',
+    title: 'A',
+    tags: [],
+    manuallyEdited: false,
+    generatedAt: 'now',
+  })}\n# A\n`)
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('a.ts:d1', 16),
+    graphDigest: digestText(wikiGraphText({ files: [{ path: 'a.ts' }], edges: [] }), 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))],
+  })
+
+  const fresh = await verifyWiki({ root })
+  assert.equal(fresh.ok, true, '结构指纹一致时通过')
+
+  writeIndex(
+    root,
+    [{ path: 'a.ts', lines: 2 }, { path: 'b.ts', lines: 1 }],
+    6,
+    [{ from: 'a.ts', to: 'b.ts' }],
+  )
+  const stale = await verifyWiki({ root })
+  assert.equal(stale.ok, false)
+  assert.deepEqual(stale.locales[0].staleReasons, ['graph'])
+  assert.ok(stale.problems.some(problem => problem.code === 'wiki/stale-graph'
+    && problem.severity === 'error'))
+  assert.match(stale.issues.join(' '), /dependency graph changed/)
 })
 
 test('verify-wiki：已采信记忆变化导致 Wiki 陈旧', async () => {

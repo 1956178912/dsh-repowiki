@@ -237,6 +237,34 @@ test('repowiki-generate execute：输入未变时跳过合成，force 强制重�
   assert.strictEqual(activationSpecs.length, dispatched + 2)
 })
 
+test('repowiki-generate execute：索引边变化（卡片不变）不再短路', async () => {
+  const { ctx, dir, activationSpecs } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+    'repowiki-generate': generateResult([{
+      title: '项目概览', slug: 'overview',
+      overview: '这是概览正文。',
+      sections: [{ heading: '核心模块', body: '核心模块正文。', sources: ['a.ts#L1-L1'] }],
+      mermaid: '',
+    }]),
+  })
+  await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  const generate = repowikiGenerateTool(ctx)
+  await generate.execute({ locale: 'zh' }, fakeExec)
+  const dispatched = activationSpecs.length
+
+  // 只改索引边（模拟配置清单解析变化），卡片与引用源码都未变
+  const indexPath = path.join(dir, '.dsh-repowiki/index.json')
+  const index = JSON.parse(nodefs.readFileSync(indexPath, 'utf8'))
+  index.edges = [{ from: 'a.ts', to: 'b.ts', kind: 'import', line: 1, symbols: [] }]
+  nodefs.writeFileSync(indexPath, JSON.stringify(index, null, 2))
+
+  const again = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.equal(again.skippedFresh, undefined, '结构指纹变化不得短路')
+  // 引用漂移只在 fresh 短路路径核对；此处结构已变，直接重新合成
+  assert.equal(again.citationDrift, undefined)
+  assert.strictEqual(activationSpecs.length, dispatched + 1, '结构变化应重新派发模型')
+})
+
 test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', async () => {
   const { ctx, dir, activationSpecs } = await makeIndexedCtx({
     'repowiki-extract': extractResult(),

@@ -3,6 +3,20 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.176.0] - 2026-11-28
+
+- **Wiki 新鲜度覆盖依赖图**：Wiki 清单新增 `graphDigest`（索引文件集合 +
+  依赖边）。生成侧的增量短路要求它一致，因此只影响解析的变化——新增
+  `tsconfig` 别名、composer PSR-4 映射、`go.mod` module 路径、pubspec
+  包名，或无卡片文件的新增/删除——都会重新合成，而不是把架构页静默留在
+  过期状态。`verify:wiki` 报告 `wiki/stale-graph` 与
+  `staleReasons: ['graph']`，`repowiki-status` 给出告警，面板把结构不匹配
+  并入既有“Wiki 落后”提示（用已加载的 `index.json` 计算）。旧清单没有
+  `graphDigest` 时保持原有卡片/记忆检查，下次生成写入新字段。
+- **测试**：558 例在 LANG=en 与 LANG=zh 下全通过；新增用例覆盖签名
+  （顺序无关、非法条目忽略）、索引边变化强制重新生成、门禁 graph 陈旧
+  原因与问题码、状态告警，以及仅结构指纹不同时的面板提示。
+
 ## [0.175.0] - 2026-11-28
 
 - **中文查询不再被单字误召回**：BM25 检索（`tokenizeQuery`）与面板搜索在

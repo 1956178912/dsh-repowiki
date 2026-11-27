@@ -22,6 +22,7 @@ import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
 import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource } from './wiki-references.js'
 import { checkCitationDrift, summarizeCitationCoverage, citationCoveragePages } from './citation-drift.js'
+import { wikiGraphText } from './wiki-graph.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
@@ -762,6 +763,12 @@ export function repowikiStatusTool(ctx) {
         [...cardsMap.entries()].map(([path, card]) => `${path}:${card.meta.sourceDigest ?? ''}`).sort().join('\n'),
         16,
       )
+      // 结构指纹：文件集合 + 依赖边。旧清单缺该字段时跳过（不误报）。
+      const currentGraphDigest = digestText(wikiGraphText(index), 16)
+      if (manifest && typeof manifest.graphDigest === 'string' && manifest.graphDigest
+        && manifest.graphDigest !== currentGraphDigest) {
+        warnings.push('Wiki is stale: the indexed file set or dependency graph changed since generation; run repowiki-generate.')
+      }
       const manifestSlugs = new Set((manifest?.pages ?? []).map(p => p.slug))
       // 重复页：磁盘上两个文件声明同一 slug，或清单重复登记 slug/路径。
       // 前者会让按 slug 解析的页面被静默覆盖，后者让页面归属依赖顺序。

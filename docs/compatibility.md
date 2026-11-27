@@ -19,7 +19,7 @@
 | 卡片 frontmatter | 1 | 版本不符按坏卡跳过；`manuallyEdited` 卡片不被自动刷新 |
 | Wiki 页面 frontmatter | 1 | `schemaVersion`/`title`/`slug`/`locale`/`generatedAt`，可选 `inputDigest`；缺字段按旧页处理 |
 | `knowledge/<locale>/_index.json` | 2（v1 可读） | 模块→卡片 + `lastRun` 最近运行快照；缺失不影响读取 |
-| `wiki/<locale>/_index.json` | 3（v1/v2 可读） | v1 页面级 `sources`；v2 增加章节级 `sections`；v3 增加 `inputDigest`/`memoryDigest`（生成增量短路与陈旧检测）、`citationDigests`/`citationMisses`（引用内容指纹与未覆盖原因）、`failed`/`failedTotal`（上次生成失败页）；旧清单按可得字段降级 |
+| `wiki/<locale>/_index.json` | 3（v1/v2 可读） | v1 页面级 `sources`；v2 增加章节级 `sections`；v3 增加 `inputDigest`/`memoryDigest`/`graphDigest`（生成增量短路与陈旧检测；graphDigest 覆盖索引文件集合与依赖边，缺失时只做卡片/记忆检查）、`citationDigests`/`citationMisses`（引用内容指纹与未覆盖原因）、`failed`/`failedTotal`（上次生成失败页）；旧清单按可得字段降级 |
 | 记忆 frontmatter | 1 | `status` 为 `pending`/`accepted`/`rejected`；可选 `reviewedAt` |
 | `repowiki-plan.json` | 无版本字段 | `exclude`/`includeOnly`/`maxCardsPerRun`/`cardComplexityThreshold`/`concurrency`/`attempts`；损坏时回退默认值并告警 |
 
