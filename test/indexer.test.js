@@ -181,6 +181,47 @@ test('Java：通配符与 static 成员 import 解析到类文件', async () => 
   assert.deepEqual(wildcardEdge?.symbols, [], '普通通配导入保持文件级边')
 })
 
+test('C#：using static 解析到类文件并记潜在通配引用', async () => {
+  const dir = makeProject({
+    'src/App/Program.cs': [
+      'using static App.Math.Util;',
+      'using System;',
+      'class Program { static int Run() { return Abs(-1); } }',
+    ].join('\n'),
+    'src/App/Math/Util.cs': 'namespace App.Math;\npublic static class Util {\n  public static int Abs(int x) { return x < 0 ? -x : x; }\n}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const fromProgram = doc.edges.filter(e => e.from === 'src/App/Program.cs')
+
+  assert.equal(fromProgram.length, 1, '仅静态导入解析到本地类文件')
+  assert.equal(fromProgram[0].to, 'src/App/Math/Util.cs')
+  assert.equal(fromProgram[0].line, 1, '保留 using 行号')
+  assert.deepEqual(fromProgram[0].symbols, ['*'], '静态成员导入不臆造具体成员名')
+})
+
+test('Kotlin：类型通配导入记潜在引用，包通配保持文件级', async () => {
+  const dir = makeProject({
+    'src/com/acme/App.kt': [
+      'package com.acme',
+      'import com.acme.util.Constants.*',
+      'import com.acme.util.*',
+      'class App { fun run() = MAX_SIZE }',
+    ].join('\n'),
+    'src/com/acme/util/Constants.kt': 'package com.acme.util\nobject Constants {\n  const val MAX_SIZE = 1\n}\n',
+    'src/com/acme/util/Helper.kt': 'package com.acme.util\nfun help() {}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const fromApp = doc.edges.filter(e => e.from === 'src/com/acme/App.kt')
+
+  const typeWildcard = fromApp.find(e => e.line === 2)
+  assert.equal(typeWildcard?.to, 'src/com/acme/util/Constants.kt', '类型通配解析到类型文件')
+  assert.deepEqual(typeWildcard?.symbols, ['*'], '类型成员通配按潜在引用')
+
+  const packageWildcard = fromApp.find(e => e.line === 3)
+  assert.equal(packageWildcard?.to, 'src/com/acme/util/Constants.kt', '包通配解析到排序最前的代表文件')
+  assert.deepEqual(packageWildcard?.symbols, [], '包通配不臆造具体符号')
+})
+
 test('Go：无 go.mod 时不解析、module 根导入解析到根包文件', async () => {
   const noMod = makeProject({
     'main.go': 'package main\nimport "fmt"\nfunc main() {}\n',

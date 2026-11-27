@@ -81,6 +81,13 @@ const MAX_GO_MODS = 20
 const MAX_INTERNAL_WARNINGS = 50
 
 /**
+ * Kotlin 符号提取中代表"类型"的 kind 集合（object/enum/annotation 在
+ * extractKotlin 内分别归入 class/type）。用于判定 `import a.b.C.*` 的
+ * 前缀是类型（成员通配导入）还是包。
+ */
+const KOTLIN_TYPE_KINDS = new Set(['class', 'interface', 'type'])
+
+/**
  * 单次索引最多读取的嵌套 `composer.json` 数（PHP 多包仓库）。
  * 根清单不受此上限影响；嵌套清单提供各包的 PSR-4 自动加载映射。
  */
@@ -3357,11 +3364,36 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       vbnet: buildDottedPaths(indexed, ['.vb']),
     },
   }
+  // Kotlin `import a.b.C.*` 的前缀可能是类型而非包：类型通配导入该类成员，
+  // 用已提取的符号表判定（包通配保持代表文件级，不臆造符号）。
+  const kotlinTypeNames = new Map()
+  for (const file of files) {
+    if (file.lang !== 'kotlin') continue
+    const names = new Set()
+    for (const symbol of file.symbols ?? []) {
+      // extractKotlin 把 object/enum/annotation 归入 class/type，这里同口径
+      if (symbol && typeof symbol.name === 'string' && KOTLIN_TYPE_KINDS.has(symbol.kind)) names.add(symbol.name)
+    }
+    if (names.size > 0) kotlinTypeNames.set(file.path, names)
+  }
   /** Go internal 可见性违规（去重后进入 warnings）。 */
   const internalViolations = new Set()
   for (const file of files) {
     for (const imp of file.imports ?? []) {
-      const resolved = resolveImportEdge(file.lang, file.path, imp, resolveCtx)
+      let resolved = resolveImportEdge(file.lang, file.path, imp, resolveCtx)
+      let symbols = imp.imported
+      // 类型通配：精确命中前缀对应文件且该文件声明同名类型时，边指向该
+      // 类型文件并按 `*` 潜在引用（resolveImportEdge 对包通配只给代表文件）
+      if (file.lang === 'kotlin' && typeof imp.specifier === 'string' && imp.specifier.endsWith('.*')
+        && Array.isArray(symbols) && symbols.length === 0) {
+        const prefix = imp.specifier.slice(0, -2)
+        const typeName = prefix.slice(prefix.lastIndexOf('.') + 1)
+        const target = resolveDottedSpecifier(prefix, resolveCtx.dottedPaths.kotlin)
+        if (target && kotlinTypeNames.get(target)?.has(typeName)) {
+          resolved = target
+          symbols = ['*']
+        }
+      }
       // 自引用边（如目标代表文件 import 自身所在目标）不产生依赖信息
       if (resolved && resolved !== file.path) {
         edges.push({
@@ -3372,7 +3404,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
           kind: typeof imp.kind === 'string' && imp.kind ? imp.kind : EDGE_KIND_IMPORT,
           // import/use/require 所在行：反向引用可定位到具体语句（v5）
           line: imp.line,
-          symbols: imp.imported,
+          symbols,
           ...(Array.isArray(imp.aliases) && imp.aliases.length > 0 ? { aliases: imp.aliases } : {}),
           ...(Array.isArray(imp.hidden) && imp.hidden.length > 0 ? { hidden: imp.hidden } : {}),
         })

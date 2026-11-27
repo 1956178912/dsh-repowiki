@@ -266,8 +266,11 @@ test('C#：using / global using / static / 别名', () => {
     'using System;',
     'global using App.Common;',
     'using static System.Math;',
+    'global using static App.Util.Format;',
     'using Alias = App.Models.User;',
+    'using Pair = (int a, int b);',
     'using (var scope = Begin()) { }',
+    'using var stream = Open();',
     '// using Commented.Out;',
   ].join('\n')
   const refs = extractImports(code, 'csharp')
@@ -276,14 +279,31 @@ test('C#：using / global using / static / 别名', () => {
   assert.ok(bySpec.has('System'))
   assert.ok(bySpec.has('App.Common'), 'global using')
   assert.ok(bySpec.has('System.Math'), 'using static 路径')
-  assert.deepEqual(bySpec.get('System.Math').imported, ['Math'])
+  assert.deepEqual(bySpec.get('System.Math').imported, ['*'], '静态导入按潜在通配引用')
+  assert.deepEqual(bySpec.get('App.Util.Format').imported, ['*'], 'global using static 同样通配')
   assert.ok(bySpec.has('App.Models.User'), '别名右侧路径')
   assert.deepEqual(bySpec.get('App.Models.User').imported, ['User'], '别名导入仍归到原名')
   assert.deepEqual(bySpec.get('App.Models.User').aliases, [{ from: 'User', to: 'Alias' }],
     'using 别名进入 aliases')
   assert.equal(bySpec.get('System.Math').aliases, undefined, 'using static 不产生别名')
   assert.ok(!bySpec.has('Commented.Out'), '注释不提取')
+  assert.ok(!bySpec.has('var'), 'using 声明语句不当作指令')
   assert.ok(refs.every(r => r.relative), '统一作为本地解析候选')
+})
+
+test('C#：global:: 限定符剥离后仍登记', () => {
+  const code = [
+    'using global::System.Text;',
+    'using JsonText = global::System.Text.Json;',
+    'using static global::System.Math;',
+  ].join('\n')
+  const refs = extractImports(code, 'csharp')
+  const bySpec = new Map(refs.map(r => [r.specifier, r]))
+
+  assert.deepEqual([...bySpec.keys()], ['System.Text', 'System.Text.Json', 'System.Math'])
+  assert.deepEqual(bySpec.get('System.Text.Json').imported, ['Json'], '别名右侧取末段原名')
+  assert.deepEqual(bySpec.get('System.Text.Json').aliases, [{ from: 'Json', to: 'JsonText' }])
+  assert.deepEqual(bySpec.get('System.Math').imported, ['*'], '静态导入仍按通配')
 })
 
 test('C#：泛型/元组别名不做猜测', () => {

@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.269.0] - 2026-11-28
+
+- **C# `using static`**：`using static System.Math;` 与 `global using
+  static …` 现在按 `*` 潜在引用记账（不再把类名当成员），与 Java/Groovy
+  静态通配一致；依赖边仍指向类文件，引用/影响面覆盖全部静态成员。
+- **C# `global::` 限定符**：`using global::A.B;` 与
+  `using Json = global::A.B.Json;` 此前整条指令丢失；现在解析前剥离
+  限定符，依赖边与别名都保留。
+- **Kotlin 类型通配**：`import a.b.C.*` 用符号表判定前缀——命中声明
+  同名 class/object/interface/type 的文件时边指向该类型文件并记 `*`
+  成员潜在引用；包通配仍解析到代表文件且不臆造符号。
+- 解析器 v25 重新解析缓存导入。
+- **测试**：820 例通过（LANG=en）；新增静态 `using`/`global::` 提取断言
+  与 Kotlin 类型/包通配的索引级断言。
+
 ## [0.268.0] - 2026-11-28
 
 - **Groovy 导入语义修复**：`import static a.b.C.*` 与 `import a.b.*`

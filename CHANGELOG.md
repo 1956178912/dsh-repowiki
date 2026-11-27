@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.269.0] - 2026-11-28
+
+### Changed
+
+- **C# `using static`**: `using static System.Math;` and
+  `global using static …` now record `*` potential references instead of the
+  class name, matching Java/Groovy static wildcards: references and impact
+  treat every static member as potentially used while the edge still points
+  at the class file.
+- **C# `global::` qualifiers**: `using global::A.B;` and
+  `using Json = global::A.B.Json;` used to be dropped entirely; the qualifier
+  is now stripped before parsing so the edge and alias survive.
+- **Kotlin type wildcards**: `import a.b.C.*` is now resolved against the
+  symbol table. When the prefix maps to a file declaring a matching
+  class/object/interface/type, the edge targets that type's file and records
+  `*` potential member references; plain package wildcards keep their
+  representative file edge without invented symbols.
+- Parser v25 re-parses cached imports.
+
+### Tests
+
+- 820 cases pass (LANG=en); new extraction assertions for static
+  `using`/`global::` forms and an index-level Kotlin type-vs-package wildcard
+  test.
+
 ## [0.268.0] - 2026-11-28
 
 ### Fixed

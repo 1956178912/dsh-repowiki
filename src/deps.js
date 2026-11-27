@@ -489,29 +489,40 @@ function extractJavaImports(lines) {
 
 /**
  * 提取 C# 的 using 指令（含 global / static / 别名）。
+ *
+ * 语义约定：
+ * - `using static System.Math;` 把 Math 的全部静态成员带入作用域，
+ *   与 Java/Groovy 的静态通配一致，按 `*` 潜在引用记账（不臆造成员名）；
+ *   依赖边仍指向 Math 的类文件。
+ * - `using Alias = App.Models.User;` 引用归到原名，别名进入 aliases，
+ *   词法使用点按本地名扫描（与 JS/Rust 导入别名同一约定）。
+ * - `global::` 限定符只影响名称解析，提取前剥离，避免整条指令丢失。
+ * - `using (var x = …)` / `using var x = …` 是资源语句而非指令，不匹配。
  * @param {string[]} lines - 代码行。
  * @returns {ImportInfo[]} 引用记录。
  */
 function extractCSharpImports(lines) {
   const result = []
   for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*(?:global\s+)?using\s+(?:static\s+)?(?:(?<alias>[A-Za-z_]\w*)\s*=\s*)?(?<path>[\w.]+)\s*;/.exec(lines[i])
+    // `global::System.Math` 与 `System.Math` 指向同一实体，剥离限定符后统一解析
+    const code = lines[i].replace(/\bglobal\s*::\s*/g, '')
+    const m = /^\s*(?:global\s+)?using\s+(?:(?<static>static)\s+)?(?:(?<alias>[A-Za-z_]\w*)\s*=\s*)?(?<path>[\w.]+)\s*;/.exec(code)
     if (!m) continue
     const specifier = m.groups.path
     const segments = specifier.split('.')
     const original = segments[segments.length - 1]
-    // `using Alias = App.Models.User;`：引用归到原名，别名进入 aliases，
-    // 词法使用点按本地名扫描（与 JS/Rust 导入别名同一约定）
     const alias = m.groups.alias
     const aliases = alias && original && alias !== original
       ? [{ from: original, to: alias }]
       : []
+    // 静态导入是成员导入：符号级证据只能是"该类型的静态成员之一"
+    const imported = m.groups.static ? ['*'] : (original ? [original] : [])
     result.push({
       specifier,
       line: i + 1,
       kind: 'import',
       relative: true,
-      imported: original ? [original] : [],
+      imported,
       ...(aliases.length > 0 ? { aliases } : {}),
     })
   }

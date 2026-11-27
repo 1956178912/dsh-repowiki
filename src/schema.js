@@ -69,8 +69,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v21：Rust `use a::b::{self}` 路径去掉 `::self`，导入名取模块名。
  *  v22：Java `import static` 归到成员名/`*`，specifier 指向类文件。
  *  v23：PHP 分组 use 内的 function/const 修饰词剥离后登记。
- *  v24：Groovy 静态/普通通配与 `as` 别名（不再把 `*` 截断成包名）。 */
-export const INDEX_PARSER_VERSION = 24
+ *  v24：Groovy 静态/普通通配与 `as` 别名（不再把 `*` 截断成包名）。
+ *  v25：C# `using static` 记 `*` 潜在引用，剥离 `global::` 限定符。 */
+export const INDEX_PARSER_VERSION = 25
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']
