@@ -32,8 +32,9 @@ const DESCRIPTION = [
   'ordered verification steps. Pass symbols (name or path#name) to require named-import evidence',
   'for direct impact while retaining the unfiltered file total as an upper bound; by default the',
   'importers are also scanned for lexical usage sites (identifier-boundary occurrences, not resolved',
-  'call sites; set includeUsages=false to skip source reads). Read-only and deterministic; based on',
-  'import/use/require edges, not a runtime call graph. Run repowiki-index first.',
+  'call sites; set includeUsages=false to skip source reads). Impacted files that look like tests',
+  'are listed separately (path heuristics) so the right test files can run first. Read-only and',
+  'deterministic; based on import/use/require edges, not a runtime call graph. Run repowiki-index first.',
 ].join(' ')
 
 /**
@@ -204,6 +205,20 @@ export function repowikiImpactTool(ctx) {
           impactedTotal: { type: 'integer', description: 'Exact number of impacted files within the requested depth (even when truncated).' },
           impactedDirect: { type: 'integer', description: 'Exact number of direct importers.' },
           impactedTruncated: { type: 'boolean' },
+          affectedTests: {
+            type: 'array',
+            description: 'Impacted files that look like tests by path heuristics (test/spec directories and common naming conventions), nearest hop first, up to 50. Heuristics can misclassify; verify before running.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                path: { type: 'string' },
+                depth: { type: 'integer', description: '1 = direct importer of a changed file.' },
+              },
+              required: ['path', 'depth'],
+            },
+          },
+          affectedTestsTruncated: { type: 'boolean' },
           cycles: {
             type: 'array',
             description: 'Import cycles (strong connected components) containing at least one changed file, capped at 10 groups.',
@@ -320,6 +335,10 @@ export function repowikiImpactTool(ctx) {
           lines.push(`- ${entry.depth === 1 ? '←' : '⇠'} ${entry.path}${entry.depth > 1 ? ` (${entry.depth} hops)` : ''}${symbols}`)
         }
         if (value.impacted.length > 10) lines.push(`… ${value.impacted.length - 10} more impacted file(s) omitted`)
+        const affectedTests = value.affectedTests ?? []
+        if (affectedTests.length > 0) {
+          lines.push(`Affected tests: ${affectedTests.slice(0, 8).map(item => `${item.path}${item.depth > 1 ? ` (${item.depth} hops)` : ''}`).join('; ')}${affectedTests.length > 8 ? ` … +${affectedTests.length - 8}` : ''}${value.affectedTestsTruncated ? ' (truncated)' : ''}`)
+        }
         if (value.cycles.length > 0) {
           lines.push(`Cycles: ${value.cycles.map(cycle => {
             const shown = cycle.files.slice(0, 3).join(' ↔ ')
@@ -517,13 +536,14 @@ export function repowikiImpactTool(ctx) {
         manifest,
         limit: MAX_IMPACT_DOCS,
       })
-      const recommendations = recommendationsFor({ impact, cycles: cycleResult, hubs, docs })
+      const recommendations = recommendationsFor({ impact, cycles: cycleResult, hubs, docs, tests: impact.tests })
 
       const notes = []
       if (symbolChanges.unmatched.length > 0) notes.push(`No indexed definition matched: ${symbolChanges.unmatched.join(', ')}; these requests were not broadened to file scope.`)
       if (usagesUnreadable.length > 0) notes.push(`Usage scan could not read: ${usagesUnreadable.join(', ')}; their usage sites are unknown, not absent.`)
       if (usagesSkippedFiles > usagesUnreadable.length) notes.push(`Usage scan covered ${usagesScanned} importer file(s); the rest were skipped by the ${MAX_USAGE_FILES}-file cap.`)
       if (usagesTruncated) notes.push(`Usage evidence is capped at ${MAX_USAGES_PER_SYMBOL} sites per symbol and ${MAX_USAGE_ENTRIES} in total.`)
+      if (impact.testsTruncated) notes.push('Affected test files are capped at 50; the list is incomplete but the impacted totals above remain exact.')
       if (impact.truncated) notes.push(`Only the first ${impact.impacted.length} of ${impact.total} impacted files are listed; raise limit or lower depth for detail.`)
       if (cycleResult.truncated) notes.push('More cycle groups touch the change than are listed; inspect repowiki-status cycles.')
       if (docs.wikiTruncated) notes.push(`Only ${docs.wiki.length} wiki citation(s) are listed.`)
@@ -554,6 +574,8 @@ export function repowikiImpactTool(ctx) {
         impactedTotal: impact.total,
         impactedDirect: impact.direct,
         impactedTruncated: impact.truncated,
+        affectedTests: impact.tests,
+        affectedTestsTruncated: impact.testsTruncated,
         cycles: cycleResult.cycles,
         cyclesTruncated: cycleResult.truncated,
         hubs,

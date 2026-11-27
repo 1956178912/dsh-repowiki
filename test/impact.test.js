@@ -357,6 +357,46 @@ test('repowiki-impact：使用点总量上限 100 并如实标记截断', async 
   assert.match(out.hint, /Usage evidence is capped at 10 sites per symbol and 100 in total\./)
 })
 
+test('impact：受影响测试按路径启发式单列并排除变更自身', () => {
+  const edges = [
+    { from: 'b.test.ts', to: 'a.ts', symbols: ['a1'] },
+    { from: 'c.ts', to: 'a.ts', symbols: ['a1'] },
+    { from: 'd.spec.ts', to: 'c.ts', symbols: ['c1'] },
+  ]
+  const result = computeImpact(edges, ['a.ts'], 2, 10)
+  assert.deepEqual(result.tests, [
+    { path: 'b.test.ts', depth: 1 },
+    { path: 'd.spec.ts', depth: 2 },
+  ])
+  assert.equal(result.testsTruncated, false)
+  const changedTest = computeImpact(edges, ['b.test.ts'], 2, 10)
+  assert.ok(!changedTest.tests.some(item => item.path === 'b.test.ts'))
+})
+
+test('repowiki-impact：受影响测试单独列出并进入验证建议', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-impact-tests-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/a.ts'), 'export function a1() {}\n')
+  nodefs.writeFileSync(path.join(dir, 'src/use.ts'),
+    "import { a1 } from './a';\nexport const use = a1;\n")
+  nodefs.writeFileSync(path.join(dir, 'src/a.test.ts'),
+    "import { a1 } from './a';\ntest('a1', () => a1());\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const tool = repowikiImpactTool(ctx)
+
+  const fileScope = await tool.execute({ paths: ['src/a.ts'] }, fakeExec)
+  assert.deepEqual(fileScope.affectedTests, [{ path: 'src/a.test.ts', depth: 1 }])
+  assert.equal(fileScope.affectedTestsTruncated, false)
+  const rendered = tool.output.render({}, fileScope)[0].text
+  assert.match(rendered, /Affected tests: src\/a\.test\.ts/)
+  assert.match(rendered, /Run the 1 affected test file\(s\) first: src\/a\.test\.ts/)
+
+  const symbolScope = await tool.execute({ paths: ['src/a.ts'], symbols: ['a1'] }, fakeExec)
+  assert.deepEqual(symbolScope.affectedTests, [{ path: 'src/a.test.ts', depth: 1 }])
+  assert.match(tool.output.render({}, symbolScope)[0].text, /Affected tests: src\/a\.test\.ts/)
+})
+
 test('repowiki-impact：无索引与无匹配的降级', async () => {
   const empty = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-impact-empty-'))
   const noIndex = await repowikiImpactTool(makeCtx(empty)).execute({ paths: ['x.ts'] }, fakeExec)

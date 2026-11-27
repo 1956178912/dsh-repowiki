@@ -13,6 +13,7 @@
 
 import { findImportCycles } from './cycles.js'
 import { buildWikiReferenceIndex, wikiReferencesFor } from './wiki-references.js'
+import { collectAffectedTests } from './test-files.js'
 
 /** 单次返回的传递依赖方上限。 */
 export const MAX_IMPACT_ENTRIES = 100
@@ -177,7 +178,8 @@ function directSymbols(edges, targets) {
  * @param {number} [depth] - 最大跳数（1–MAX_IMPACT_DEPTH）。
  * @param {number} [limit] - 返回明细上限（1–MAX_IMPACT_ENTRIES）。
  * @returns {{impacted:Array<{path:string, depth:number, symbols:string[]}>, total:number,
- *   direct:number, truncated:boolean}} 依赖方、总数、直接数与截断标记。
+ *   direct:number, truncated:boolean, tests:Array<{path:string, depth:number}>,
+ *   testsTruncated:boolean}} 依赖方、总数、直接数、截断标记与受影响测试。
  */
 export function computeImpact(edges = [], changed = [], depth = 2, limit = MAX_IMPACT_DOCS) {
   const maxDepth = Number.isInteger(depth)
@@ -202,6 +204,8 @@ export function computeImpact(edges = [], changed = [], depth = 2, limit = MAX_I
   const queue = changed.map(path => ({ path, depth: 0 }))
   /** @type {Array<{path:string, depth:number, symbols:string[]}>} */
   const impacted = []
+  /** @type {Array<{path:string, depth:number}>} */
+  const testEntries = []
   let total = 0
   let direct = 0
   for (let head = 0; head < queue.length; head++) {
@@ -213,6 +217,7 @@ export function computeImpact(edges = [], changed = [], depth = 2, limit = MAX_I
       total++
       const nextDepth = current.depth + 1
       if (nextDepth === 1) direct++
+      testEntries.push({ path: edge.from, depth: nextDepth })
       if (impacted.length < maxResults) {
         impacted.push({
           path: edge.from,
@@ -224,7 +229,11 @@ export function computeImpact(edges = [], changed = [], depth = 2, limit = MAX_I
     }
   }
   impacted.sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path))
-  return { impacted, total, direct, truncated: total > impacted.length }
+  const tests = collectAffectedTests(testEntries)
+  return {
+    impacted, total, direct, truncated: total > impacted.length,
+    tests: tests.tests, testsTruncated: tests.truncated,
+  }
 }
 
 /**
@@ -294,7 +303,9 @@ export function resolveSymbolChanges(index, changed = [], inputs = [], root = ''
  * @param {number} [limit] - 明细上限。
  * @returns {{impacted:Array<{path:string, depth:number, symbols:string[]}>,
  *   references:Array<{path:string, line:number, symbols:string[]}>,
- *   total:number, direct:number, truncated:boolean}} 精确直接影响与保守传递影响。
+ *   total:number, direct:number, truncated:boolean,
+ *   tests:Array<{path:string, depth:number}>, testsTruncated:boolean}}
+ *   精确直接影响与保守传递影响、受影响测试。
  */
 export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit = MAX_IMPACT_DOCS) {
   const maxDepth = Number.isInteger(depth) ? Math.min(MAX_IMPACT_DEPTH, Math.max(1, depth)) : 2
@@ -348,10 +359,13 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
   const queue = []
   /** @type {Array<{path:string, depth:number, symbols:string[]}>} */
   const impacted = []
+  /** @type {Array<{path:string, depth:number}>} */
+  const testEntries = []
   let total = 0
   for (const path of [...directSymbolsByPath.keys()].sort()) {
     seen.add(path)
     total++
+    testEntries.push({ path, depth: 1 })
     if (impacted.length < maxResults) {
       impacted.push({ path, depth: 1, symbols: [...(directSymbolsByPath.get(path) ?? [])].sort() })
     }
@@ -366,12 +380,17 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
       seen.add(edge.from)
       total++
       const nextDepth = current.depth + 1
+      testEntries.push({ path: edge.from, depth: nextDepth })
       if (impacted.length < maxResults) impacted.push({ path: edge.from, depth: nextDepth, symbols: [] })
       queue.push({ path: edge.from, depth: nextDepth })
     }
   }
   impacted.sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path))
-  return { impacted, references, total, direct, truncated: total > impacted.length }
+  const tests = collectAffectedTests(testEntries)
+  return {
+    impacted, references, total, direct, truncated: total > impacted.length,
+    tests: tests.tests, testsTruncated: tests.truncated,
+  }
 }
 
 /**
@@ -511,10 +530,15 @@ export function assessRisk({ direct = 0, total = 0, cycles = 0, hubs = [] }) {
  * @param {{cycles:Array<{sample:string[]}>}} input.cycles - cyclesForChanged 结果。
  * @param {Array<{path:string,dependents:number}>} input.hubs - 变更文件 fan-in。
  * @param {{cards:Array<{path:string}>, wiki:Array<{path:string}>}} input.docs - 文档影响面。
+ * @param {Array<{path:string, depth:number}>} [input.tests] - 受影响测试文件。
  * @returns {string[]} 建议。
  */
-export function recommendationsFor({ impact, cycles, hubs, docs }) {
+export function recommendationsFor({ impact, cycles, hubs, docs, tests = [] }) {
   const out = []
+  if (tests.length > 0) {
+    const listed = tests.slice(0, 5).map(item => item.path).join(', ')
+    out.push(`Run the ${tests.length} affected test file(s) first: ${listed}${tests.length > 5 ? ' …' : ''}.`)
+  }
   if (cycles.cycles.length > 0) {
     const route = cycles.cycles[0].sample.length > 2
       ? ` (${cycles.cycles[0].sample.join(' → ')})`

@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.122.0] - 2026-11-27
+
+- **影响面列出受影响测试**：`repowiki-impact` 用路径启发式识别受影响文件中的
+  测试（`test`/`spec`/`__tests__` 目录、`*.test.*`/`*.spec.*`、
+  `test_*`/`*_test.*`/`*_spec.rb`、`FooTest`/`FooTests`/`FooSpec`/`FooIT`
+  等命名），在文件级与符号级输出 `affectedTests`（最近跳数优先、上限 50、
+  附 `affectedTestsTruncated`）。测试在完整图遍历中收集，明细被截断时
+  列表仍准确；文本新增 `Affected tests` 行，第一条验证建议直接点名要跑的
+  测试文件。启发式可能误判，输出中如实标注为路径推断。
+- **测试**：454 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
 ## [0.121.0] - 2026-11-27
 
 - **面板核心文件**：单库视图新增 `核心文件` chip 行，使用与

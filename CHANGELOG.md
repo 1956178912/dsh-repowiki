@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.122.0] - 2026-11-27
+
+### Added
+
+- **Affected tests in impact analysis**: `repowiki-impact` now classifies
+  impacted files with path heuristics (`test`/`spec`/`__tests__` directories,
+  `*.test.*`/`*.spec.*`, `test_*`/`*_test.*`/`*_spec.rb`, and
+  `FooTest`/`FooTests`/`FooSpec`/`FooIT` JVM/C#/Swift names) and returns
+  `affectedTests` (nearest hop first, up to 50, with `affectedTestsTruncated`)
+  in both file and symbol scope. Tests are collected during the full graph
+  traversal, so the list stays correct even when impacted details are
+  truncated. The render shows an `Affected tests` line, and the first
+  verification recommendation names the files to run. Heuristics can
+  misclassify; the output describes them as path-based.
+
+### Tests
+
+- 454 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.121.0] - 2026-11-27
 
 ### Added
