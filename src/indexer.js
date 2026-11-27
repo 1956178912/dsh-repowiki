@@ -896,6 +896,66 @@ function resolveNixPath(fromRel, specifier, indexed) {
 }
 
 /**
+ * 建立 Ada 单元名（小写）→ 文件索引。GNAT 约定文件名用连字符表示子单元
+ * （`Parent-Child.ads` ↔ `Parent.Child`），也接受目录形式
+ * （`src/parent/child.ads` ↔ `Parent.Child`，源根不限）；同一单元同时存在
+ * spec 与 body 时优先 `.ads`。目录形式另存后缀表，只作精确键的兜底，
+ * 避免任意源根下的同名单元覆盖真实单元。
+ * @param {Array<{path:string, lang:string}>} files - 索引文件条目。
+ * @returns {{units:Map<string,{spec?:string, body?:string}>,
+ *   suffixes:Map<string,{spec?:string, body?:string}>}} 精确键与后缀键索引。
+ */
+function buildAdaUnits(files) {
+  /** 写入一个单元名槽位（同名取字典序最小的文件，保证确定性）。 */
+  const register = (map, key, filePath, isSpec) => {
+    if (!key) return
+    const entry = map.get(key) ?? {}
+    if (isSpec) {
+      if (!entry.spec || filePath < entry.spec) entry.spec = filePath
+    } else if (!entry.body || filePath < entry.body) {
+      entry.body = filePath
+    }
+    map.set(key, entry)
+  }
+  const units = new Map()
+  const suffixes = new Map()
+  for (const file of files) {
+    if (file.lang !== 'ada' || typeof file.path !== 'string') continue
+    const base = path.posix.basename(file.path)
+    const dot = base.lastIndexOf('.')
+    const stem = dot > 0 ? base.slice(0, dot) : base
+    if (!/^[A-Za-z_][\w.-]*$/.test(stem)) continue
+    const isSpec = file.path.toLowerCase().endsWith('.ads')
+    // GNAT 连字符文件名 → 点分子单元名（与所在目录无关）
+    register(units, stem.toLowerCase().replace(/-/g, '.'), file.path, isSpec)
+    // 目录形式（src/parent/child.ads）→ parent.child；去掉前导段后进后缀表
+    const parts = file.path.slice(0, file.path.lastIndexOf('.')).split('/')
+    if (parts.length < 2) continue
+    for (let drop = 0; drop < parts.length; drop++) {
+      const key = parts.slice(drop).join('.').toLowerCase()
+      register(drop === 0 ? units : suffixes, key, file.path, isSpec)
+    }
+  }
+  return { units, suffixes }
+}
+
+/**
+ * 解析 Ada `with` 单元名：大小写不敏感，spec 优先于 body；未索引的外部
+ * 单元（标准库/第三方 crate）返回 null。
+ * @param {string} specifier - `with` 后的单元名（可点分）。
+ * @param {{units:Map<string,{spec?:string, body?:string}>,
+ *   suffixes:Map<string,{spec?:string, body?:string}>}} adaUnits - 单元索引。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveAdaUnit(specifier, adaUnits) {
+  if (typeof specifier !== 'string') return null
+  const key = specifier.trim().toLowerCase()
+  if (!/^[a-z][\w.]*$/.test(key)) return null
+  const entry = adaUnits.units.get(key) ?? adaUnits.suffixes.get(key)
+  return entry?.spec ?? entry?.body ?? null
+}
+
+/**
  * 建立 Object Pascal 单元名（小写，语言大小写不敏感）→ 文件索引：Delphi
  * 要求 unit 名与文件名一致，因此按文件名主干登记（`.pas`/`.pp`/`.lpr`），
  * 同名取字典序最小文件，保证确定性。
@@ -2504,6 +2564,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   fortranModules:Map<string,string>,
  *   perlRoots:string[],
  *   pascalUnits:Map<string,string>,
+ *   adaUnits:Map<string,{spec?:string, body?:string}>,
  *   fsharpModules:Map<string,string>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
@@ -2555,6 +2616,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
   if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
   if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
+  if (lang === 'ada') return resolveAdaUnit(imp.specifier, ctx.adaUnits)
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
   if (lang === 'tcl') return resolveTclSource(fromRel, imp.specifier, ctx.indexed)
@@ -2851,6 +2913,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     fortranModules: buildFortranModules(files),
     perlRoots: buildPerlRoots(indexed),
     pascalUnits: buildPascalUnits(files),
+    adaUnits: buildAdaUnits(files),
     fsharpModules: buildFsharpModules(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),

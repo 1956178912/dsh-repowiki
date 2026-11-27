@@ -359,6 +359,7 @@ const LANGUAGE_LABELS = {
   vbnet: 'Visual Basic .NET',
   tcl: 'Tcl',
   fsharp: 'F#',
+  ada: 'Ada',
   c: 'C',
   cpp: 'C++',
 }

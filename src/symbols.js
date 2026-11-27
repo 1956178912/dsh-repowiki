@@ -5218,6 +5218,251 @@ function extractCpp(lines) {
 }
 
 /**
+ * Ada 的注释/字符串屏蔽（双视图）：`--` 到行尾为注释，双引号字符串
+ * （`""` 表示转义引号）置空；字符字面量 `'a'` 不屏蔽，避免破坏
+ * `X'Length` 这类属性引用。
+ * @param {string[]} lines - 代码行。
+ * @returns {{code:string[], masked:string[]}} 原行与等长掩码行。
+ */
+export function adaScan(lines) {
+  const code = []
+  const masked = []
+  for (const line of lines) {
+    let out = ''
+    let inString = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (inString) {
+        if (ch === '"') {
+          if (line[i + 1] === '"') { out += '  '; i++; continue }
+          inString = false
+        }
+        out += ' '
+        continue
+      }
+      if (ch === '"') { inString = true; out += ' '; continue }
+      if (ch === '-' && line[i + 1] === '-') break
+      out += ch
+    }
+    code.push(line)
+    masked.push(out.padEnd(line.length, ' '))
+  }
+  return { code, masked }
+}
+
+/** Ada 保留字（禁止被识别为对象/类型名）。 */
+const ADA_KEYWORDS = new Set([
+  'abort', 'abs', 'abstract', 'accept', 'access', 'aliased', 'all', 'and', 'array',
+  'at', 'begin', 'body', 'case', 'constant', 'declare', 'delay', 'delta', 'digits',
+  'do', 'else', 'elsif', 'end', 'entry', 'exception', 'exit', 'for', 'function',
+  'generic', 'goto', 'if', 'in', 'interface', 'is', 'limited', 'loop', 'mod', 'new',
+  'not', 'null', 'of', 'or', 'others', 'out', 'overriding', 'package', 'pragma',
+  'private', 'procedure', 'protected', 'raise', 'range', 'record', 'rem', 'renames',
+  'requeue', 'return', 'reverse', 'select', 'separate', 'some', 'subtype', 'synchronized',
+  'tagged', 'task', 'terminate', 'then', 'type', 'until', 'use', 'when', 'while', 'with',
+])
+
+/**
+ * 定位 Ada 声明头的结束行：参数/返回类型可跨行，直到出现 `is` 或 `;`。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 声明起始行索引（0-based）。
+ * @returns {number} 出现 `is`/`;` 的行索引；扫描上限 20 行。
+ */
+function adaHeaderEnd(masked, startIdx) {
+  const limit = Math.min(masked.length, startIdx + 20)
+  for (let i = startIdx; i < limit; i++) {
+    if (/\bis\b/i.test(masked[i]) || masked[i].includes(';')) return i
+  }
+  return startIdx
+}
+
+/**
+ * 定位 `type X is record … end record;` 的结束行。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 声明起始行索引（0-based）。
+ * @returns {number} 含 `end record;` 的行索引（找不到时退回起始行）。
+ */
+function adaRecordEnd(masked, startIdx) {
+  for (let i = startIdx; i < masked.length; i++) {
+    if (/^\s*end\s+record\s*;/i.test(masked[i])) return i
+  }
+  return startIdx
+}
+
+/**
+ * 最近的包/子程序单元名（用于符号 `parent`）。
+ * @param {Array<{kind:string, name?:string}>} stack - 当前块栈。
+ * @returns {string|null} 单元名；无单元时 null。
+ */
+function adaEnclosingUnit(stack) {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const frame = stack[i]
+    if (frame.kind === 'unit' && typeof frame.name === 'string') return frame.name
+  }
+  return null
+}
+
+/**
+ * 提取 Ada 符号：package（spec/body，含嵌套与点分子单元）、
+ * procedure/function（声明单行、body 按 `end` 收尾）、type/subtype、
+ * task/protected type 与包级对象声明。
+ *
+ * 语义边界：`end if/loop/case/record/select/block` 不关闭单元；
+ * 匿名 `declare … begin … end;` 块单独记账，避免其 `end;` 提前关闭外层
+ * 子程序；`generic` 形式参数（`type T is private;`、`with procedure P;`）
+ * 不登记为符号。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractAda(lines) {
+  const { masked } = adaScan(lines)
+  const symbols = []
+  /** @type {Array<{kind:'unit'|'declare', unitType?:'package'|'subprogram', name?:string, symbolIndex?:number, private?:boolean}>} */
+  const stack = []
+  let genericPending = false
+  // record 组件不是包级对象；`type T is record … end record;` 期间禁用对象检测
+  let recordDepth = 0
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (!line) continue
+
+    if (/^declare\b/i.test(line)) {
+      stack.push({ kind: 'declare' })
+      continue
+    }
+    if (/^private$/i.test(line)) {
+      // 包私有部分：其后的声明仍可见于本单元，但不是公开接口
+      for (let j = stack.length - 1; j >= 0; j--) {
+        if (stack[j].kind === 'unit') { stack[j].private = true; break }
+      }
+      continue
+    }
+    if (/^end\b/i.test(line)) {
+      // 内层控制结构（if/loop/case/record/select/block）不关闭单元
+      if (/^end\s+record\b/i.test(line)) recordDepth = Math.max(0, recordDepth - 1)
+      if (/^end\s+(if|loop|case|record|select|block)\b/i.test(line)) continue
+      // 裸 `end;` 关闭的是最近的匿名 declare 块（若有），不关闭外层单元
+      const named = /^end\s+[A-Za-z]/i.test(line)
+      const top = stack[stack.length - 1]
+      if (!named && top && top.kind === 'declare') {
+        stack.pop()
+        continue
+      }
+      // 命名 end 属于单元；防御性清掉其上方残留的 declare
+      while (stack.length > 0 && stack[stack.length - 1].kind === 'declare') stack.pop()
+      const frame = stack.pop()
+      if (frame && frame.kind === 'unit' && typeof frame.symbolIndex === 'number') {
+        symbols[frame.symbolIndex].endLine = i + 1
+      }
+      continue
+    }
+    if (/^generic\b/i.test(line)) {
+      genericPending = true
+      continue
+    }
+    if (/\brecord\b/i.test(line) && !/\bnull\s+record\b/i.test(line)) recordDepth++
+
+    const pkg = /^package\s+(body\s+)?([A-Za-z][\w.]*)\b/i.exec(line)
+    if (pkg) {
+      const headerEnd = adaHeaderEnd(masked, i)
+      const header = masked.slice(i, headerEnd + 1).join(' ')
+      const isBody = Boolean(pkg[1]) || /\bis\b/i.test(header)
+      genericPending = false
+      if (!isBody || /\brenames\b/i.test(header)) continue
+      const parent = adaEnclosingUnit(stack)
+      symbols.push({
+        name: pkg[2],
+        kind: 'class',
+        line: i + 1,
+        endLine: headerEnd + 1,
+        exported: !stack.some(frame => frame.kind === 'unit' && frame.private === true),
+        ...(parent ? { parent } : {}),
+      })
+      stack.push({ kind: 'unit', unitType: 'package', name: pkg[2], symbolIndex: symbols.length - 1 })
+      continue
+    }
+
+    const sub = /^(?:overriding\s+|not\s+overriding\s+)?(procedure|function)\s+([A-Za-z]\w*)\b/i.exec(line)
+    if (sub) {
+      const headerEnd = adaHeaderEnd(masked, i)
+      const headLine = masked[headerEnd]
+      const header = masked.slice(i, headerEnd + 1).join(' ')
+      const parent = adaEnclosingUnit(stack)
+      const exported = !stack.some(frame => frame.kind === 'unit' && frame.private === true)
+      // 表达式函数 `is (…)`、独立体 `is separate` 与 `renames` 没有 end
+      const bodyLike = /\bis\b/i.test(headLine)
+        && !/\bis\s*(\(|separate\b)/i.test(headLine)
+        && !/\brenames\b/i.test(header)
+      genericPending = false
+      if (bodyLike && /\bend\b/i.test(headLine)) {
+        // 单行 body：声明与 end 同一行，无需入栈
+        symbols.push({
+          name: sub[2], kind: 'function', line: i + 1, endLine: headerEnd + 1,
+          exported, ...(parent ? { parent } : {}),
+        })
+        continue
+      }
+      symbols.push({
+        name: sub[2],
+        kind: 'function',
+        line: i + 1,
+        endLine: headerEnd + 1,
+        exported,
+        ...(parent ? { parent } : {}),
+      })
+      if (bodyLike) {
+        stack.push({ kind: 'unit', unitType: 'subprogram', name: sub[2], symbolIndex: symbols.length - 1 })
+      }
+      continue
+    }
+
+    if (genericPending) continue
+
+    const typeMatch = /^(?:task|protected)\s+type\s+([A-Za-z]\w*)\b/i.exec(line)
+      ?? /^type\s+([A-Za-z]\w*)\b/i.exec(line)
+      ?? /^subtype\s+([A-Za-z]\w*)\b/i.exec(line)
+    if (typeMatch) {
+      const headerEnd = adaHeaderEnd(masked, i)
+      const header = masked.slice(i, headerEnd + 1).join(' ')
+      const isRecord = /\brecord\b/i.test(header) && !/\bnull\s+record\b/i.test(header)
+      const endIdx = isRecord ? adaRecordEnd(masked, headerEnd) : headerEnd
+      symbols.push({
+        name: typeMatch[1],
+        kind: 'type',
+        line: i + 1,
+        endLine: endIdx + 1,
+        exported: !stack.some(frame => frame.kind === 'unit' && frame.private === true),
+      })
+      continue
+    }
+
+    // 包级对象声明（常量/变量）；子程序体与 declare 块内的局部对象不登记
+    const innermost = stack[stack.length - 1]
+    const packageLevel = !innermost
+      || (innermost.kind === 'unit' && innermost.unitType === 'package')
+    if (packageLevel && recordDepth === 0) {
+      const object = /^([A-Za-z]\w*)\s*:\s*(?:aliased\s+)?(?:constant\s+)?[A-Za-z]/.exec(line)
+      if (object && !ADA_KEYWORDS.has(object[1].toLowerCase())) {
+        symbols.push({
+          name: object[1],
+          kind: 'variable',
+          line: i + 1,
+          endLine: i + 1,
+          exported: !stack.some(frame => frame.kind === 'unit' && frame.private === true),
+        })
+      }
+    }
+  }
+  // 未闭合单元（截断/异常语法）保守延伸到文件尾
+  for (const frame of stack) {
+    if (frame.kind === 'unit' && typeof frame.symbolIndex === 'number') {
+      symbols[frame.symbolIndex].endLine = lines.length
+    }
+  }
+  return symbols
+}
+
+/**
  * 从源码提取符号（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识（见 schema.js 的 EXTENSION_LANGS）。
@@ -5262,6 +5507,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'vbnet') return extractVbnet(lines)
   if (lang === 'tcl') return extractTcl(lines)
   if (lang === 'fsharp') return extractFsharp(lines)
+  if (lang === 'ada') return extractAda(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

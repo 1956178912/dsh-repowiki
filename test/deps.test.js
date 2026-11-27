@@ -833,3 +833,27 @@ test('C/C++：#include 引号与尖括号都提取，仅引号为相对语义', 
   assert.ok(imports.every(i => i.kind === 'import'))
   assert.deepEqual(extractImports('#include <memory>\n', 'c').map(i => i.specifier), ['memory'])
 })
+
+test('Ada：with/limited with/private with 提取，use 与 generic 形式参数不建边', () => {
+  const code = [
+    'with Ada.Text_IO, Demo.Utils;',
+    'limited with Demo.Other;',
+    'private with Demo.Secret;',
+    '-- with Commented.Out;',
+    'with function Formal (X : Integer) return Integer;',
+    'with procedure Hook;',
+    'use Ada.Text_IO;',
+    '',
+    'procedure Main is',
+    'begin',
+    '   null;',
+    'end Main;',
+  ].join('\n')
+  const imports = extractImports(code, 'ada')
+  assert.deepEqual(imports.map(item => [item.line, item.specifier, item.relative]), [
+    [1, 'Ada.Text_IO', false],
+    [1, 'Demo.Utils', false],
+    [2, 'Demo.Other', false],
+    [3, 'Demo.Secret', false],
+  ])
+})

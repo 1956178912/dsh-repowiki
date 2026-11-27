@@ -232,6 +232,8 @@ export const EXTENSION_LANGS = {
   fs: 'fsharp',
   fsx: 'fsharp',
   fsi: 'fsharp',
+  adb: 'ada',
+  ads: 'ada',
   c: 'c',
   h: 'c',
   cc: 'cpp',

@@ -1968,3 +1968,41 @@ test('索引遍历：目录列举有界预取，结果与串行一致', async ()
   assert.ok(peak > 1, '兄弟目录应并发列举（预取生效）')
   assert.ok(peak <= 8, '预取并发不超过上限')
 })
+
+test('Ada：with 单元名大小写不敏感，spec 优先、body 兜底', async () => {
+  const dir = makeProject({
+    'demo-utils.ads': 'package Demo.Utils is\n   procedure Hello;\nend Demo.Utils;\n',
+    'demo-utils.adb': 'package body Demo.Utils is\n   procedure Hello is\n   begin\n      null;\n   end Hello;\nend Demo.Utils;\n',
+    'solo.adb': 'package body Solo is\nend Solo;\n',
+    'main.adb': [
+      'with demo.utils;',
+      'with Solo;',
+      'with Ada.Text_IO;',
+      'procedure Main is',
+      'begin',
+      '   null;',
+      'end Main;',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { ada: 4 })
+  const edges = doc.edges.filter(edge => edge.from === 'main.adb')
+  assert.deepEqual(edges.map(edge => [edge.line, edge.to]).sort(), [
+    [1, 'demo-utils.ads'],
+    [2, 'solo.adb'],
+  ], 'spec 优先、仅有 body 时回退 body，外部 Ada.Text_IO 不建边')
+})
+
+test('Ada：点分子单元支持连字符与目录两种文件名约定', async () => {
+  const dir = makeProject({
+    'src/demo-utils.ads': 'package Demo.Utils is\nend Demo.Utils;\n',
+    'src/demo/io.ads': 'package Demo.IO is\nend Demo.IO;\n',
+    'app.adb': 'with Demo.Utils;\nwith Demo.IO;\nprocedure App is\nbegin\n   null;\nend App;\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edges = doc.edges.filter(edge => edge.from === 'app.adb')
+  assert.deepEqual(edges.map(edge => [edge.line, edge.to]).sort(), [
+    [1, 'src/demo-utils.ads'],
+    [2, 'src/demo/io.ads'],
+  ])
+})

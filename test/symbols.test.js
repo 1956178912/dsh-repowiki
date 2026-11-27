@@ -2185,3 +2185,103 @@ test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   ])
   assert.ok(symbols.every(s => typeof s.endLine === 'number' && s.endLine >= s.line))
 })
+
+test('Ada：package spec/body、record、子程序声明与私有段', () => {
+  const code = [
+    'package body Demo.Stack is',
+    '',
+    '   type Stack_Type is record',
+    '      Top : Integer := 0;',
+    '      Items : array (1 .. 10) of Integer;',
+    '   end record;',
+    '',
+    '   function Is_Empty (S : Stack_Type) return Boolean is',
+    '   begin',
+    '      if S.Top = 0 then',
+    '         return True;',
+    '      end if;',
+    '      return False;',
+    '   end Is_Empty;',
+    '',
+    '   procedure Push (S : in out Stack_Type; Value : Integer) is',
+    '      Temp : Integer := Value;',
+    '   begin',
+    '      declare',
+    '         Inner : Integer := 0;',
+    '      begin',
+    '         S.Top := S.Top + Inner;',
+    '      end;',
+    '      S.Items (S.Top) := Temp;',
+    '   end Push;',
+    '',
+    '   procedure Pop (S : in out Stack_Type);',
+    '',
+    'private',
+    '   Hidden : Integer := 0;',
+    '',
+    'end Demo.Stack;',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ada')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Demo.Stack').kind, 'class')
+  assert.deepEqual([byName.get('Demo.Stack').line, byName.get('Demo.Stack').endLine], [1, 32])
+  assert.equal(byName.get('Stack_Type').kind, 'type')
+  assert.deepEqual([byName.get('Stack_Type').line, byName.get('Stack_Type').endLine], [3, 6])
+  assert.equal(byName.get('Is_Empty').kind, 'function')
+  assert.deepEqual([byName.get('Is_Empty').line, byName.get('Is_Empty').endLine], [8, 14])
+  assert.equal(byName.get('Push').kind, 'function')
+  assert.deepEqual([byName.get('Push').line, byName.get('Push').endLine], [16, 25])
+  assert.equal(byName.get('Pop').kind, 'function')
+  assert.deepEqual([byName.get('Pop').line, byName.get('Pop').endLine], [27, 27])
+  assert.equal(byName.get('Hidden').kind, 'variable')
+  assert.equal(byName.get('Hidden').exported, false)
+  // record 组件、局部变量、declare 块变量不登记
+  assert.equal(byName.has('Top'), false)
+  assert.equal(byName.has('Items'), false)
+  assert.equal(byName.has('Temp'), false)
+  assert.equal(byName.has('Inner'), false)
+})
+
+test('Ada：generic 形式参数不登记，嵌套包带 parent', () => {
+  const code = [
+    'generic',
+    '   type Element is private;',
+    '   with function Copy (X : Element) return Element;',
+    'package Demo.Container is',
+    '   procedure Add (X : Element);',
+    '   package Inner is',
+    '      function Size return Natural;',
+    '   end Inner;',
+    'end Demo.Container;',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ada')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.has('Element'), false, 'generic 形式类型不登记')
+  assert.equal(byName.get('Demo.Container').kind, 'class')
+  assert.deepEqual([byName.get('Demo.Container').line, byName.get('Demo.Container').endLine], [4, 9])
+  assert.equal(byName.get('Add').parent, 'Demo.Container')
+  assert.equal(byName.get('Inner').kind, 'class')
+  assert.equal(byName.get('Inner').parent, 'Demo.Container')
+  assert.deepEqual([byName.get('Inner').line, byName.get('Inner').endLine], [6, 8])
+  assert.equal(byName.get('Size').parent, 'Inner')
+})
+
+test('Ada：注释与字符串中的 end/private 不干扰范围', () => {
+  const code = [
+    'package Demo.Notes is',
+    '   -- end Demo.Notes;',
+    '   Msg : constant String := "end Demo.Notes;";',
+    '   procedure Show is',
+    '   begin',
+    '      Put_Line ("a ""quoted"" end Demo.Notes;");',
+    '   end Show;',
+    'end Demo.Notes;',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ada')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.deepEqual([byName.get('Demo.Notes').line, byName.get('Demo.Notes').endLine], [1, 8])
+  assert.deepEqual([byName.get('Show').line, byName.get('Show').endLine], [4, 7])
+  assert.equal(byName.get('Msg').kind, 'variable')
+})

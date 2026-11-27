@@ -3,6 +3,26 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.234.0] - 2026-11-28
+
+- **Ada 支持（第 39 种语言）**：`.ads`/`.adb` 进入索引。`package`/
+  `package body`（class；嵌套包与点分子单元带 `parent`）、`procedure`/
+  `function`（声明到声明头结束，body 按 `end [Name];`；表达式函数
+  `is (…)`、`is separate` 与 `renames` 不展开）、`type`/`subtype`/
+  `task type`/`protected type`（type；record 覆盖到 `end record;`）与
+  包级对象声明；`private` 段内声明非导出。`--` 注释与双引号字符串
+  （`""` 转义）屏蔽；`end if/loop/case/record/select/block` 不关闭单元，
+  匿名 `declare … begin … end;` 单独记账，其 `end;` 不会提前关闭外层
+  子程序。
+- **Ada `with` 依赖边**：`with`/`limited with`/`private with` 单元名
+  大小写不敏感，经 GNAT 文件名构建的单元表解析（连字符
+  `Parent-Child.ads` 与目录形式 `src/parent/child.ads` 都映射为
+  `Parent.Child`），spec 优先、仅有 body 时回退；`use` 子句与 generic
+  形式子程序（`with function …`）不建边，外部标准库/第三方 crate 不建边。
+- **测试**：734 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖包、record、
+  子程序声明/实现、private 段、declare 块、generic 形式参数、屏蔽、
+  单元名解析与点分子单元命名约定。
+
 ## [0.233.0] - 2026-11-28
 
 - **`repowiki-status` 对照架构基线**：工具用与 `verify:arch` 相同的

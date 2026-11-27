@@ -60,6 +60,7 @@
 | VB.NET | `Namespace`/`Class`/`Module`/`Structure`/`Interface`/`Enum`（类型范围按 `End <type>` 配平）、`Sub`/`Function`/`Property`/`Event`（接口与 `MustOverride` 声明止于本行，`Property` 块覆盖 `Get`/`Set`）；构造器为 `Sub New`；修饰符栈；`Private`/`Friend`/`Protected` 非导出；`'`、`REM` 与引号字符串屏蔽 | `Imports`（含 `Alias = …`）与 `Inherits`/`Implements` 经点分路径解析（精确 → 简单名后缀 → 命名空间后缀），根命名空间不在目录布局也能命中；外部程序集不建边 |
 | Tcl | `proc name {args} {…}`（function；`::Foo::bar` 以 `Foo` 为 `parent`）、`namespace eval Foo {…}` 与 TclOO `oo::class create Foo {…}`（class）、类体内 `method`/`constructor`/`destructor`（method + `parent`）；块范围按整行花括号净值配平；行首 `#`、`; #` 尾注释与双引号字符串屏蔽 | `source` 相对路径或 `.tcl` 文件先项目根、再脚本目录，补 `.tcl`；`source [file join …]` 等动态形式不建边 |
 | F# | `namespace`/`module`（class，嵌套模块带命名空间 `parent`）、`type`（显式 `class … end`/构造参数 → class，显式 `interface` → interface，record/union/缩写 → type）、`member`/`abstract member`/`override`（method + `parent`）、`let`（带参数 function，否则 variable）；`end` 或缩进块定范围；`//`、可嵌套 `(* *)`、引号/三引号字符串屏蔽 | `open Foo.Bar`/`open type Foo.Bar` 经命名空间/模块映射解析（精确 → 逐段前缀回退），并登记 `Parent.Module` 组合名；外部命名空间不建边 |
+| Ada | `package`/`package body`（class，嵌套包与点分子单元带 `parent`）、`procedure`/`function`（声明按声明头收尾，body 按 `end [Name];` 收尾；表达式函数 `is (…)`、`is separate` 与 `renames` 不展开）、`type`/`subtype`/`task type`/`protected type`（type，`record … end record;` 覆盖整体）、包级对象声明（variable）；`private` 段内声明与含 `private` 段的嵌套单元为非导出；`--` 注释与双引号字符串（`""` 转义）屏蔽；`end if/loop/case/record/select/block` 不关闭单元，匿名 `declare … begin … end;` 单独记账；generic 形式参数（`type T is private;`、`with function …;`）不登记 | `with`/`limited with`/`private with` 单元名大小写不敏感，GNAT 连字符文件名（`Parent-Child.ads`）与任意源根下的目录形式（`src/parent/child.ads`）都映射到点分单元名；同一单元 spec 优先、仅有 body 时回退；`use` 不建边，generic 形式子程序与外部标准库/第三方 crate 不建边 |
 | Clojure | `ns`（class）、`defn`/`defn-`/`defmacro`/`defmacro-`/`defmulti`/`defmethod`（function）、`def`/`defonce`（variable）、`defrecord`/`deftype`/`defprotocol`/`definterface`（class）；`^:private` 与 `defn-`/`defmacro-` 非导出；`;` 注释、字符串屏蔽、`(comment …)` 整体跳过；形式范围按圆/方/花括号配平 | `(:require …)`/`(:use …)` 的 `[ns.name …]` 命名空间点分换算路径，在每个 `src/`/`test/` 根与项目根下尝试同类扩展优先的 `.clj`/`.cljc`/`.cljs`；外部命名空间不建边；`deps.edn` `:deps` 与 `project.clj` `:dependencies` 提供依赖计数/版本与技术映射 |
 | Solidity | `contract`/`library`/`interface`（含 `abstract contract`）容器；成员 `function`/`constructor`/`receive`/`fallback`/`modifier`/`event`/`error`/`struct`/`enum`/`type X is`（method/type/class，带 `parent`）；文件级函数与类型；`private`/`internal` 非导出；`//`、`/* */` 与字符串屏蔽；范围按花括号配平（`;` 声明单行） | 相对 `import`（`import "…"`、`import {A} from "…"`、`import * as X from "…"`）按引用文件目录解析并补 `.sol`；npm/`hardhat/…` 等外部路径不建边；`foundry.toml` 标记 Foundry 工具链 |
 | Erlang | `-module`、`-record`、`-type`/`-opaque`、`-define` 宏、顶层函数（多子句、`when` 守卫、跨行签名）；`-export([f/1])` 决定可见性（默认私有，同名不同 arity 合并），`-module` 自身公开；缩进体与匿名函数不登记；`%` 注释、字符串、引号原子与 `$x` 字符字面量屏蔽 | `-include("…")` 先按引用文件目录，再经每个 `src/`/`include/` 根与项目根（原路径与补 `.hrl`）；`-include_lib("app/…")` 额外尝试剥离首段应用名的路径；外部头文件不建边；`rebar.config` 的 `{deps, …}` 提供依赖计数与 rebar 技术映射 |
@@ -195,6 +196,11 @@ Tcl 为轻量行级解析：只识别行首 `proc`/`namespace eval`/`oo::class c
 `method` 等形式（`{*}` 展开、动态 proc 名与 `interp alias` 不登记）；
 proc body 内嵌套 proc 会带外层命名空间作为 `parent`；`source` 只识别
 字面量路径，`$dir`/`[file join]` 拼接不建边。
+Ada 为轻量行级解析：单元名以文件名（GNAT 约定，含连字符与目录两种形式）
+为准，不从 `package` 声明反推；`entry`、`task body`/`protected body` 内的
+accept 与 entry 不产符号；记录变体部与 `declare` 块的复杂嵌套按关键字
+保守配平（`end if/loop/case/record/select/block` 不关闭单元）；generic
+形式参数不登记、也不建边；`with` 外部标准库/第三方 crate 不建边。
 
 ## 升级检查清单
 

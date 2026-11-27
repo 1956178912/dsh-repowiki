@@ -5,6 +5,37 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.234.0] - 2026-11-28
+
+### Added
+
+- **Ada indexing (39th language)**: `.ads`/`.adb` files are now indexed.
+  Packages (`package`/`package body`, nested packages and dotted child
+  units keep their owner as `parent`), `procedure`/`function`
+  (declarations end at the header, bodies at `end [Name];`; expression
+  functions `is (…)`, `is separate` and `renames` are not expanded),
+  `type`/`subtype`/`task type`/`protected type` (records span
+  `end record;`), and package-level object declarations. Declarations
+  inside a `private` part are non-exported. `--` comments and
+  double-quoted strings (`""` escapes) are masked; `end
+  if/loop/case/record/select/block` never closes a unit, and anonymous
+  `declare … begin … end;` blocks are tracked separately so their `end;`
+  cannot close the enclosing subprogram.
+- **Ada `with` edges**: `with`, `limited with` and `private with` unit
+  names resolve case-insensitively through a unit map built from GNAT
+  file names (dashed `Parent-Child.ads` and directory-form
+  `src/parent/child.ads` both map to `Parent.Child`), preferring the spec
+  over the body and falling back to a body-only unit; `use` clauses and
+  generic formal subprograms (`with function …`) create no edges, and
+  external standard-library crates stay edge-free.
+
+### Tests
+
+- 734 cases pass (LANG=en and LANG=zh); new coverage for packages,
+  records, subprogram declarations vs bodies, private parts, declare
+  blocks, generic formal parts, masking, unit-name resolution and
+  dotted child-unit conventions.
+
 ## [0.233.0] - 2026-11-28
 
 ### Added

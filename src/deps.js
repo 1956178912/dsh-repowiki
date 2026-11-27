@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan, vbnetScan, tclScan, fsharpScan,
+  nixScan, vbnetScan, tclScan, fsharpScan, adaScan,
 } from './symbols.js'
 
 /**
@@ -1517,6 +1517,32 @@ function extractDartImports(lines) {
 }
 
 /**
+ * 提取 Ada 依赖：`with A, B.C;`、`limited with`、`private with`。
+ *
+ * `use` 是可见性指令而非导入（合法代码必先 `with`），不建边；generic
+ * 形式参数（`with procedure P;`、`with function F ...;`）不是单元依赖，
+ * 按首关键字排除。单元名保持原始大小写，解析时统一小写。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractAdaImports(lines) {
+  const result = []
+  const { masked } = adaScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const m = /^\s*(?:limited\s+|private\s+)?with\s+([^;]+)/i.exec(masked[i])
+    if (!m) continue
+    for (const part of m[1].split(',')) {
+      const name = part.trim()
+      if (!name) continue
+      if (/^(procedure|function|package|type)\b/i.test(name)) continue
+      if (!/^[A-Za-z][\w.]*$/.test(name)) continue
+      result.push({ specifier: name, line: i + 1, kind: 'import', relative: false, imported: [] })
+    }
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -1563,6 +1589,7 @@ export function extractImports(code, lang) {
   if (lang === 'vbnet') return extractVbnetImports(lines)
   if (lang === 'tcl') return extractTclImports(lines)
   if (lang === 'fsharp') return extractFsharpImports(lines)
+  if (lang === 'ada') return extractAdaImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }
