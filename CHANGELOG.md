@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.216.0] - 2026-11-28
+
+### Added
+
+- **Index scale/performance guard**: every test run indexes a synthetic
+  300-file TypeScript repository and asserts `stats.files`, a symbol-count
+  floor and `stats.edges`, plus a generous 5s ceiling. An extractor
+  regression that silently drops symbols, loses import edges or
+  accidentally introduces a quadratic path now fails CI immediately
+  instead of surfacing later.
+
+### Tests
+
+- 632 cases pass (LANG=en and LANG=zh); the guard adds ~35ms locally and
+  keeps the threshold far above real runtime to avoid flaky machines.
+
 ## [0.215.0] - 2026-11-28
 
 ### Added

@@ -1704,6 +1704,27 @@ test('HCL：module source 解析到模块代表文件与 provider 技术栈', as
   assert.ok(doc.stack.technologies.some(t => t.name === 'AWS' && t.ecosystem === 'terraform'))
 })
 
+test('规模与性能回归：300 文件合成仓库', async () => {
+  const files = {}
+  for (let i = 0; i < 300; i++) {
+    const next = (i + 1) % 300
+    files[`src/mod${i % 10}/f${i}.ts`] = [
+      `import { f${next} } from '../mod${next % 10}/f${next}'`,
+      `export function fn${i}() { return ${i} }`,
+      `export class C${i} { run() { return ${i} } }`,
+      `export const v${i} = ${i}`,
+    ].join('\n')
+  }
+  const dir = makeProject(files)
+  const started = Date.now()
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const elapsed = Date.now() - started
+  assert.equal(doc.stats.files, 300)
+  assert.ok(doc.stats.symbols >= 900, `符号数异常：${doc.stats.symbols}`)
+  assert.equal(doc.stats.edges, 300, '每个文件一条 import 边')
+  assert.ok(elapsed < 5000, `索引耗时异常：${elapsed}ms`)
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',
