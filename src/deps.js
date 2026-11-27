@@ -662,6 +662,60 @@ function extractLuaImports(lines) {
 }
 
 /**
+ * 掩码一行 Zig 代码：注释截断、多行字符串截断，字符串/字符字面量内容
+ * 替换为空格（保留引号与列位置），用于在代码区定位 `@import`。
+ * @param {string} raw - 源码行。
+ * @returns {{masked:string, original:string}} 掩码行与原行。
+ */
+function maskZigLine(raw) {
+  let masked = ''
+  let quote = null
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+    if (quote) {
+      if (ch === '\\') { masked += '  '; i++; continue }
+      if (ch === quote) { quote = null; masked += ch; continue }
+      masked += ' '
+      continue
+    }
+    if (ch === '/' && raw[i + 1] === '/') break
+    if (ch === '\\' && raw[i + 1] === '\\') break
+    if (ch === '"' || ch === "'") { quote = ch; masked += ch; continue }
+    masked += ch
+  }
+  return { masked, original: raw }
+}
+
+/**
+ * 提取 Zig 的 `@import("x.zig")` 引用。
+ * `@cImport`/`@cInclude` 是 C 头文件桥接，不指向索引内文件，不提取。
+ * specifier 保持原样（相对当前文件的路径由解析层换算）。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractZigImports(lines) {
+  const result = []
+  for (let i = 0; i < lines.length; i++) {
+    const { masked, original } = maskZigLine(lines[i])
+    const re = /@import\s*\(\s*/g
+    let match
+    while ((match = re.exec(masked)) !== null) {
+      const lit = /^"((?:[^"\\]|\\.)*)"/.exec(original.slice(match.index + match[0].length))
+      if (!lit) continue
+      const specifier = lit[1].replace(/\\(["\\])/g, '$1')
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: specifier.endsWith('.zig'),
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -782,6 +836,7 @@ export function extractImports(code, lang) {
   if (lang === 'dart') return extractDartImports(lines)
   if (lang === 'elixir') return extractElixirImports(lines)
   if (lang === 'lua') return extractLuaImports(lines)
+  if (lang === 'zig') return extractZigImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

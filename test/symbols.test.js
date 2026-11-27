@@ -892,6 +892,86 @@ test('Lua：函数/方法/局部函数/模块变量与注释/长字符串', () =
   assert.ok(!byName.has('fake'), '长字符串不产出符号')
 })
 
+test('Zig：容器类型、成员方法、测试块与注释/字符串屏蔽', () => {
+  const code = [
+    'const std = @import("std");',
+    'const builtin = @import("builtin");',
+    'pub const Point = struct {',
+    '    x: i32,',
+    '    y: i32,',
+    '',
+    '    pub fn init(x: i32, y: i32) Point {',
+    '        return .{ .x = x, .y = y };',
+    '    }',
+    '',
+    '    const Self = @This();',
+    '',
+    '    fn hidden() void {}',
+    '};',
+    '',
+    'pub const Color = enum(u8) {',
+    '    red,',
+    '    green,',
+    '',
+    '    pub fn code(self: Color) u8 {',
+    '        return @intFromEnum(self);',
+    '    }',
+    '};',
+    '',
+    'pub const Value = union(enum) {',
+    '    int: i64,',
+    '    float: f64,',
+    '};',
+    '',
+    '// const commented = struct {};',
+    '/// doc comment',
+    'pub fn main() !void {',
+    '    const unused = "fake { } // not a comment";',
+    '    _ = unused;',
+    '}',
+    '',
+    'test "parses points" {',
+    '    try std.testing.expect(true);',
+    '}',
+    '',
+    'extern fn native_add(a: i32, b: i32) i32;',
+    'const MULTI =',
+    '    \\\\multi',
+    '    \\\\line',
+    ';',
+    'const after = 1;',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'zig')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.ok(!byName.has('std') && !byName.has('builtin'), '@import 绑定不是符号')
+  assert.ok(!byName.has('Self'), '@This 绑定不是符号')
+  assert.equal(byName.get('Point').kind, 'class')
+  assert.equal(byName.get('Point').exported, true)
+  assert.equal(byName.get('Point').endLine, 14)
+  assert.equal(byName.get('init').kind, 'method')
+  assert.equal(byName.get('init').parent, 'Point')
+  assert.equal(byName.get('init').endLine, 9)
+  assert.equal(byName.get('hidden').parent, 'Point')
+  assert.equal(byName.get('hidden').exported, false, '无 pub 的成员非导出')
+  assert.equal(byName.get('hidden').endLine, 13, '单行块体范围正确')
+  assert.equal(byName.get('Color').kind, 'class')
+  assert.equal(byName.get('code').parent, 'Color')
+  assert.equal(byName.get('code').endLine, 22)
+  assert.equal(byName.get('Value').kind, 'class', 'union(enum) 识别为类型')
+  assert.equal(byName.get('main').kind, 'function')
+  assert.equal(byName.get('main').exported, true)
+  assert.equal(byName.get('main').endLine, 35)
+  assert.equal(byName.get('parses points').exported, false)
+  assert.equal(byName.get('parses points').endLine, 39)
+  assert.equal(byName.get('native_add').endLine, 41, 'extern 原型为单行符号')
+  assert.equal(byName.get('MULTI').kind, 'variable')
+  assert.equal(byName.get('after').line, 46)
+  assert.ok(!byName.has('unused'), '函数体内局部量不登记')
+  assert.ok(!byName.has('commented'), '注释不产出符号')
+  assert.ok(!byName.has('x') && !byName.has('y'), '结构体字段不登记为变量')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

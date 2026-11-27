@@ -338,6 +338,7 @@ const LANGUAGE_LABELS = {
   dart: 'Dart',
   elixir: 'Elixir',
   lua: 'Lua',
+  zig: 'Zig',
   c: 'C',
   cpp: 'C++',
 }

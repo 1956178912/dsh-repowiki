@@ -43,6 +43,7 @@
 | Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`package:<本仓库 pubspec 名>/x.dart` 解析到对应包的 `lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
 | Elixir | `defmodule`（嵌套记录完整 `Outer.Inner`）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`；私有形式标记非导出 | `alias` / `import` / `require` / `use` 经 `defmodule` 模块名映射到声明文件（含 `alias A.{B, C}` 与 `as:`）；外部模块不建边；根与 `apps/*/mix.exs` 的 `app: :name` / 依赖元组计入 mix 项目名（根清单）、依赖计数与技术栈（嵌套清单合并，来源可追溯）；`.exs`（测试/脚本/config）作为源码索引，`mix.exs` 仅作清单 |
 | Lua | `local M = {}` 模块表、`function` / `local function`、`M.foo` / `M:foo`（归一为 method + parent）、`M.foo = function` 赋值；`local` 形式非导出，函数体内局部变量不登记 | `require "a.b"` / `require([[a.b]])` 不支持（仅引号形式）→ 点分名换算路径，经每个 `lua/` 根与项目根匹配 `a/b.lua` / `a/b/init.lua`；外部模块不建边 |
+| Zig | `const Foo = struct/enum/union/opaque`（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn` / `extern fn` / `export fn`、具名 `test "…"` 块、顶层常量与变量；容器成员带 `parent`，`pub` 决定导出；`@import`/`@cImport`/`@This` 模块别名不登记 | `@import("x.zig")` 相对引用文件所在目录归一解析并限制在项目内；`std`/`builtin`/`root` 与构建注入的模块名不建边；`@cImport`/`@cInclude` 不提取 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -77,7 +78,12 @@ Dart 约定标记私有。Lua 为轻量行级解析：块范围按 `function/if/
 宏与条件编译，不解析多行模板参数、函数指针声明与运算符重载；类内方法
 归属依赖类型块的括号配平，`#define` 生成的声明不会产出符号；`#include`
 的尖括号形式只按仓库内 `include`/`src`/`inc` 根推断 `-I`，仓库外或
-生成的头文件搜索路径不解析。
+生成的头文件搜索路径不解析。Zig 为轻量行级解析：块范围按花括号配平，
+`//`/`///`/`//!` 注释与 `\\` 多行字符串行在匹配前屏蔽（Zig 无块注释）；
+`comptime` 块与函数体内的声明不登记，匿名 `test {` 不产符号，
+`@import` 绑定（`const std = @import("std")`）视为模块别名而非常量；
+`@import` 参数必须是字符串字面量，构建期生成的模块名与外部包不建边；
+`build.zig.zon` 只统计 `dependencies` 的直接子键，不解析嵌套依赖图。
 
 ## 升级检查清单
 

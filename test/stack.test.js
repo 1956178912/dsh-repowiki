@@ -231,6 +231,39 @@ test('build.sbt：libraryDependencies 坐标、groupId 兜底与项目名', () =
   assert.ok(info.technologies.every(t => t.ecosystem === 'sbt'))
 })
 
+test('build.zig.zon：项目名/版本/依赖直系子键计数', () => {
+  const zon = [
+    '.{',
+    '    .name = .demo_app,',
+    '    .version = "0.3.1",',
+    '    .fingerprint = 0x1234,',
+    '    .dependencies = .{',
+    '        .zap = .{',
+    '            .url = "git+https://github.com/zigzap/zap#v0.9.0",',
+    '            .hash = "zap-123",',
+    '        },',
+    '        .known_folders = .{',
+    '            .path = "../known-folders",',
+    '        },',
+    '        // .commented = .{ .path = "../x" },',
+    '    },',
+    '    .paths = .{ "", "build.zig", "src" },',
+    '}',
+  ].join('\n')
+  const info = detectStack({ 'build.zig.zon': zon })
+  assert.equal(info.projectName, 'demo_app')
+  assert.equal(info.projectVersion, '0.3.1')
+  assert.equal(info.dependencyCounts.zig, 2, '只数 dependencies 的直接子键')
+})
+
+test('build.zig.zon：旧版字符串项目名', () => {
+  const zon = '.{ .name = "old_app", .version = "1.0.0", .dependencies = .{ .foo = .{} } }'
+  const info = detectStack({ 'build.zig.zon': zon })
+  assert.equal(info.projectName, 'old_app')
+  assert.equal(info.projectVersion, '1.0.0')
+  assert.equal(info.dependencyCounts.zig, 1)
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

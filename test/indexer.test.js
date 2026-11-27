@@ -1245,6 +1245,51 @@ test('Lua：require 解析 lua/ 根与 init.lua，符号进入索引', async () 
   assert.ok(util.symbols.some(s => s.name === 'trim' && s.kind === 'method' && s.parent === 'U'))
 })
 
+test('Zig：@import 相对当前文件解析与 build.zig.zon 技术栈', async () => {
+  const dir = makeProject({
+    'build.zig.zon': [
+      '.{',
+      '    .name = .demo,',
+      '    .version = "0.1.0",',
+      '    .dependencies = .{',
+      '        .zap = .{ .url = "git+https://example.com/zap" },',
+      '    },',
+      '}',
+    ].join('\n'),
+    'build.zig': 'const std = @import("std");\n',
+    'src/main.zig': [
+      'const std = @import("std");',
+      'const util = @import("util.zig");',
+      'const model = @import("model/mod.zig");',
+      'pub fn main() void {}',
+      'test "smoke" { try std.testing.expect(true); }',
+    ].join('\n'),
+    'src/util.zig': 'pub fn trim(s: []const u8) []const u8 { return s; }\n',
+    'src/model/mod.zig': 'pub const Model = struct {};\n',
+    'src/outside.zig': 'const up = @import("../src/util.zig");\nconst ext = @import("builtin");\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { zig: 5 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/main.zig', 'src/util.zig')?.line, 2, '同目录相对路径')
+  assert.equal(edge('src/main.zig', 'src/model/mod.zig')?.line, 3, '子目录相对路径')
+  assert.equal(edge('src/outside.zig', 'src/util.zig')?.line, 1, '上级相对路径归一')
+  assert.equal(doc.edges.filter(e => e.from === 'src/outside.zig').length, 1, '外部模块不建边')
+  assert.equal(doc.edges.length, 3)
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.projectVersion, '0.1.0')
+  assert.equal(doc.stack.dependencyCounts.zig, 1)
+
+  const util = doc.files.find(f => f.path === 'src/util.zig')
+  assert.ok(util.symbols.some(s => s.name === 'trim' && s.kind === 'function' && s.exported))
+  const main = doc.files.find(f => f.path === 'src/main.zig')
+  assert.ok(main.symbols.some(s => s.name === 'smoke' && s.kind === 'function'))
+  const model = doc.files.find(f => f.path === 'src/model/mod.zig')
+  assert.ok(model.symbols.some(s => s.name === 'Model' && s.kind === 'class'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

@@ -370,6 +370,31 @@ test('Lua：require 字符串与括号形式，注释不提取', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
 })
 
+test('Zig：@import 字符串、注释与字符串内伪引用', () => {
+  const code = [
+    'const std = @import("std");',
+    'const util = @import("util.zig");',
+    'const nested = @import("nested/mod.zig");',
+    '// @import("commented.zig")',
+    '/// @import("doc.zig")',
+    'const text = "@import(\\"fake.zig\\")";',
+    'const builtin = @import("builtin");',
+    'pub fn main() void {',
+    '    _ = @import("dynamic.zig");',
+    '}',
+    'const c = @cImport({ @cInclude("stdio.h"); });',
+  ].join('\n')
+  const imports = extractImports(code, 'zig')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['std', 1, false],
+    ['util.zig', 2, true],
+    ['nested/mod.zig', 3, true],
+    ['builtin', 7, false],
+    ['dynamic.zig', 9, true],
+  ])
+  assert.ok(!imports.some(i => i.specifier.endsWith('.h')), '@cImport/@cInclude 不提取')
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

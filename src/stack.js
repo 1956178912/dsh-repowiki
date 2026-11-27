@@ -525,6 +525,69 @@ function mixAppName(text) {
 }
 
 /**
+ * 扫描 ZON（Zig Object Notation）某个 `.{...}` 段的直接子键（depth 1）。
+ * 跳过字符串与 `//` 行注释，嵌套对象里的 `.url`/`.hash` 不会被误收集。
+ * @param {string} text - ZON 内容。
+ * @param {string} section - 段名（如 dependencies）。
+ * @returns {string[]} 直接子键名（按出现顺序）。
+ */
+function zonSectionKeys(text, section) {
+  const marker = new RegExp(`\\.${section}\\s*=\\s*\\.\\{`).exec(text)
+  if (!marker) return []
+  const keys = []
+  let depth = 1
+  let i = marker.index + marker[0].length
+  while (i < text.length && depth > 0) {
+    const ch = text[i]
+    if (ch === '"') {
+      i++
+      while (i < text.length && text[i] !== '"') {
+        if (text[i] === '\\') i++
+        i++
+      }
+      i++
+      continue
+    }
+    if (ch === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++
+      continue
+    }
+    if (ch === '\\' && text[i + 1] === '\\') {
+      while (i < text.length && text[i] !== '\n') i++
+      continue
+    }
+    if (ch === '{') { depth++; i++; continue }
+    if (ch === '}') { depth--; i++; continue }
+    if (depth === 1 && ch === '.') {
+      const key = /^\.([A-Za-z_]\w*)\s*=/.exec(text.slice(i, i + 128))
+      if (key) {
+        keys.push(key[1])
+        i += key[0].length
+        continue
+      }
+    }
+    i++
+  }
+  return keys
+}
+
+/**
+ * 从 build.zig.zon 读取项目名、版本与依赖名。
+ * `name` 兼容 Zig 0.14+ 的枚举字面量（`.foo`）与旧版字符串（`"foo"`）。
+ * @param {string} text - build.zig.zon 内容。
+ * @returns {{name:string|undefined, version:string|undefined, dependencies:string[]}} 元数据。
+ */
+function zigZonInfo(text) {
+  const name = /\.name\s*=\s*(?:\.([A-Za-z_]\w*)|"([^"]+)")/.exec(text)
+  const version = /\.version\s*=\s*"([^"]+)"/.exec(text)
+  return {
+    name: name ? (name[1] ?? name[2]) : undefined,
+    version: version ? version[1] : undefined,
+    dependencies: zonSectionKeys(text, 'dependencies'),
+  }
+}
+
+/**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
  * @returns {{group:string, artifact:string, version?:string}[]} 依赖列表。
@@ -688,6 +751,11 @@ export function detectStack(manifests) {
         const name = MIX_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'mix', source: path })
       }
+    } else if (path === 'build.zig.zon') {
+      const zon = zigZonInfo(text)
+      info.dependencyCounts.zig = zon.dependencies.length
+      if (!info.projectName && zon.name) info.projectName = zon.name
+      if (!info.projectVersion && zon.version) info.projectVersion = zon.version
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)
       // 根清单 + 嵌套子项目清单：依赖按出现次数累加，技术名在末尾统一去重

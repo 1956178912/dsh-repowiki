@@ -5,6 +5,35 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.183.0] - 2026-11-28
+
+### Added
+
+- **Zig indexing (18th language)**: `.zig` files produce container types
+  (`const Foo = struct/enum/union/opaque`, including `pub`, `extern`,
+  `packed` and `union(enum)` forms), top-level `fn` / `extern fn` / `export
+  fn` prototypes and bodies, named `test "…"` blocks, and top-level
+  constants and variables. Container members carry their owning type as
+  `parent` and are only read at the container's own nesting level, so
+  function-local constants never become symbols. `@import` / `@cImport` /
+  `@This` bindings are module aliases, not business symbols, and are
+  skipped; `//`, `///`, `//!` comments and `\\` multiline-string lines are
+  masked before block matching. `@import("x.zig")` resolves against the
+  importing file's directory (normalized and clamped to the project root);
+  package imports (`std`, `builtin`, `root`, build-injected module names)
+  stay edge-free. `build.zig.zon` contributes the project name, version and
+  direct `dependencies` keys (enum-literal and quoted names). Prompt fences
+  and the panel language filter know `zig`.
+
+### Tests
+
+- 570 cases pass (LANG=en and LANG=zh); new coverage pins container/member
+  ownership, single-line block ranges, `extern fn` prototypes, comment and
+  multiline-string shielding, `@import` extraction with in-string decoys,
+  `build.zig.zon` dependency counting and an indexer fixture proving
+  same-directory, nested and `../`-relative resolution with `std`/`builtin`
+  staying edge-free.
+
 ## [0.182.0] - 2026-11-28
 
 ### Added

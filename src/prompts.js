@@ -164,6 +164,7 @@ function fenceLang(lang) {
     case 'dart': return 'dart'
     case 'elixir': return 'elixir'
     case 'lua': return 'lua'
+    case 'zig': return 'zig'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

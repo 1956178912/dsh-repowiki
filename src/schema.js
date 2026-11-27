@@ -123,6 +123,7 @@ export const MANIFEST_FILES = {
   'build.sbt': 'sbt',
   'pubspec.yaml': 'pub',
   'mix.exs': 'mix',
+  'build.zig.zon': 'zig',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -157,6 +158,7 @@ export const EXTENSION_LANGS = {
   ex: 'elixir',
   exs: 'elixir',
   lua: 'lua',
+  zig: 'zig',
   c: 'c',
   h: 'c',
   cc: 'cpp',

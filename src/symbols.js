@@ -1752,6 +1752,189 @@ function extractLua(lines) {
   return symbols
 }
 
+/** Zig 关键字与内建值：禁止被误识别为声明名。 */
+const ZIG_KEYWORDS = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'break', 'continue',
+  'defer', 'errdefer', 'try', 'orelse', 'and', 'or', 'not', 'null', 'true',
+  'false', 'undefined', 'unreachable', 'fn', 'struct', 'enum', 'union',
+  'opaque', 'test', 'comptime', 'inline', 'noinline', 'export', 'extern',
+  'threadlocal', 'usingnamespace', 'const', 'var', 'pub', 'async', 'await',
+  'suspend', 'resume', 'nosuspend', 'align', 'allowzero', 'volatile', 'packed',
+])
+
+/**
+ * 提取 Zig 的可解析代码行：去掉 `//`（含 `///`、`//!`）注释，并把
+ * 多行字符串行（`\\` 起始）的剩余内容清空。Zig 没有块注释，逐行即可；
+ * 字符串/字符字面量内的 `//` 不截断。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长的可解析代码行。
+ */
+function zigCodeLines(lines) {
+  const out = []
+  for (const raw of lines) {
+    let code = ''
+    let quote = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        code += ch
+        if (ch === '\\' && i + 1 < raw.length) { code += raw[i + 1]; i++; continue }
+        if (ch === quote) quote = null
+        continue
+      }
+      if (ch === '/' && raw[i + 1] === '/') break
+      // 多行字符串：`\\` 之后到行尾都是内容（不含引号语义）
+      if (ch === '\\' && raw[i + 1] === '\\') break
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; continue }
+      code += ch
+    }
+    out.push(code)
+  }
+  return out
+}
+
+/**
+ * 计算一行 Zig 代码的花括号增量（字符串/字符字面量感知）。
+ * @param {string} code - 已去注释的代码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function zigBraceDelta(code) {
+  let delta = 0
+  let quote = null
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i]
+    if (quote) {
+      if (ch === '\\') { i++; continue }
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === '{') delta++
+    else if (ch === '}') delta--
+  }
+  return delta
+}
+
+/**
+ * 计算 Zig 声明的结束行：块体按花括号配平；在块开始前遇到 `;`
+ * （`extern fn` 原型、单行常量）时返回该行。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function zigBlockEnd(codeLines, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < codeLines.length; i++) {
+    const line = codeLines[i]
+    if (!opened) {
+      const semi = line.indexOf(';')
+      const brace = line.indexOf('{')
+      if (semi >= 0 && (brace < 0 || semi < brace)) return i + 1
+    }
+    depth += zigBraceDelta(line)
+    if (depth > 0) opened = true
+    // 单行闭合块（`fn f() void {}` / `const T = struct {};`）
+    if (!opened && line.includes('{')) return i + 1
+    if (opened && depth <= 0) return i + 1
+  }
+  return codeLines.length
+}
+
+/**
+ * 提取 Zig 符号。
+ * - 顶层：`const Foo = struct/enum/union/opaque`（含 `extern`/`packed`/
+ *   `union(enum)`）、`fn name`、`test "desc"`、`const/var name`；
+ * - 容器内（struct/enum/union 体的一层）：成员 `fn` 记 method 并归属容器，
+ *   嵌套类型与常量同样登记；函数体与 comptime 块内的局部量不登记；
+ * - `pub` 决定导出；`export fn`（C ABI）视为导出；
+ * - `@import`/`@cImport`/`@This` 绑定是模块别名而非业务符号，跳过。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractZig(lines) {
+  const codeLines = zigCodeLines(lines)
+  const symbols = []
+  /** @type {Array<{name:string, bodyDepth:number}>} */
+  const containers = []
+  let depth = 0
+  const typeRe = /^(?:pub\s+)?(?:const|var)\s+([A-Za-z_]\w*)\s*(?::[^=]+)?=\s*(?:extern\s+|packed\s+)*(struct|enum|union|opaque)\b/
+  const fnRe = /^(?:pub\s+)?(?:(?:export|inline|noinline|threadlocal)\s+|extern\s+(?:"[^"]*"\s+)?)*fn\s+([A-Za-z_]\w*)\s*\(/
+  const testRe = /^test\s+"([^"]*)"\s*\{/
+  const varRe = /^(?:pub\s+)?(?:threadlocal\s+)?(?:const|var)\s+([A-Za-z_]\w*)\b/
+  for (let i = 0; i < codeLines.length; i++) {
+    while (containers.length > 0 && depth < containers[containers.length - 1].bodyDepth) {
+      containers.pop()
+    }
+    const line = codeLines[i].trim()
+    const container = containers[containers.length - 1]
+    const atMember = container !== undefined && depth === container.bodyDepth
+    if (line !== '' && (depth === 0 || atMember)) {
+      const exported = /^pub\s+/.test(line) || /^export\s+fn\b/.test(line)
+      const typeMatch = typeRe.exec(line)
+      if (typeMatch) {
+        const name = typeMatch[1]
+        symbols.push({
+          name,
+          kind: 'class',
+          line: i + 1,
+          endLine: zigBlockEnd(codeLines, i),
+          exported,
+          ...(atMember ? { parent: container.name } : {}),
+        })
+        containers.push({ name, bodyDepth: depth + 1 })
+        depth += zigBraceDelta(codeLines[i])
+        continue
+      }
+      const test = depth === 0 ? testRe.exec(line) : null
+      if (test) {
+        const name = test[1].trim()
+        if (name !== '') {
+          symbols.push({
+            name,
+            kind: 'function',
+            line: i + 1,
+            endLine: zigBlockEnd(codeLines, i),
+            exported: false,
+          })
+        }
+        depth += zigBraceDelta(codeLines[i])
+        continue
+      }
+      const fn = fnRe.exec(line)
+      if (fn && !ZIG_KEYWORDS.has(fn[1])) {
+        symbols.push({
+          name: fn[1],
+          kind: atMember ? 'method' : 'function',
+          line: i + 1,
+          endLine: zigBlockEnd(codeLines, i),
+          exported,
+          ...(atMember ? { parent: container.name } : {}),
+        })
+        depth += zigBraceDelta(codeLines[i])
+        continue
+      }
+      // 模块别名不是业务符号（每个文件都有 const std = @import("std")）
+      const isBinding = /=\s*@(?:import|cImport|This)\b/.test(line)
+      const variable = varRe.exec(line)
+      if (variable && !isBinding && !ZIG_KEYWORDS.has(variable[1])) {
+        symbols.push({
+          name: variable[1],
+          kind: 'variable',
+          line: i + 1,
+          endLine: i + 1,
+          exported,
+          ...(atMember ? { parent: container.name } : {}),
+        })
+        depth += zigBraceDelta(codeLines[i])
+        continue
+      }
+    }
+    depth += zigBraceDelta(codeLines[i])
+  }
+  return symbols
+}
+
 /**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
@@ -1881,6 +2064,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'dart') return extractDart(lines)
   if (lang === 'elixir') return extractElixir(lines)
   if (lang === 'lua') return extractLua(lines)
+  if (lang === 'zig') return extractZig(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

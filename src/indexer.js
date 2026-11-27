@@ -690,6 +690,25 @@ function resolveLuaSpecifier(specifier, roots, indexed) {
 }
 
 /**
+ * 解析 Zig `@import("x.zig")`：Zig 的路径导入相对于引用文件所在目录，
+ * 归一化后必须落在项目内且命中已索引文件。包名导入（`std`/`builtin`/
+ * `root`/构建注入的模块名）不以 `.zig` 结尾，按外部模块处理。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - `@import` 的字符串参数。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveZigSpecifier(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (!raw.endsWith('.zig') || raw.startsWith('/') || raw.includes('\\')) return null
+  const base = path.posix.join(path.posix.dirname(fromRel), raw)
+  const normalized = path.posix.normalize(base)
+  if (normalized.startsWith('../') || normalized === '..') return null
+  return indexed.has(normalized) ? normalized : null
+}
+
+/**
  * 解析 Elixir 模块引用：alias/import/require/use 的点分模块名精确匹配
  * 仓库内 defmodule 或 `lib/` 布局文件；外部依赖返回 null。
  * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
@@ -1593,6 +1612,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
+  if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }
