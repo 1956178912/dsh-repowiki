@@ -2060,7 +2060,11 @@ test('Objective-C：.h 按内容改判、.m 的 MATLAB 识别与 #import 边', a
 
   const matlab = doc.files.find(file => file.path === 'App/Helper.m')
   assert.equal(matlab.lang, 'matlab', 'MATLAB 写法的 .m 不被标成 Objective-C')
-  assert.deepEqual(matlab.symbols, [])
+  assert.deepEqual(
+    matlab.symbols.map(symbol => [symbol.name, symbol.kind, symbol.line, symbol.endLine]),
+    [['helper', 'function', 1, 4]],
+    'MATLAB 函数提取且不被 Objective-C 解析器吞掉',
+  )
 
   const edges = doc.edges.filter(edge => edge.to === 'App/Widget.h')
   assert.deepEqual(edges.map(edge => [edge.from, edge.line]).sort(), [

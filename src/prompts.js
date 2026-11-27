@@ -189,6 +189,7 @@ export function fenceLang(lang) {
     case 'verilog': return 'verilog'
     case 'systemverilog': return 'systemverilog'
     case 'objc': return 'objectivec'
+    case 'matlab': return 'matlab'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

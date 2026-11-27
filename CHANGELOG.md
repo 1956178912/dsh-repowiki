@@ -5,6 +5,33 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.249.0] - 2026-11-28
+
+### Added
+
+- **MATLAB indexing (43rd language)**: `.m` files classified as MATLAB by
+  content now expose `function` declarations (multi-output `[a,b] = f`,
+  single-output and no-output forms), nested/local functions (nested ones
+  carry `parent` and are non-exported), `classdef` classes, `properties`
+  block members as variables (private blocks non-exported) and `methods`
+  block functions as methods whose `parent` is the class (private method
+  blocks non-exported).
+- **MATLAB masking and ranges**: `%` line comments, `%{…%}` block comments
+  and single/double-quoted strings are masked, with transpose-aware single
+  quotes (`x'` is not a string). Ranges balance `end` across
+  `if`/`for`/`while`/`switch`/`try`/`spmd`/`arguments`, compact
+  `if x, y; end` lines, and end-less function files stop before the next
+  same-indent `function`.
+- **Language-onboarding guard**: `matlab` joins `SYMBOL_LANGUAGES` so the
+  prompt fence and panel label cannot silently drift; `.m` still classifies
+  as Objective-C unless MATLAB markers are present.
+
+### Tests
+
+- 775 cases pass (LANG=en); new MATLAB extractor coverage (masking,
+  transpose, nested functions, compact blocks, class properties/methods and
+  private blocks) plus a real-index assertion.
+
 ## [0.248.0] - 2026-11-28
 
 ### Added

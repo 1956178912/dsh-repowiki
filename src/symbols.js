@@ -6158,6 +6158,209 @@ function extractObjc(lines) {
   })
 }
 
+/** MATLAB 以 `end` 收尾的块关键字（`else`/`elseif`/`catch` 不单独开块）。 */
+const MATLAB_BLOCK_KEYWORDS = /^(?:classdef|properties|methods|events|enumeration|function|if|for|parfor|while|switch|try|spmd|arguments)\b/
+
+/**
+ * 扫描 MATLAB 源码行：行注释 `%`、块注释 `%{`…`%}` 与单/双引号字符串
+ * 内容替换为空格。单引号既可能是字符串也可能是转置运算符，按前一非空
+ * 字符判定：标识符、数字、`)`/`]`/`}`/`.` 之后视为转置。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function matlabScan(lines) {
+  const out = []
+  let blockComment = false
+  for (const raw of lines) {
+    const trimmed = raw.trim()
+    if (blockComment) {
+      if (trimmed.startsWith('%}')) blockComment = false
+      out.push(' '.repeat(raw.length))
+      continue
+    }
+    if (trimmed.startsWith('%{')) {
+      blockComment = true
+      out.push(' '.repeat(raw.length))
+      continue
+    }
+    let masked = ''
+    let quote = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        if (ch === quote) {
+          if (raw[i + 1] === quote) { i++; masked += '  ' }
+          else { quote = null; masked += ' ' }
+        } else masked += ' '
+        continue
+      }
+      if (ch === '%') break
+      if (ch === "'" || ch === '"') {
+        let prev = ''
+        for (let j = i - 1; j >= 0; j--) {
+          if (raw[j] !== ' ' && raw[j] !== '\t') { prev = raw[j]; break }
+        }
+        if (ch === "'" && /[A-Za-z0-9_)\]}.]/.test(prev)) { masked += ch; continue }
+        quote = ch
+        masked += ' '
+        continue
+      }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 计算一行 MATLAB 的块深度增量：行首块关键字 +1、行首 `end` -1，并处理
+ * 同一行的紧凑写法（`if x, y; end`）。索引里的 `end`（如 `a(end)`）不计。
+ * @param {string} line - 已掩码的行（去首尾空白）。
+ * @returns {number} 深度增量。
+ */
+function matlabBlockDelta(line) {
+  let delta = 0
+  const opener = MATLAB_BLOCK_KEYWORDS.exec(line)
+  if (opener) delta += 1
+  if (/^end\b/.test(line)) delta -= 1
+  if (/^end\b/.test(line)) return delta
+  const rest = opener ? line.slice(opener[0].length) : line
+  for (const _ of rest.matchAll(/(?:^|[;,])\s*end(?=\s*(?:[;,]|$))/g)) delta -= 1
+  return delta
+}
+
+/**
+ * 计算 MATLAB 单元的结束行：按块关键字配平，第一个把深度降到 -1 的 `end`
+ * 收尾；文件末尾仍未闭合时取最后一个非空行。无 `end` 风格的函数在下一个
+ * 同级 `function` 前收尾（缩进更深的是嵌套函数，交由块配平处理）。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 单元起始行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function matlabUnitEnd(masked, startIdx) {
+  const baseIndent = masked[startIdx].length - masked[startIdx].trimStart().length
+  let depth = 0
+  let last = startIdx
+  for (let i = startIdx + 1; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '') continue
+    const indent = masked[i].length - masked[i].trimStart().length
+    if (depth === 0 && /^function\b/.test(line) && indent <= baseIndent) return last + 1
+    last = i
+    depth += matlabBlockDelta(line)
+    if (depth < 0) return i + 1
+  }
+  return last + 1
+}
+
+/**
+ * 提取 MATLAB 符号：`classdef`（class）、`properties` 块成员（variable，
+ * `(Access=private)` 块非导出）、类内 `function`（method）、独立/嵌套
+ * `function`（function，嵌套带 parent）。范围按块配平，注释、块注释与
+ * 字符串屏蔽，`x'` 转置不误判为字符串。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractMatlab(lines) {
+  const masked = matlabScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, start:number, end:number}>} classdef 范围（end 为闭合 end 的 0-based 索引） */
+  const classes = []
+  /** @type {Array<{name:string, start:number, end:number}>} 函数范围，用于嵌套归属 */
+  const functions = []
+  /** @type {Array<{start:number, end:number}>} 私有 methods 块范围（end 为闭合 end 的 0-based 索引） */
+  const privateMethods = []
+
+  /**
+   * 找到包住某行的最内层 classdef。
+   * @param {number} idx - 行索引（0-based）。
+   * @returns {{name:string, start:number, end:number}|null} 命中或 null。
+   */
+  const classAt = (idx) => {
+    for (let k = classes.length - 1; k >= 0; k--) {
+      if (idx > classes[k].start && idx < classes[k].end) return classes[k]
+    }
+    return null
+  }
+
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    const classMatch = /^classdef\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(line)
+    if (classMatch) {
+      const endLine = matlabUnitEnd(masked, i)
+      symbols.push({
+        name: classMatch[1], kind: 'class', line: i + 1, endLine, exported: true,
+      })
+      classes.push({ name: classMatch[1], start: i, end: endLine - 1 })
+      continue
+    }
+
+    const classFrame = classAt(i)
+
+    const methodsMatch = /^methods\b/.exec(line)
+    if (methodsMatch && classFrame) {
+      const endLine = matlabUnitEnd(masked, i)
+      if (/Access\s*=\s*private/i.test(line)) {
+        privateMethods.push({ start: i, end: endLine - 1 })
+      }
+      continue
+    }
+
+    const propsMatch = /^properties\b/.exec(line)
+    if (propsMatch) {
+      if (!classFrame) continue
+      const endLine = matlabUnitEnd(masked, i)
+      const blockPrivate = /Access\s*=\s*private/i.test(line)
+      for (let j = i + 1; j < endLine - 1; j++) {
+        const member = masked[j].trim()
+        if (member === '' || /^end\b/.test(member)) continue
+        if (MATLAB_BLOCK_KEYWORDS.test(member)) continue
+        const name = /^([A-Za-z_]\w*)\s*(?:[=(]|[A-Za-z_]\w*\s|$)/.exec(member)
+        if (!name) continue
+        symbols.push({
+          name: name[1],
+          kind: 'variable',
+          line: j + 1,
+          endLine: j + 1,
+          exported: !blockPrivate,
+          parent: classFrame.name,
+        })
+      }
+      // 未闭合、且没有成员行的属性块不能回退索引（否则原地循环）
+      i = Math.max(i, endLine - 2)
+      continue
+    }
+
+    const fn = /^function\s+(?:\[[^\]]*\]\s*=\s*|(?:[A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*)\s*(?:\(|$)/.exec(line)
+    if (!fn) continue
+    const endLine = matlabUnitEnd(masked, i)
+    /** @type {{name:string, start:number, end:number}|null} */
+    let enclosing = null
+    for (let k = functions.length - 1; k >= 0; k--) {
+      if (i > functions[k].start && i < functions[k].end) { enclosing = functions[k]; break }
+    }
+    const isMethod = Boolean(classFrame) && !enclosing
+    const privateMember = isMethod
+      && privateMethods.some(range => i > range.start && i < range.end)
+    /** @type {SymbolInfo} */
+    const symbol = {
+      name: fn[1],
+      kind: isMethod ? 'method' : 'function',
+      line: i + 1,
+      endLine,
+      // 嵌套函数只在文件/类内部可见；顶层函数与类方法按可调用处理
+      exported: isMethod ? !privateMember : !enclosing,
+    }
+    const parent = isMethod ? classFrame.name : enclosing?.name
+    if (parent) symbol.parent = parent
+    symbols.push(symbol)
+    functions.push({ name: fn[1], start: i, end: endLine - 1 })
+  }
+  return symbols
+}
+
 /**
  * 从源码提取符号（纯函数入口）。
  * @param {string} code - 源码文本。
@@ -6206,6 +6409,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'ada') return extractAda(lines)
   if (lang === 'verilog' || lang === 'systemverilog') return extractVerilog(lines)
   if (lang === 'objc') return extractObjc(lines)
+  if (lang === 'matlab') return extractMatlab(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

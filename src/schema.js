@@ -254,8 +254,11 @@ export const EXTENSION_LANGS = {
   ipp: 'cpp',
 }
 
-/** 支持符号提取的语言集合（由 EXTENSION_LANGS 的值推导，避免重复维护）。 */
-export const SYMBOL_LANGUAGES = new Set(Object.values(EXTENSION_LANGS))
+/**
+ * 支持符号提取的语言集合：扩展名映射推导，另加按内容识别的 `matlab`
+ * （`.m` 默认归 objc，命中 MATLAB 标记后才改判，无法由扩展名表表达）。
+ */
+export const SYMBOL_LANGUAGES = new Set([...Object.values(EXTENSION_LANGS), 'matlab'])
 
 /**
  * JS/TS 相对 import specifier 解析为文件路径时尝试的后缀与入口

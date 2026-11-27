@@ -2483,6 +2483,84 @@ test('Objective-C：@interface/@protocol/@implementation、方法选择器与属
   assert.equal(symbols.some(s => s.name === 'Fake'), false, '注释中的 @interface 被屏蔽')
 })
 
+test('MATLAB：函数、嵌套函数、紧凑 end 与注释/字符串屏蔽', () => {
+  const code = [
+    '% function commentedOut(x)',
+    'function y = helper(x)',
+    "  label = 'function notReal(x)';",
+    "  t = x';",
+    '  if x > 0',
+    '    y = x + 1;',
+    '  else',
+    '    y = -x;',
+    '  end',
+    '  %{',
+    '  function ignored(x)',
+    '  %}',
+    '  function inner()',
+    '    disp("inner end")',
+    '  end',
+    'end',
+    '',
+    'function z = compact(x)',
+    '  if x, z = 1; end',
+    'end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'matlab')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.deepEqual(symbols.map(s => s.name), ['helper', 'inner', 'compact'])
+  assert.deepEqual([byName.get('helper').kind, byName.get('helper').line, byName.get('helper').endLine], ['function', 2, 16])
+  assert.deepEqual([byName.get('inner').line, byName.get('inner').endLine], [13, 15])
+  assert.equal(byName.get('inner').parent, 'helper')
+  assert.equal(byName.get('inner').exported, false, '嵌套函数只在文件内可见')
+  assert.deepEqual([byName.get('compact').line, byName.get('compact').endLine], [18, 20], '紧凑 if/end 不导致范围漂移')
+  assert.equal(symbols.some(s => s.name === 'ignored'), false, '块注释与字符串里的 function 被屏蔽')
+})
+
+test('MATLAB：classdef 属性/方法归属与私有块', () => {
+  const code = [
+    'classdef (Abstract) Widget < handle',
+    '  properties (Access = private)',
+    '    secret',
+    '  end',
+    '  properties',
+    "    Name (1,:) char = ''",
+    '    Count double = 0',
+    '  end',
+    '  methods',
+    '    function obj = Widget(name)',
+    '      obj.Name = name;',
+    '    end',
+    '    function run(obj)',
+    '      obj.secret = 1;',
+    '    end',
+    '  end',
+    '  methods (Access = private)',
+    '    function reset(obj)',
+    '      obj.Count = 0;',
+    '    end',
+    '  end',
+    'end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'matlab')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  const widget = symbols.find(s => s.name === 'Widget' && s.kind === 'class')
+  const ctor = symbols.find(s => s.name === 'Widget' && s.kind === 'method')
+
+  assert.deepEqual([widget.line, widget.endLine, widget.exported], [1, 22, true])
+  assert.equal(byName.get('secret').exported, false, '私有 properties 块成员非导出')
+  assert.equal(byName.get('secret').parent, 'Widget')
+  assert.equal(byName.get('Name').kind, 'variable')
+  assert.equal(byName.get('Name').exported, true)
+  assert.equal(byName.get('Count').kind, 'variable')
+  assert.deepEqual([ctor.line, ctor.endLine, ctor.parent], [10, 12, 'Widget'])
+  assert.deepEqual([byName.get('run').kind, byName.get('run').line, byName.get('run').endLine], ['method', 13, 15])
+  assert.equal(byName.get('run').parent, 'Widget')
+  assert.deepEqual([byName.get('reset').line, byName.get('reset').endLine], [18, 20])
+  assert.equal(byName.get('reset').exported, false, '私有 methods 块方法非导出')
+})
+
 test('Objective-C：C 声明与 ObjC 合并，@class 前向声明不登记', () => {
   const code = [
     '@class Forward;',

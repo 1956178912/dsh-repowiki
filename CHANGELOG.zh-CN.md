@@ -3,6 +3,24 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.249.0] - 2026-11-28
+
+- **MATLAB 支持（第 43 种语言）**：按内容识别为 MATLAB 的 `.m` 现在登记
+  `function`（多输出 `[a,b] = f`、单输出/无输出）、嵌套/局部函数（嵌套
+  带 `parent` 且非导出）、`classdef` 类、`properties` 块成员（variable，
+  私有块非导出）与 `methods` 块函数（method，`parent` 为类，私有块
+  非导出）。
+- **屏蔽与范围**：`%` 行注释、`%{…%}` 块注释与单/双引号字符串屏蔽，
+  单引号按转置语义判别（`x'` 不当作字符串）；范围在
+  `if`/`for`/`while`/`switch`/`try`/`spmd`/`arguments` 间按 `end` 配平，
+  支持紧凑 `if x, y; end`，无 `end` 风格函数在下一个同缩进 `function`
+  前收尾。
+- **接入守卫**：`matlab` 加入 `SYMBOL_LANGUAGES`，提示词围栏与面板标签
+  不再可能静默漏接；`.m` 仍默认按 Objective-C 处理，仅命中 MATLAB 标记
+  时改判。
+- **测试**：775 例通过（LANG=en）；新增 MATLAB 屏蔽/转置/嵌套函数/紧凑
+  块/类属性与方法/私有块覆盖，以及真实索引断言。
+
 ## [0.248.0] - 2026-11-28
 
 - **SwiftPM 本地包**：`Package.swift` 的 `.package(path: "../LocalCore")`
