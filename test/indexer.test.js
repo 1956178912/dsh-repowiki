@@ -188,10 +188,22 @@ test('Go：无 go.mod 时不解析、module 根导入解析到根包文件', asy
   const withMod = makeProject({
     'go.mod': 'module example.com/demo\n\ngo 1.22\n',
     'app.go': 'package main\nfunc App() {}\n',
-    'main.go': 'package main\nimport "example.com/demo"\nfunc main() { App() }\n',
+    'internal/greeter/greeter.go': 'package greeter\nfunc Hello() {}\n',
+    'internal/blank/blank.go': 'package blank\nfunc Init() {}\n',
+    'main.go': [
+      'package main',
+      'import "example.com/demo"',
+      'import alias "example.com/demo/internal/greeter"',
+      'import _ "example.com/demo/internal/blank"',
+      'func main() { App() }',
+    ].join('\n'),
   })
   const doc = await buildIndex(makeFakeFs(withMod), withMod)
   assert.ok(doc.edges.some(e => e.from === 'main.go' && e.to === 'app.go'), 'module 根导入解析到根包代表文件')
+  const greeterEdge = doc.edges.find(e => e.from === 'main.go' && e.to === 'internal/greeter/greeter.go')
+  assert.deepEqual(greeterEdge?.aliases, [{ from: 'greeter', to: 'alias' }], 'Go 别名写入边')
+  const blankEdge = doc.edges.find(e => e.from === 'main.go' && e.to === 'internal/blank/blank.go')
+  assert.deepEqual(blankEdge?.symbols, [], '空白导入保留依赖边但无符号引用')
 })
 
 test('Rust：self/super 相对模块、无 crate 根降级', async () => {

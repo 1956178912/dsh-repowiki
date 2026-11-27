@@ -133,7 +133,14 @@ test('Go：单条 import、分组 import、别名与点导入', () => {
   const specs = refs.map(r => r.specifier)
   assert.deepEqual(specs, ['fmt', 'example.com/demo/internal/greeter', 'example.com/demo/dotpkg', 'os', 'embed'])
   assert.ok(refs.every(r => r.relative), 'Go import 统一作为本地解析候选')
-  assert.deepEqual(refs.find(r => r.specifier === 'example.com/demo/internal/greeter').imported, ['greeter'])
+  const bySpec = new Map(refs.map(r => [r.specifier, r]))
+  assert.deepEqual(bySpec.get('example.com/demo/internal/greeter').imported, ['greeter'])
+  assert.deepEqual(bySpec.get('example.com/demo/internal/greeter').aliases,
+    [{ from: 'greeter', to: 'alias' }], 'Go 别名记录本地名')
+  assert.deepEqual(bySpec.get('example.com/demo/dotpkg').imported, ['*'],
+    '点导入把包内符号带入作用域，按潜在通配引用')
+  assert.deepEqual(bySpec.get('embed').imported, [], '空白导入仅副作用，无符号引用')
+  assert.equal(bySpec.get('fmt').aliases, undefined, '无别名不产生 aliases')
 })
 
 test('Rust：mod 声明、crate/self/super use 与分组 use', () => {

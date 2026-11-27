@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.262.0] - 2026-11-28
+
+### Added
+
+- **Go import semantics**: aliased imports (`import f "x/y"`) keep the
+  package name for attribution and record the local binding in edge
+  `aliases`, so lexical usage scans search `f`; dot imports (`. "x/y"`)
+  become `*` potential references; blank imports (`_ "x/y"`) keep the
+  dependency edge but no longer claim a symbol reference. Parser v18
+  re-parses cached imports.
+
+### Tests
+
+- 813 cases pass (LANG=en); Go alias/dot/blank assertions plus real-index
+  edge checks.
+
 ## [0.261.0] - 2026-11-28
 
 ### Fixed

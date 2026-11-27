@@ -254,17 +254,29 @@ function extractGoImports(lines) {
    * @returns {void}
    */
   const push = (text, line) => {
-    const m = /^(?:[\w.]+\s+)?["`](?<mod>[^"`]+)["`]/.exec(text)
+    const m = /^(?:(?<alias>[\w.]+)\s+)?["`](?<mod>[^"`]+)["`]/.exec(text)
     if (!m) return
     const mod = m.groups.mod
     const segments = mod.split('/')
+    const localName = segments[segments.length - 1] || ''
+    const alias = m.groups.alias
+    // Go 导入语义：`_` 仅触发包初始化（无符号引用）；`.` 把包内导出符号
+    // 带入当前作用域（按 `*` 潜在引用处理）；普通别名记录包名近似原名 →
+    // 本地名，供词法使用点扫描。
+    let imported = localName ? [localName] : []
+    if (alias === '_') imported = []
+    else if (alias === '.') imported = ['*']
+    const aliases = alias && alias !== '_' && alias !== '.' && localName && alias !== localName
+      ? [{ from: localName, to: alias }]
+      : []
     result.push({
       specifier: mod,
       line,
       kind: 'import',
       // 候选本地包；indexer 按 go.mod module 前缀过滤
       relative: true,
-      imported: segments[segments.length - 1] ? [segments[segments.length - 1]] : [],
+      imported,
+      ...(aliases.length > 0 ? { aliases } : {}),
     })
   }
   for (let i = 0; i < lines.length; i++) {
