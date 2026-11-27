@@ -29,6 +29,7 @@ test('JS：各类 import 形态均可提取', () => {
   assert.equal(bySpec.get('./foo').imported.length, 2, '具名导入两个符号')
   assert.ok(bySpec.get('./foo').imported.includes('a'))
   assert.ok(bySpec.get('./foo').imported.includes('b'), 'as 别名归一为原名')
+  assert.deepEqual(bySpec.get('./foo').aliases, [{ from: 'b', to: 'c' }], '本地别名进入 aliases')
   assert.equal(bySpec.get('./types').imported[0], 'T', 'type 导入保留符号名')
   assert.deepEqual(bySpec.get('../pkg/mod').imported, ['*'], '命名空间导入记为通配符')
   assert.deepEqual(bySpec.get('./star').imported, ['*'], 'export * 再导出全部符号')
@@ -59,6 +60,7 @@ test('JS：多行 import/export-from 保留起始行与具名符号', () => {
   const refs = extractImports(code, 'typescript')
   const bySpec = new Map(refs.map(ref => [ref.specifier, ref]))
   assert.deepEqual(bySpec.get('./multi').imported, ['alpha', 'beta', 'Gamma'])
+  assert.deepEqual(bySpec.get('./multi').aliases, [{ from: 'beta', to: 'renamed' }])
   assert.equal(bySpec.get('./multi').line, 1)
   assert.deepEqual(bySpec.get('./mixed').imported, ['default:main', 'delta'], '默认 + 具名混合')
   assert.equal(bySpec.get('./mixed').line, 7)
@@ -156,7 +158,8 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   assert.ok(bySpec.has('self::inner::Thing'))
   assert.ok(bySpec.has('crate::graph'), '分组 use 展开为叶子路径')
   assert.ok(bySpec.has('crate::lexer::Lexer'))
-  assert.deepEqual(bySpec.get('crate::lexer::Token').imported, ['T'], 'as 别名作为导入名')
+  assert.deepEqual(bySpec.get('crate::lexer::Token').imported, ['Token'], '别名导入记录目标原名')
+  assert.deepEqual(bySpec.get('crate::lexer::Token').aliases, [{ from: 'Token', to: 'T' }], '本地别名进入 aliases')
   assert.ok(bySpec.has('serde::Serialize'), '外部 crate 也记录（解析失败不计边）')
   assert.ok(!bySpec.has('not::real'), '注释不提取')
 })
@@ -183,7 +186,9 @@ test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
     'reexport', ['Old'], [{ from: 'Old', to: 'Renamed' }],
   ], 'pub use 别名记录目标原名并用于再导出解析')
   const localAlias = refs.find(ref => ref.specifier === 'crate::core::Local')
-  assert.deepEqual([localAlias.kind, localAlias.imported, localAlias.aliases], ['import', ['Alias'], undefined], '普通 use 保持本地名')
+  assert.deepEqual([localAlias.kind, localAlias.imported, localAlias.aliases], [
+    'import', ['Local'], [{ from: 'Local', to: 'Alias' }],
+  ], '普通 use 也记录原名与本地别名')
 })
 
 test('Java：普通/静态/通配符 import', () => {

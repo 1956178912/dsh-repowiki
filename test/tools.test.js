@@ -865,6 +865,27 @@ test('repowiki-cards execute：别名再导出链的引用与使用点', async (
   assert.equal(out.symbolUsages[0].filesScanned, 3)
 })
 
+test('repowiki-cards execute：具名导入别名的引用与使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-import-alias-'))
+  nodefs.writeFileSync(path.join(dir, 'core.ts'), 'export function parse() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'app.ts'),
+    "import { parse as parseValue } from './core'\nexport const value = parseValue()\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'core.ts',
+    symbol: 'parse',
+    referencedBy: [{ path: 'app.ts', line: 1 }],
+  }])
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'app.ts', line: 2, text: 'export const value = parseValue()' },
+  ], '按本地别名 parseValue 定位使用点')
+  assert.equal(out.symbolUsages[0].filesScanned, 2)
+})
+
 test('repowiki-cards execute：默认导入穿过 barrel 的引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-default-import-'))
   nodefs.writeFileSync(path.join(dir, 'Button.ts'), 'export default function Button() { return 1 }\n')

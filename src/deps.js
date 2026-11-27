@@ -63,12 +63,12 @@ function jsImportedNames(line) {
 }
 
 /**
- * 从 `export { a as b } from` 提取别名映射（原名 → 导出名）。
- * 无别名、`export *` 与多行注释内容不产生条目。
+ * 从 `import { a as b }` / `export { a as b } from` 提取花括号内的
+ * 别名映射（原名 → 本地/导出名）。无别名、`*` 与注释内容不产生条目。
  * @param {string} line - 源码语句（可跨行）。
  * @returns {Array<{from:string, to:string}>} 别名映射。
  */
-function jsExportAliases(line) {
+function jsBraceAliases(line) {
   const cleanLine = line.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, '')
   const brace = /\{(?<body>[^}]*)\}/.exec(cleanLine)
   if (!brace) return []
@@ -126,12 +126,14 @@ function extractJsImports(lines) {
       const imported = jsImportedNames(im.groups.clause.startsWith('{') ? line : im.groups.clause)
       const defaultLocal = jsDefaultLocalName(im.groups.clause)
       if (defaultLocal) imported.unshift(`${JS_DEFAULT_PREFIX}${defaultLocal}`)
+      const aliases = jsBraceAliases(line)
       result.push({
         specifier: mod,
         line: i + 1,
         kind: 'import',
         relative: isJsRelative(mod),
         imported,
+        ...(aliases.length > 0 ? { aliases } : {}),
       })
       i = statementEnd
       continue
@@ -153,7 +155,7 @@ function extractJsImports(lines) {
     if (em) {
       // `export * from` 再导出目标文件的全部符号（无 as 别名时记为通配符）
       const reexportAll = /^\s*export\s+\*\s*from\b/.test(line)
-      const aliases = reexportAll ? [] : jsExportAliases(line)
+      const aliases = reexportAll ? [] : jsBraceAliases(line)
       result.push({
         specifier: em.groups.mod,
         line: i + 1,
@@ -378,9 +380,10 @@ function extractRustImports(lines) {
       const local = (specifier.split('::').pop() ?? '').trim()
       const leaf = (alias ?? local).trim()
       const valid = /^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super'
-      // pub use 记录目标原名 + 导出别名（引用归到原名）；普通 use 保持本地名
-      const imported = star ? ['*'] : (kind === 'reexport' ? (valid ? [local] : []) : (valid ? [leaf] : []))
-      const aliases = kind === 'reexport' && valid && local !== leaf ? [{ from: local, to: leaf }] : []
+      const validLocal = /^[A-Za-z_]\w*$/.test(local) && local !== 'self' && local !== 'super'
+      // 统一记录目标原名；`as` 本地名进入 aliases（引用归到原名，使用点按本地名扫描）
+      const imported = star ? ['*'] : (validLocal ? [local] : [])
+      const aliases = valid && validLocal && local !== leaf ? [{ from: local, to: leaf }] : []
       result.push({
         specifier,
         line: i + 1,
@@ -397,8 +400,8 @@ function extractRustImports(lines) {
       const star = leaf.name === '*'
       const valid = /^[A-Za-z_]\w*$/.test(leaf.name)
       const validLocal = /^[A-Za-z_]\w*$/.test(leaf.local)
-      const imported = star ? ['*'] : (kind === 'reexport' ? (validLocal ? [leaf.local] : []) : (valid ? [leaf.name] : []))
-      const aliases = kind === 'reexport' && valid && validLocal && leaf.local !== leaf.name
+      const imported = star ? ['*'] : (validLocal ? [leaf.local] : [])
+      const aliases = valid && validLocal && leaf.local !== leaf.name
         ? [{ from: leaf.local, to: leaf.name }]
         : []
       result.push({

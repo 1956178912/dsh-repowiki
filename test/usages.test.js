@@ -243,6 +243,17 @@ test('usages：usageImporters 识别别名再导出', () => {
   ], '别名导入方带实际扫描名')
 })
 
+test('usages：具名导入别名作为本地扫描名', () => {
+  const edges = [
+    { from: 'src/app.ts', to: 'src/a.ts', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'parseValue' }] },
+    { from: 'src/barrel.ts', to: 'src/a.ts', line: 2, kind: 'export-from', symbols: ['parse'], aliases: [{ from: 'parse', to: 'exported' }] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'src/a.ts', name: 'parse' }, []), [
+    { path: 'src/app.ts', importLines: [1], names: ['parseValue'] },
+    { path: 'src/barrel.ts', importLines: [2] },
+  ], '普通导入别名进入扫描名，再导出别名不误当本地绑定')
+})
+
 test('usages：默认导入别名作为本地扫描名', () => {
   const edges = [
     { from: 'src/app.ts', to: 'src/a.ts', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'thing' }] },

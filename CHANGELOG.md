@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.258.0] - 2026-11-28
+
+### Added
+
+- **Import alias evidence**: JS/TS `import { parse as parseValue }` and Rust
+  `use …::Foo as Bar` now record the original target name plus the local
+  binding in edge `aliases`. References, impact and symbol attribution keep
+  the original name, while lexical usage scans search the local alias.
+- Re-export/`pub use` alias metadata is never treated as an importer's local
+  binding; parser v14 re-parses cached imports.
+
+### Tests
+
+- 809 cases pass (LANG=en); new coverage for JS/Rust alias metadata,
+  alias-local usage scanning and a real-index cards integration.
+
 ## [0.257.0] - 2026-11-28
 
 ### Added
