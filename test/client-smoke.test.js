@@ -86,6 +86,10 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     '   - 内层第二项',
     '2. 第二个外层',
     '',
+    '#### 四级标题',
+    '',
+    '深层小节正文',
+    '',
     'BodyMarkerOnly 仅出现在卡片正文，用于验证全文检索',
     '',
     '## 关键符号 / Key symbols',
@@ -1330,6 +1334,12 @@ test('Markdown 渲染：GFM 表格与嵌套列表', async () => {
   }
   const centerHeader = findNode(table, n => n.type === 'th' && n.props.style?.textAlign === 'center')
   assert.ok(centerHeader, '分隔行 :--: 驱动居中对齐')
+  assert.equal(centerHeader.props.scope, 'col', '表头单元格带 scope=col')
+
+  const deepHeading = findNode(hooks.root, n => n.type === 'h5'
+    && collectTexts(n).includes('四级标题'))
+  assert.ok(deepHeading, '#### 渲染为 h5（页面 h1 由外层容器承担）')
+  assert.ok(deepHeading.props.id, '四级标题同样带锚点 id')
 
   const nested = findNode(hooks.root, n => n.type === 'li'
     && (n.children ?? []).some(child => child && child.type === 'ul'))

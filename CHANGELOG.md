@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.180.0] - 2026-11-28
+
+### Fixed
+
+- **Deep Markdown headings render**: the panel renderer now understands
+  `####` through `######` (previously only `#`–`###`), keeping the page-level
+  h1 offset and clamping to `h6`, so model-written subsections no longer
+  appear as literal `####` paragraphs; deep headings still get anchor ids
+  and paragraph interruption rules follow the wider heading range.
+
+### Accessibility
+
+- Table header cells carry `scope="col"`, letting screen readers associate
+  each data cell with its column.
+
+### Tests
+
+- 561 cases pass (LANG=en and LANG=zh); the client fixture card now contains a
+  `####` subsection and the DOM test asserts the `h5` node, its anchor id and
+  the table header `scope` attribute.
+
 ## [0.179.0] - 2026-11-28
 
 ### Added

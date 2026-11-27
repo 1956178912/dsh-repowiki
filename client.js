@@ -3779,7 +3779,7 @@ window.__ModuleLoader__.load({
       let key = 0
       const headingStyle = (level) => ({
         margin: level === 1 ? '0 0 10px' : '14px 0 6px',
-        fontSize: level === 1 ? 18 : level === 2 ? 15 : 14,
+        fontSize: level === 1 ? 18 : level === 2 ? 15 : level === 3 ? 14 : 13,
         fontWeight: 600,
         color: 'var(--dsw-alias-label-primary, #111827)',
       })
@@ -3819,12 +3819,13 @@ window.__ModuleLoader__.load({
           }, codeLines.join('\n')))
           continue
         }
-        // 标题（# ~ ###）：带锚点 id，供自动目录链接页内跳转
-        const heading = /^(#{1,3})\s+(.*)$/.exec(line)
+        // 标题（# ~ ######）：带锚点 id，供自动目录链接页内跳转
+        const heading = /^(#{1,6})\s+(.*)$/.exec(line)
         if (heading) {
           const level = heading[1].length
           const id = anchorOf(heading[2], headingAnchors)
-          blocks.push(h(`h${level + 1}`, { key: key++, id, style: headingStyle(level) },
+          // 页面 h1 由外层容器承担：Markdown 的 # 映射为 h2，最深到 h6
+          blocks.push(h(`h${Math.min(level + 1, 6)}`, { key: key++, id, style: headingStyle(level) },
             ...inlineText(heading[2])))
           i++
           continue
@@ -3869,7 +3870,7 @@ window.__ModuleLoader__.load({
             i += 2
             const rows = []
             while (i < lines.length && lines[i].trim() !== '' && lines[i].includes('|')
-              && !/^(#{1,3}\s|```|>\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
+              && !/^(#{1,6}\s|```|>\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
               rows.push(splitTableRow(lines[i]))
               i++
             }
@@ -3885,6 +3886,7 @@ window.__ModuleLoader__.load({
             },
             h('thead', null, h('tr', null, ...headers.map((text, column) => h('th', {
               key: column,
+              scope: 'col',
               style: {
                 ...cellStyle(aligns[column]),
                 background: 'var(--dsw-alias-bg-layer-2, #f3f4f6)',
@@ -3903,7 +3905,7 @@ window.__ModuleLoader__.load({
         // 段落：连继行直到空行或块级起始
         const paraLines = []
         while (i < lines.length && lines[i].trim() !== ''
-          && !/^(#{1,3}\s|```|-{3,}$|>\s|[-*]\s|\d+\.\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
+          && !/^(#{1,6}\s|```|-{3,}$|>\s|[-*]\s|\d+\.\s|\s*([-*]|\d+\.)\s)/.test(lines[i])) {
           paraLines.push(lines[i]); i++
         }
         blocks.push(h('p', { key: key++, style: paragraphStyle },
