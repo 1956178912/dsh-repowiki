@@ -910,7 +910,12 @@ export function repowikiStatusTool(ctx) {
       const health = index
         ? assessHealth({
           coverage,
-          wiki: { count: wikiPages.length, stale: wikiStale, orphaned: wikiOrphaned },
+          wiki: {
+            count: wikiPages.length,
+            stale: wikiStale,
+            orphaned: wikiOrphaned,
+            missing: missingWikiPages.length,
+          },
           citations: {
             broken: brokenCitations?.total ?? 0,
             outOfRange: citationRanges?.total ?? 0,

@@ -135,6 +135,29 @@ test('health：引用缺失/越界/漂移扣 Wiki 分量并进入待办', () => 
   assert.match(untracked.issues.join(' '), /3 citation\(s\) have no content digest/)
 })
 
+test('health：清单缺页扣 Wiki 分量', () => {
+  const base = {
+    coverage: { eligible: 4, documented: 4, fresh: 4, stale: 0, percent: 100 },
+    wiki: { count: 4, stale: 0, orphaned: 0, missing: 1 },
+    cycles: [],
+    hubs: [],
+    warnings: [],
+    skipped: 0,
+  }
+  const result = assessHealth(base)
+  assert.equal(result.components[1].score, 92, '缺 1/5 页扣 40 分权重 → 92')
+  assert.equal(result.score, 98)
+  assert.match(result.issues.join(' '), /listed in the manifest but missing on disk/)
+  assert.match(result.components[1].detail, /1 missing/)
+
+  const allMissing = assessHealth({
+    ...base,
+    wiki: { count: 0, stale: 0, orphaned: 0, missing: 2 },
+  })
+  assert.equal(allMissing.components[1].score, 60, '页面全部缺失仍保留 60 分底')
+  assert.match(allMissing.issues.join(' '), /2 wiki page\(s\).*missing on disk/)
+})
+
 test('health：等级边界', () => {
   assert.equal(healthGrade(100), 'A')
   assert.equal(healthGrade(85), 'A')

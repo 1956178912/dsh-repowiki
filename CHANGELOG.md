@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.150.0] - 2026-11-27
+
+### Added
+
+- **Missing-page health penalty**: `assessHealth` now accepts
+  `wiki.missing`, counts missing pages in the wiki denominator and deducts
+  up to 40 points from the wiki component (`40 * missing / total`). Status
+  passes its `wiki.missing` through, the component detail includes
+  `N missing`, and the top issues prefer the missing-page message over the
+  stale-page one. A full loss of pages scores 60 instead of collapsing to 0,
+  keeping the component interpretable.
+
+### Tests
+
+- 514 cases pass (LANG=en and LANG=zh); a health case covers one/five and
+  zero/five missing pages, and the status missing-page case now asserts the
+  wiki component score and issue text.
+
 ## [0.149.0] - 2026-11-27
 
 ### Added
