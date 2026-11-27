@@ -92,6 +92,22 @@ function formatCitationDrift(info) {
   return `${body}${info.unchecked > 0 ? `; ${info.unchecked} unchecked` : ''}`
 }
 
+/**
+ * 渲染未覆盖引用原因摘要（与 generate 文案一致）。
+ * @param {{unreadable?:number, range?:number, cap?:number, unknown?:number}|undefined} reasons
+ *   原因计数。
+ * @returns {string} 例如 `1 unreadable, 2 invalid range`；无计数时为空。
+ */
+function formatCitationReasons(reasons) {
+  if (!reasons) return ''
+  const parts = []
+  if (reasons.unreadable > 0) parts.push(`${reasons.unreadable} unreadable`)
+  if (reasons.range > 0) parts.push(`${reasons.range} invalid range`)
+  if (reasons.cap > 0) parts.push(`${reasons.cap} over read cap`)
+  if (reasons.unknown > 0) parts.push(`${reasons.unknown} unknown`)
+  return parts.join(', ')
+}
+
 /** 工具描述。 */
 const DESCRIPTION = [
   'Read-only health report for the .dsh-repowiki knowledge base: index presence and schema',
@@ -100,7 +116,7 @@ const DESCRIPTION = [
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
   'against the index and the filesystem, including #Lx-Ly bounds when the index records line counts',
-  'and content-drift digests recorded by manifest v3 with explicit digest coverage (untracked citations cannot be drift-checked); export candidates without named-import',
+  'and content-drift digests recorded by manifest v3 with explicit digest coverage and reasons (untracked citations cannot be drift-checked); export candidates without named-import',
   'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
   'Ca/Ce coupling and instability are reported for cross-module imports. Use it to diagnose',
   'why a panel or tool looks out of',
@@ -315,15 +331,27 @@ export function repowikiStatusTool(ctx) {
           },
           citationCoverage: {
             type: 'object',
-            description: 'How many manifest citations have content digests. Untracked citations (unreadable file or generation read cap) cannot be checked for drift; hasDigests is false for legacy manifests.',
+            description: 'How many manifest citations have content digests and why the rest do not. Untracked citations (unreadable file, invalid line range or generation read cap) cannot be checked for drift; hasDigests is false for legacy manifests.',
             additionalProperties: false,
             properties: {
               total: { type: 'integer' },
               tracked: { type: 'integer' },
               untracked: { type: 'integer' },
               hasDigests: { type: 'boolean' },
+              reasons: {
+                type: 'object',
+                additionalProperties: false,
+                description: 'Untracked citation reasons; unknown means the manifest predates reason recording.',
+                properties: {
+                  unreadable: { type: 'integer' },
+                  range: { type: 'integer' },
+                  cap: { type: 'integer' },
+                  unknown: { type: 'integer' },
+                },
+                required: ['unreadable', 'range', 'cap', 'unknown'],
+              },
             },
-            required: ['total', 'tracked', 'untracked', 'hasDigests'],
+            required: ['total', 'tracked', 'untracked', 'hasDigests', 'reasons'],
           },
           coverage: {
             type: 'object',
@@ -551,7 +579,7 @@ export function repowikiStatusTool(ctx) {
             : []),
           ...(value.citationCoverage && value.citationCoverage.total > 0
             && (!value.citationCoverage.hasDigests || value.citationCoverage.untracked > 0)
-            ? [`Citation digests: ${value.citationCoverage.tracked}/${value.citationCoverage.total} tracked${value.citationCoverage.untracked > 0 ? `, ${value.citationCoverage.untracked} untracked` : ''}${value.citationCoverage.hasDigests ? '' : ' (manifest has no digests)'}`]
+            ? [`Citation digests: ${value.citationCoverage.tracked}/${value.citationCoverage.total} tracked${value.citationCoverage.untracked > 0 ? `, ${value.citationCoverage.untracked} untracked${formatCitationReasons(value.citationCoverage.reasons) ? ` (${formatCitationReasons(value.citationCoverage.reasons)})` : ''}` : ''}${value.citationCoverage.hasDigests ? '' : ' (manifest has no digests)'}`]
             : []),
           ...(value.index.exists
             ? [`Docs coverage: ${value.coverage.documented}/${value.coverage.eligible} eligible file(s) (${value.coverage.percent}%)${value.coverage.stale ? `, ${value.coverage.stale} stale` : ''}${value.coverage.gaps.length > 0 ? `; largest gap: ${value.coverage.gaps[0].module} (${value.coverage.gaps[0].eligible - value.coverage.gaps[0].documented})` : ''}`]

@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.133.0] - 2026-11-27
+
+- **未覆盖引用原因分类**：生成时在清单页面记录 `citationMisses`
+  （source → 原因），`citationCoverage.reasons` 输出 `unreadable`（文件不可读）、
+  `range`（行号非法/倒置/越界）、`cap`（生成读取上限）与 `unknown`（旧清单
+  无原因数据）。原因会出现在生成 `hint`/渲染与 status 的 `Citation digests`
+  行；计数按页面口径与覆盖率一致，旧清单回退为 unknown 而不是猜测。
+- **测试**：487 例在 LANG=en 与 LANG=zh 下全通过；新增原因分桶、越界引用
+  归为 range、不可读文件归为 unreadable、旧清单归为 unknown 的用例。
+
 ## [0.132.0] - 2026-11-27
 
 - **面板引用指纹覆盖率**：Wiki 页签从清单派生页级与汇总覆盖率，无需读取

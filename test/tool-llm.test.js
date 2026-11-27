@@ -253,6 +253,7 @@ test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', 
   assert.deepEqual(first.pages, ['overview'])
   assert.deepEqual(first.citationCoverage, {
     total: 1, tracked: 1, untracked: 0, hasDigests: true,
+    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
   })
   const dispatched = activationSpecs.length
 
@@ -262,6 +263,7 @@ test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', 
   assert.equal(second.citationDrift, 0)
   assert.deepEqual(second.citationCoverage, {
     total: 1, tracked: 1, untracked: 0, hasDigests: true,
+    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
   })
   assert.strictEqual(activationSpecs.length, dispatched, '跳过时不派发模型')
 
@@ -273,6 +275,34 @@ test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', 
   assert.strictEqual(activationSpecs.length, dispatched + 1, '引用漂移时重新派发模型')
   assert.match(third.hint ?? '', /cited source\(s\) changed/)
   assert.match(generate.output.render({}, third)[0].text, /cited source\(s\) changed/)
+})
+
+test('repowiki-generate execute：越界引用未覆盖原因为 range', async () => {
+  const { ctx, dir } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+    'repowiki-generate': generateResult([{
+      title: '项目概览', slug: 'overview',
+      overview: '这是概览正文。',
+      sections: [{
+        heading: '核心模块', body: '核心模块正文。',
+        sources: ['a.ts#L1-L1', 'b.ts#L99-L100'],
+      }],
+      mermaid: '',
+    }]),
+  })
+  await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  const generate = repowikiGenerateTool(ctx)
+  const out = await generate.execute({ locale: 'zh' }, fakeExec)
+
+  assert.deepEqual(out.citationCoverage, {
+    total: 2, tracked: 1, untracked: 1, hasDigests: true,
+    reasons: { unreadable: 0, range: 1, cap: 0, unknown: 0 },
+  })
+  const manifest = JSON.parse(
+    nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'), 'utf8'),
+  )
+  assert.equal(manifest.pages[0].citationMisses['b.ts#L99-L100'], 'range')
+  assert.match(generate.output.render({}, out)[0].text, /1 invalid range/)
 })
 
 test('repowiki-generate execute：引用无法验证时保守重合成', async () => {
@@ -298,8 +328,9 @@ test('repowiki-generate execute：引用无法验证时保守重合成', async (
   assert.match(second.hint ?? '', /could not be verified/)
   assert.deepEqual(second.citationCoverage, {
     total: 1, tracked: 0, untracked: 1, hasDigests: false,
+    reasons: { unreadable: 1, range: 0, cap: 0, unknown: 0 },
   })
-  assert.match(generate.output.render({}, second)[0].text, /1 untracked/)
+  assert.match(generate.output.render({}, second)[0].text, /1 untracked \(1 unreadable\)/)
 })
 
 test('repowiki-generate execute：旧清单无指纹时保持原短路行为', async () => {
@@ -329,6 +360,7 @@ test('repowiki-generate execute：旧清单无指纹时保持原短路行为', a
   assert.equal(second.citationDrift, undefined, '无指纹不得声称已验证')
   assert.deepEqual(second.citationCoverage, {
     total: 1, tracked: 0, untracked: 1, hasDigests: false,
+    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 1 },
   })
   assert.match(second.hint ?? '', /0\/1 cited source\(s\) verified; 1 have no content digest/)
   assert.match(generate.output.render({}, second)[0].text, /0\/1 cited source\(s\) verified/)

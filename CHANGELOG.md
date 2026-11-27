@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.133.0] - 2026-11-27
+
+### Added
+
+- **Untracked citation reasons**: generation now records `citationMisses`
+  (source → reason) in each manifest page for citations without a digest, and
+  `citationCoverage.reasons` reports `unreadable`, `range` (invalid, reversed
+  or out-of-bounds line range), `cap` (generation read cap) and `unknown`
+  (legacy manifests without reason data). Reasons appear in generation
+  hints/renders and the status `Citation digests` line. Counting is per page,
+  consistent with coverage; legacy manifests fall back to `unknown` instead of
+  guessing.
+
+### Tests
+
+- 487 cases pass (LANG=en and LANG=zh); new coverage for reason buckets, an
+  out-of-range citation classified as `range`, an unreadable source as
+  `unreadable`, and legacy manifests as `unknown`.
+
 ## [0.132.0] - 2026-11-27
 
 ### Added

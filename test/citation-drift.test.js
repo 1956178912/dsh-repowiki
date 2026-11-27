@@ -14,8 +14,12 @@ test('citation-coverage：按页去重统计引用与已记录指纹', () => {
         sources: ['a.ts#L1', 'b.ts#L1'],
         sections: [{ sources: ['a.ts#L1', 'c.ts#L1'] }],
         citationDigests: { 'a.ts#L1': 'aaaaaaaaaaaa' },
+        citationMisses: { 'b.ts#L1': 'range' },
       },
-      { sources: ['d.ts#L1'] },
+      {
+        sources: ['d.ts#L1'],
+        citationMisses: { 'd.ts#L1': 'unreadable' },
+      },
     ],
   })
   assert.deepEqual(coverage, {
@@ -23,6 +27,7 @@ test('citation-coverage：按页去重统计引用与已记录指纹', () => {
     tracked: 1,
     untracked: 3,
     hasDigests: true,
+    reasons: { unreadable: 1, range: 1, cap: 0, unknown: 1 },
   })
 })
 
@@ -30,15 +35,31 @@ test('citation-coverage：空清单、旧清单与空指纹', () => {
   assert.equal(summarizeCitationCoverage(null), null)
   assert.equal(summarizeCitationCoverage({}), null)
   assert.deepEqual(summarizeCitationCoverage({ pages: [] }), {
-    total: 0, tracked: 0, untracked: 0, hasDigests: false,
+    total: 0,
+    tracked: 0,
+    untracked: 0,
+    hasDigests: false,
+    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
   })
   assert.deepEqual(
     summarizeCitationCoverage({ pages: [{ sources: ['a.ts#L1'], citationDigests: {} }] }),
-    { total: 1, tracked: 0, untracked: 1, hasDigests: false },
+    {
+      total: 1,
+      tracked: 0,
+      untracked: 1,
+      hasDigests: false,
+      reasons: { unreadable: 0, range: 0, cap: 0, unknown: 1 },
+    },
   )
   assert.deepEqual(
     summarizeCitationCoverage({ pages: [{ sources: ['a.ts#L1'], citationDigests: { 'a.ts#L1': '' } }] }),
-    { total: 1, tracked: 0, untracked: 1, hasDigests: false },
+    {
+      total: 1,
+      tracked: 0,
+      untracked: 1,
+      hasDigests: false,
+      reasons: { unreadable: 0, range: 0, cap: 0, unknown: 1 },
+    },
     '空字符串不算已记录指纹',
   )
 })

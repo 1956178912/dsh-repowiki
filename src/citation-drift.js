@@ -30,8 +30,10 @@ export const MAX_CITATION_DRIFT_ISSUES = 10
  * 让 status/generate 能如实报告"哪些引用无法被漂移检查覆盖"，而不是
  * 把未覆盖误读为已验证。
  * @param {{pages?:Array<{sources?:string[], sections?:Array<{sources?:string[]}>,
- *   citationDigests?:Record<string, string>}>}|null} manifest - Wiki 清单。
- * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean}|null}
+ *   citationDigests?:Record<string, string>,
+ *   citationMisses?:Record<string, string>}>}|null} manifest - Wiki 清单。
+ * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean,
+ *   reasons:{unreadable:number, range:number, cap:number, unknown:number}}|null}
  *   覆盖率；清单结构不可用时返回 null（0 条引用返回全 0 对象）。
  */
 export function summarizeCitationCoverage(manifest) {
@@ -39,6 +41,7 @@ export function summarizeCitationCoverage(manifest) {
   let total = 0
   let tracked = 0
   let hasDigests = false
+  const reasons = { unreadable: 0, range: 0, cap: 0, unknown: 0 }
   for (const page of manifest.pages) {
     const digests = page?.citationDigests && typeof page.citationDigests === 'object'
       ? page.citationDigests
@@ -46,6 +49,9 @@ export function summarizeCitationCoverage(manifest) {
     if (digests && Object.values(digests).some(value => typeof value === 'string' && value)) {
       hasDigests = true
     }
+    const misses = page?.citationMisses && typeof page.citationMisses === 'object'
+      ? page.citationMisses
+      : null
     /** @type {Set<string>} */
     const sources = new Set()
     for (const source of Array.isArray(page?.sources) ? page.sources : []) {
@@ -58,10 +64,16 @@ export function summarizeCitationCoverage(manifest) {
     }
     for (const source of sources) {
       total++
-      if (digests && typeof digests[source] === 'string' && digests[source]) tracked++
+      if (digests && typeof digests[source] === 'string' && digests[source]) {
+        tracked++
+        continue
+      }
+      const reason = misses && typeof misses[source] === 'string' ? misses[source] : 'unknown'
+      if (reason === 'unreadable' || reason === 'range' || reason === 'cap') reasons[reason]++
+      else reasons.unknown++
     }
   }
-  return { total, tracked, untracked: total - tracked, hasDigests }
+  return { total, tracked, untracked: total - tracked, hasDigests, reasons }
 }
 
 
