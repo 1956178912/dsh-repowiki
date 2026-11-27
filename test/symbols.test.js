@@ -940,6 +940,7 @@ test('Zig：容器类型、成员方法、测试块与注释/字符串屏蔽', (
     '    \\\\line',
     ';',
     'const after = 1;',
+    'pub const net = @import("net.zig");',
   ].join('\n')
   const symbols = extractSymbols(code, 'zig')
   const byName = new Map(symbols.map(s => [s.name, s]))
@@ -967,6 +968,9 @@ test('Zig：容器类型、成员方法、测试块与注释/字符串屏蔽', (
   assert.equal(byName.get('native_add').endLine, 41, 'extern 原型为单行符号')
   assert.equal(byName.get('MULTI').kind, 'variable')
   assert.equal(byName.get('after').line, 46)
+  assert.equal(byName.get('net').kind, 'variable', 'pub 再导出可见')
+  assert.equal(byName.get('net').exported, true)
+  assert.equal(byName.get('net').line, 47)
   assert.ok(!byName.has('unused'), '函数体内局部量不登记')
   assert.ok(!byName.has('commented'), '注释不产出符号')
   assert.ok(!byName.has('x') && !byName.has('y'), '结构体字段不登记为变量')

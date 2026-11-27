@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.189.0] - 2026-11-28
+
+### Added
+
+- **Zig public re-exports**: `pub const x = @import("x.zig")` now registers
+  `x` as an exported variable symbol, so module facades that forward
+  submodules are discoverable by symbol search and symbol-level impact
+  analysis. Private aliases (`const std = @import("std")`,
+  `const Self = @This()`, `@cImport`) stay out of the symbol table as
+  before, keeping per-file import noise at zero.
+
+### Tests
+
+- 577 cases pass (LANG=en and LANG=zh); the Zig symbol fixture now pins the
+  re-export symbol (kind, export flag, line) alongside the private-alias
+  exclusions.
+
 ## [0.188.0] - 2026-11-28
 
 ### Added

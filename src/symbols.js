@@ -1914,10 +1914,12 @@ function extractZig(lines) {
         depth += zigBraceDelta(codeLines[i])
         continue
       }
-      // 模块别名不是业务符号（每个文件都有 const std = @import("std")）
+      // 私有模块别名不是业务符号（每个文件都有 const std = @import("std")）；
+      // `pub const x = @import("x.zig")` 是对外再导出，检索/影响面需要看到它
       const isBinding = /=\s*@(?:import|cImport|This)\b/.test(line)
+      const reexport = isBinding && exported && /=\s*@import\b/.test(line)
       const variable = varRe.exec(line)
-      if (variable && !isBinding && !ZIG_KEYWORDS.has(variable[1])) {
+      if (variable && (!isBinding || reexport) && !ZIG_KEYWORDS.has(variable[1])) {
         symbols.push({
           name: variable[1],
           kind: 'variable',
