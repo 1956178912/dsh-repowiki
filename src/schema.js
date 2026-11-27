@@ -238,6 +238,8 @@ export const EXTENSION_LANGS = {
   vh: 'verilog',
   sv: 'systemverilog',
   svh: 'systemverilog',
+  m: 'objc',
+  mm: 'objc',
   c: 'c',
   h: 'c',
   cc: 'cpp',

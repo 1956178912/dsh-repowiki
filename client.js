@@ -362,7 +362,9 @@ const LANGUAGE_LABELS = {
   ada: 'Ada',
   verilog: 'Verilog',
   systemverilog: 'SystemVerilog',
+  objc: 'Objective-C',
   coq: 'Coq',
+  matlab: 'MATLAB',
   c: 'C',
   cpp: 'C++',
 }

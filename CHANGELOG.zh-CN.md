@@ -3,6 +3,25 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.239.0] - 2026-11-28
+
+- **Objective-C 支持（第 42 种语言）**：`.m`/`.mm` 进入索引。
+  `@interface`/`@implementation` 记为 class（类扩展 `@interface Foo ()`
+  内成员非导出，category 归到所属类），`@protocol` 记为 interface，
+  `-`/`+` 方法带完整选择器（如 `insert:at:`），原型止于 `;`、实现按
+  花括号配平；`@property` 记为 variable（含 block 属性 `(^name)`）。
+  同文件中的 C/C++ 声明合并提取，结构体/typedef/函数不会丢失。
+- **共享扩展名的内容识别**：含 `@interface`/`@protocol`/`@property` 的
+  `.h` 改判为 Objective-C 且保留原有 C 符号；MATLAB 写法的 `.m`
+  （`function`/`classdef` 或行首 `%`）归为 `matlab`，不会被误标成
+  Objective-C；`.mm` 按扩展名视为 Objective-C++。
+- **Objective-C 依赖边**：`#import "…"`/`#include "…"` 先查引用方目录，
+  再经 `include`/`src`/`inc` 根；尖括号框架头不建边；`@import Module;`
+  是模块导入，不产生文件边。
+- **测试**：760 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 protocol/类/
+  类扩展范围、选择器与方法体、block 属性、C 声明合并、`#import` 提取、
+  `.h` 内容改判、MATLAB `.m` 识别与 Objective-C++ 边。
+
 ## [0.238.0] - 2026-11-28
 
 - **`repowiki-cards` 的符号使用点证据**：`usages=true` 回答"这个符号在哪被

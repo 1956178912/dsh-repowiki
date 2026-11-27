@@ -2037,3 +2037,34 @@ test('Verilog/SystemVerilog：include 根与包名解析，`.v` 按内容区分 
     [2, 'rtl/pkg/fifo_pkg.sv'],
   ], 'quote include 经 include 根命中，import 经包名映射')
 })
+
+test('Objective-C：.h 按内容改判、.m 的 MATLAB 识别与 #import 边', async () => {
+  const dir = makeProject({
+    'App/Widget.h': [
+      '#import <Foundation/Foundation.h>',
+      '@interface Widget : NSObject',
+      '@property (nonatomic, copy) NSString *title;',
+      '- (void)reload;',
+      '@end',
+    ].join('\n'),
+    'App/Widget.m': '#import "Widget.h"\n@implementation Widget\n- (void)reload {}\n@end\n',
+    'App/Helper.m': 'function y = helper(x)\n% comment\ny = x + 1;\nend\n',
+    'App/Glue.mm': '#import "Widget.h"\n@implementation Glue\n@end\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { matlab: 1, objc: 3 })
+
+  const header = doc.files.find(file => file.path === 'App/Widget.h')
+  assert.equal(header.lang, 'objc', '含 @interface 的 .h 改判为 objc')
+  assert.deepEqual(header.symbols.map(symbol => symbol.name).sort(), ['Widget', 'reload', 'title'])
+
+  const matlab = doc.files.find(file => file.path === 'App/Helper.m')
+  assert.equal(matlab.lang, 'matlab', 'MATLAB 写法的 .m 不被标成 Objective-C')
+  assert.deepEqual(matlab.symbols, [])
+
+  const edges = doc.edges.filter(edge => edge.to === 'App/Widget.h')
+  assert.deepEqual(edges.map(edge => [edge.from, edge.line]).sort(), [
+    ['App/Glue.mm', 1],
+    ['App/Widget.m', 1],
+  ], 'Objective-C 与 Objective-C++ 的 #import 都建边，框架头不建')
+})

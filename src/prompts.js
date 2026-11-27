@@ -188,6 +188,7 @@ export function fenceLang(lang) {
     case 'ada': return 'ada'
     case 'verilog': return 'verilog'
     case 'systemverilog': return 'systemverilog'
+    case 'objc': return 'objectivec'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

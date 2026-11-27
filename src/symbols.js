@@ -5858,6 +5858,307 @@ function extractVerilog(lines) {
 }
 
 /**
+ * Objective-C 的注释/字符串屏蔽（双视图）。
+ *
+ * `//` 行注释与 `/* … *\/` 块注释在两个视图里都置空；`"` 字符串与 `'`
+ * 字符字面量只在 `masked` 视图中置空（保留引号位置），`code` 视图保留
+ * 字符串内容，供 `#import "…"` 提取路径使用。Objective-C 字符串不跨行，
+ * 因此按行重置引号状态。
+ * @param {string[]} lines - 代码行。
+ * @returns {{code:string[], masked:string[]}} 去注释原行与等长掩码行。
+ */
+export function objcScan(lines) {
+  const code = []
+  const masked = []
+  let inBlock = false
+  for (const raw of lines) {
+    let visible = ''
+    let blank = ''
+    let quote = ''
+    let escaped = false
+    let i = 0
+    while (i < raw.length) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') {
+          visible += '  '
+          blank += '  '
+          inBlock = false
+          i += 2
+        } else {
+          visible += ' '
+          blank += ' '
+          i++
+        }
+        continue
+      }
+      if (quote) {
+        if (escaped) {
+          visible += ch
+          blank += ' '
+          escaped = false
+        } else if (ch === '\\') {
+          visible += ' '
+          blank += ' '
+          escaped = true
+        } else if (ch === quote) {
+          visible += quote
+          blank += quote
+          quote = ''
+        } else {
+          visible += ch
+          blank += ' '
+        }
+        i++
+        continue
+      }
+      if (ch === '/' && next === '/') {
+        const padding = raw.length - i
+        visible += ' '.repeat(padding)
+        blank += ' '.repeat(padding)
+        break
+      }
+      if (ch === '/' && next === '*') {
+        visible += '  '
+        blank += '  '
+        inBlock = true
+        i += 2
+        continue
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch
+        visible += ch
+        blank += ch
+        i++
+        continue
+      }
+      visible += ch
+      blank += ch
+      i++
+    }
+    code.push(visible)
+    masked.push(blank)
+  }
+  return { code, masked }
+}
+
+/** Objective-C 类型/关键字（禁止被误识别为属性名）。 */
+const OBJC_KEYWORDS = new Set([
+  'id', 'void', 'int', 'char', 'short', 'long', 'float', 'double', 'signed',
+  'unsigned', 'BOOL', 'instancetype', 'self', 'super', 'nil', 'Nil', 'YES',
+  'NO', 'const', 'static', 'extern', 'inline', 'struct', 'enum', 'union',
+  'typedef', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case',
+  'default', 'break', 'continue', 'goto', 'sizeof', 'class', 'protocol',
+])
+
+/**
+ * 定位 Objective-C 声明（`@property`）的 `;` 终结行：圆/方括号配平，
+ * 属性参数与泛型列表里的分号不计。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 起始行索引。
+ * @param {number} [maxScan] - 最大扫描行数（默认 20）。
+ * @returns {number} 终结行索引；未找到时退回起始行。
+ */
+function objcDeclarationEnd(masked, startIdx, maxScan = 20) {
+  let paren = 0
+  let bracket = 0
+  const limit = Math.min(masked.length, startIdx + maxScan)
+  for (let i = startIdx; i < limit; i++) {
+    for (const ch of masked[i]) {
+      if (ch === '(') paren++
+      else if (ch === ')') paren = Math.max(0, paren - 1)
+      else if (ch === '[') bracket++
+      else if (ch === ']') bracket = Math.max(0, bracket - 1)
+      else if (ch === ';' && paren === 0 && bracket === 0) return i
+    }
+  }
+  return startIdx
+}
+
+/**
+ * 定位方法实现的结束行：首个 `;` 视为原型，首个 `{` 视为方法体并配平
+ * 花括号。参数里的 block 类型不含花括号，因此首个 `{` 一定是方法体。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 方法起始行索引。
+ * @returns {{endLine:number, body:boolean}} 结束行（1-based）与是否有方法体。
+ */
+function objcMethodRange(masked, startIdx) {
+  const limit = Math.min(masked.length, startIdx + 200)
+  for (let i = startIdx; i < limit; i++) {
+    const line = masked[i]
+    for (let c = 0; c < line.length; c++) {
+      if (line[c] === ';') return { endLine: i + 1, body: false }
+      if (line[c] !== '{') continue
+      let depth = 0
+      for (let j = i; j < masked.length; j++) {
+        const start = j === i ? c : 0
+        for (let k = start; k < masked[j].length; k++) {
+          if (masked[j][k] === '{') depth++
+          else if (masked[j][k] === '}') depth--
+        }
+        if (depth <= 0) return { endLine: j + 1, body: true }
+      }
+      return { endLine: i + 1, body: true }
+    }
+  }
+  return { endLine: startIdx + 1, body: false }
+}
+
+/**
+ * 解析 Objective-C 方法选择器：`insert:at:` / `shared`。
+ * @param {string} text - 返回类型 `)` 之后的声明文本。
+ * @returns {string} 选择器；无法识别时为空串。
+ */
+function objcSelector(text) {
+  const parts = []
+  const keyword = /([A-Za-z_]\w*)\s*:/g
+  let match
+  while ((match = keyword.exec(text)) !== null) parts.push(match[1])
+  if (parts.length > 0) return `${parts.join(':')}:`
+  const bare = /^\s*([A-Za-z_]\w*)/.exec(text)
+  if (!bare || OBJC_KEYWORDS.has(bare[1])) return ''
+  return bare[1]
+}
+
+/**
+ * 从 `@property` 声明中取属性名：优先 block 形式 `(^name)`，否则去掉
+ * 结尾的 `(…)`/`[…]` 后取最后一个标识符。
+ * @param {string} header - 压缩空白后的声明头（含结尾 `;`）。
+ * @returns {string} 属性名；无法识别时为空串。
+ */
+function objcPropertyName(header) {
+  const text = header.replace(/;\s*$/, '').trim()
+  const block = /\(\s*\^\s*([A-Za-z_]\w*)\s*\)/.exec(text)
+  if (block) return block[1]
+  const cleaned = text
+    .replace(/(?:\([^()]*\)\s*)+$/, '')
+    .replace(/(?:\[[^\]]*\]\s*)+$/, '')
+  const name = /([A-Za-z_]\w*)\s*$/.exec(cleaned)
+  if (!name || OBJC_KEYWORDS.has(name[1])) return ''
+  return name[1]
+}
+
+/**
+ * 提取 Objective-C 声明符号。
+ *
+ * 覆盖 `@interface`/`@implementation`/`@protocol` 容器（`@end` 收尾；
+ * 类扩展 `@interface Foo ()` 内的成员非导出；category 归到所属类名）、
+ * 方法（`-`/`+`，选择器含冒号段，原型止于 `;`，实现按花括号配平）、
+ * `@property`（variable；block 属性取 `(^name)`）。C/C++ 声明由调用方
+ * 与 `extractCpp` 结果合并，因此 `.h`/`.m` 里的结构体与函数不会丢失。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractObjcDecls(lines) {
+  const { masked } = objcScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, symbolIndex:number, private:boolean}>} */
+  const stack = []
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    if (/^@end\b/.test(line)) {
+      const frame = stack.pop()
+      if (frame) symbols[frame.symbolIndex].endLine = Math.max(symbols[frame.symbolIndex].line, i + 1)
+      continue
+    }
+
+    const iface = /^@interface\s+([A-Za-z_]\w*)\s*(\([^)]*\))?/.exec(line)
+    if (iface) {
+      const isExtension = typeof iface[2] === 'string' && /^\(\s*\)$/.test(iface[2])
+      symbols.push({
+        name: iface[1],
+        kind: 'class',
+        line: i + 1,
+        endLine: i + 1,
+        // 类扩展只是补充声明，类本身仍是公开的；扩展内成员才非导出
+        exported: true,
+      })
+      stack.push({ name: iface[1], symbolIndex: symbols.length - 1, private: isExtension })
+      continue
+    }
+
+    const impl = /^@implementation\s+([A-Za-z_]\w*)/.exec(line)
+    if (impl) {
+      symbols.push({ name: impl[1], kind: 'class', line: i + 1, endLine: i + 1, exported: true })
+      stack.push({ name: impl[1], symbolIndex: symbols.length - 1, private: false })
+      continue
+    }
+
+    const proto = /^@protocol\s+([A-Za-z_]\w*)/.exec(line)
+    if (proto && !/;\s*$/.test(line)) {
+      symbols.push({ name: proto[1], kind: 'interface', line: i + 1, endLine: i + 1, exported: true })
+      stack.push({ name: proto[1], symbolIndex: symbols.length - 1, private: false })
+      continue
+    }
+
+    const frame = stack[stack.length - 1]
+    if (!frame) continue
+    const privateMember = stack.some(entry => entry.private)
+
+    const method = /^[-+]\s*\([^)]*\)\s*(.*)$/.exec(line)
+    if (method) {
+      const selector = objcSelector(method[1])
+      if (!selector) continue
+      const range = objcMethodRange(masked, i)
+      symbols.push({
+        name: selector,
+        kind: 'method',
+        line: i + 1,
+        endLine: range.endLine,
+        exported: !privateMember,
+        parent: frame.name,
+      })
+      i = range.endLine - 1
+      continue
+    }
+
+    if (/^@property\b/.test(line)) {
+      const endIdx = objcDeclarationEnd(masked, i)
+      const header = masked.slice(i, endIdx + 1).join(' ').replace(/\s+/g, ' ').trim()
+      const name = objcPropertyName(header)
+      if (name) {
+        symbols.push({
+          name,
+          kind: 'variable',
+          line: i + 1,
+          endLine: endIdx + 1,
+          exported: !privateMember,
+          parent: frame.name,
+        })
+      }
+      i = endIdx
+    }
+  }
+  // 未闭合容器（截断/异常语法）保守延伸到文件尾
+  for (const frame of stack) {
+    symbols[frame.symbolIndex].endLine = Math.max(symbols[frame.symbolIndex].endLine, lines.length)
+  }
+  return symbols
+}
+
+/**
+ * 提取 Objective-C 符号：C/C++ 声明（结构体/枚举/函数/方法）与
+ * Objective-C 声明合并，按行序去重。`.h`/`.m`/`.mm` 共用同一入口，
+ * 因此按内容识别为 Objective-C 的头文件不会丢失原有 C 符号。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractObjc(lines) {
+  const merged = [...extractCpp(lines), ...extractObjcDecls(lines)]
+  merged.sort((a, b) => (a.line - b.line) || a.name.localeCompare(b.name))
+  const seen = new Set()
+  return merged.filter((symbol) => {
+    const key = `${symbol.name}\u0000${symbol.line}\u0000${symbol.kind}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
  * 从源码提取符号（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识（见 schema.js 的 EXTENSION_LANGS）。
@@ -5904,6 +6205,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'fsharp') return extractFsharp(lines)
   if (lang === 'ada') return extractAda(lines)
   if (lang === 'verilog' || lang === 'systemverilog') return extractVerilog(lines)
+  if (lang === 'objc') return extractObjc(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

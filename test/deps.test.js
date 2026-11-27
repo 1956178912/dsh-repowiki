@@ -879,3 +879,21 @@ test('SystemVerilog：`include 与 import 提取，注释/字符串屏蔽', () =
   ])
   assert.deepEqual(imports.filter(item => item.kind === 'import').map(item => item.imported), [[], ['state_t'], []])
 })
+
+test('Objective-C：#import/#include 提取，注释/字符串/模块导入屏蔽', () => {
+  const code = [
+    '// #import "nope.h"',
+    '/* #import "also_nope.h" */',
+    '#import "Widget.h"',
+    '#import <UIKit/UIKit.h>',
+    '#include "CHeader.h"',
+    '@import Foundation;',
+    'NSString *s = @"#import \\"str.h\\"";',
+  ].join('\n')
+  const imports = extractImports(code, 'objc')
+  assert.deepEqual(imports.map(item => [item.line, item.specifier, item.kind, item.relative]), [
+    [3, 'Widget.h', 'import', true],
+    [4, 'UIKit/UIKit.h', 'import', false],
+    [5, 'CHeader.h', 'import', true],
+  ], '@import 模块与注释/字符串中的伪 import 不产生引用')
+})

@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan, vbnetScan, tclScan, fsharpScan, adaScan, verilogScan,
+  nixScan, vbnetScan, tclScan, fsharpScan, adaScan, verilogScan, objcScan,
 } from './symbols.js'
 
 /**
@@ -1587,6 +1587,30 @@ function extractVerilogImports(lines) {
 }
 
 /**
+ * 提取 Objective-C 的 `#import` / `#include`：引号形式标记为相对
+ * （先查引用文件目录），尖括号形式只经 include 根查找。`@import Module;`
+ * 是模块导入而非文件路径，不建边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractObjcImports(lines) {
+  const { code } = objcScan(lines)
+  const result = []
+  for (let i = 0; i < code.length; i++) {
+    const m = /^\s*#\s*(?:import|include)\s*(?:<(?<angle>[^>]+)>|"(?<quote>[^"]+)")/.exec(code[i])
+    if (!m) continue
+    result.push({
+      specifier: m.groups.quote ?? m.groups.angle,
+      line: i + 1,
+      kind: 'import',
+      relative: m.groups.quote !== undefined,
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -1635,6 +1659,7 @@ export function extractImports(code, lang) {
   if (lang === 'fsharp') return extractFsharpImports(lines)
   if (lang === 'ada') return extractAdaImports(lines)
   if (lang === 'verilog' || lang === 'systemverilog') return extractVerilogImports(lines)
+  if (lang === 'objc') return extractObjcImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

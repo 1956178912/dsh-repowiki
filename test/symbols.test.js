@@ -2420,3 +2420,86 @@ test('Verilog：注释/字符串/宏续行不产生假符号，未闭合模块�
   assert.deepEqual([byName.get('open_ended').line, byName.get('open_ended').endLine], [16, 18], '未闭合时保守延伸到文件尾')
   assert.deepEqual([byName.get('g').line, byName.get('g').endLine], [17, 18])
 })
+
+test('Objective-C：@interface/@protocol/@implementation、方法选择器与属性', () => {
+  const code = [
+    '// @interface Fake : NSObject @end',
+    '#import "Widget.h"',
+    '@protocol WidgetDelegate <NSObject>',
+    '- (void)widgetDidTap:(Widget *)widget;',
+    '@property (nonatomic, weak) id<WidgetDelegate> delegate;',
+    '@end',
+    '',
+    '@interface Widget () {',
+    '  NSString *secret;',
+    '}',
+    '@property (nonatomic, copy) void (^completion)(BOOL success);',
+    '- (void)reload;',
+    '@end',
+    '',
+    '@implementation Widget',
+    '+ (instancetype)shared {',
+    '  static Widget *instance;',
+    '  return instance;',
+    '}',
+    '- (void)setTitle:(NSString *)title forKey:(NSInteger)key {',
+    '  NSString *value = @"@end";',
+    '  if (value) { NSLog(@"%@", value); }',
+    '}',
+    '- (void)reload {',
+    '}',
+    '@end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'objc')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('WidgetDelegate').kind, 'interface')
+  assert.deepEqual([byName.get('WidgetDelegate').line, byName.get('WidgetDelegate').endLine], [3, 6])
+  assert.equal(byName.get('widgetDidTap:').kind, 'method')
+  assert.deepEqual([byName.get('widgetDidTap:').line, byName.get('widgetDidTap:').endLine], [4, 4], '原型止于分号')
+  assert.equal(byName.get('widgetDidTap:').parent, 'WidgetDelegate')
+  assert.equal(byName.get('delegate').kind, 'variable')
+  assert.equal(byName.get('delegate').parent, 'WidgetDelegate')
+
+  const widgets = symbols.filter(s => s.name === 'Widget')
+  assert.deepEqual(widgets.map(s => [s.kind, s.line, s.endLine, s.exported]), [
+    ['class', 8, 13, true],
+    ['class', 15, 26, true],
+  ], '类扩展与实现各自按 @end 收尾，类本身仍公开')
+  assert.equal(byName.get('completion').kind, 'variable')
+  assert.equal(byName.get('completion').parent, 'Widget')
+  assert.equal(byName.get('completion').exported, false, '类扩展成员非导出')
+  const reloads = symbols.filter(s => s.name === 'reload')
+  assert.deepEqual(reloads.map(s => [s.line, s.endLine, s.exported]), [
+    [12, 12, false],
+    [24, 25, true],
+  ], '扩展内声明非导出，实现内方法与类扩展同名但独立记账')
+
+  assert.deepEqual([byName.get('shared').line, byName.get('shared').endLine], [16, 19], '方法体按花括号配平')
+  assert.equal(byName.get('shared').parent, 'Widget')
+  assert.equal(byName.get('setTitle:forKey:').kind, 'method', '多段选择器按冒号拼接')
+  assert.deepEqual([byName.get('setTitle:forKey:').line, byName.get('setTitle:forKey:').endLine], [20, 23])
+  assert.equal(byName.has('secret'), false, 'ivar 不登记')
+  assert.equal(symbols.some(s => s.name === 'Fake'), false, '注释中的 @interface 被屏蔽')
+})
+
+test('Objective-C：C 声明与 ObjC 合并，@class 前向声明不登记', () => {
+  const code = [
+    '@class Forward;',
+    'typedef struct { int a; } Pair;',
+    'static NSString *helper(NSString *x) { return x; }',
+    '@implementation Plain',
+    '- (void)run {',
+    '}',
+    '@end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'objc')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.has('Forward'), false)
+  assert.equal(byName.get('Pair').kind, 'class', 'C typedef 仍被提取')
+  assert.equal(byName.get('helper').kind, 'function')
+  assert.equal(byName.get('helper').exported, false, 'static 函数非导出')
+  assert.equal(byName.get('Plain').kind, 'class')
+  assert.equal(byName.get('run').kind, 'method')
+  assert.equal(byName.get('run').parent, 'Plain')
+})

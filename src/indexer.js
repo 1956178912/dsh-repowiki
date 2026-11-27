@@ -2192,9 +2192,9 @@ function swiftRepresentative(paths, dir) {
 }
 
 /**
- * C/C++ 源码扩展名集合（用于识别 include 根所在的项目布局）。
+ * C/C++/Objective-C 源码扩展名集合（用于识别 include 根所在的项目布局）。
  */
-const CPP_SOURCE_EXTS = ['.c', '.h', '.cc', '.cpp', '.cxx', '.hpp', '.hh', '.hxx', '.ipp']
+const CPP_SOURCE_EXTS = ['.c', '.h', '.cc', '.cpp', '.cxx', '.hpp', '.hh', '.hxx', '.ipp', '.m', '.mm']
 
 /**
  * 建立 C/C++ 引号 include 的候选根：任意层级 `include` / `src` / `inc`
@@ -2352,6 +2352,35 @@ const HDL_MARKERS = /^\s*(?:`(?:timescale|include|define|ifdef|ifndef|module)\b|
 function isCoqSource(text) {
   if (typeof text !== 'string' || text === '') return false
   return COQ_MARKERS.test(text) && !HDL_MARKERS.test(text)
+}
+
+/** Objective-C 的结构性标记（行首 `@` 声明；`@end` 单独出现不足以判型）。 */
+const OBJC_MARKERS = /^\s*@(?:interface|implementation|protocol|class|property)\b/m
+
+/** MATLAB 的结构性标记（`.m` 与 Objective-C/MATLAB 共用扩展名）。 */
+const MATLAB_MARKERS = /^\s*(?:function\b|classdef\b)|^\s*%[^\s%{]/m
+
+/**
+ * 判断源码是否为 Objective-C（用于 `.h`/`.m` 的内容识别）。
+ * 要求行首 `@interface`/`@implementation`/`@protocol`/`@class`/`@property`；
+ * 普通的 C `#import`（GCC 扩展）不足以改判。
+ * @param {string} text - 源码文本。
+ * @returns {boolean} 是否按 Objective-C 归类。
+ */
+function isObjCSource(text) {
+  if (typeof text !== 'string' || text === '') return false
+  return OBJC_MARKERS.test(text)
+}
+
+/**
+ * 判断 `.m` 文件是否为 MATLAB：`function`/`classdef` 或行首 `%` 注释。
+ * 无 Objective-C 与 MATLAB 标记时保持扩展名主语义（Objective-C）。
+ * @param {string} text - 源码文本。
+ * @returns {boolean} 是否按 MATLAB 归类。
+ */
+function isMatlabSource(text) {
+  if (typeof text !== 'string' || text === '') return false
+  return MATLAB_MARKERS.test(text)
 }
 
 /**
@@ -2734,6 +2763,9 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     }
     return resolveVerilogUnit(imp.specifier, ctx.verilogUnits)
   }
+  // Objective-C 的 #import 与 C/C++ 的 #include 同语义：#import "…" 先查
+  // 引用方目录，两种形式再经 include/src/inc 根；框架头自然不命中
+  if (lang === 'objc') return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
   if (lang === 'tcl') return resolveTclSource(fromRel, imp.specifier, ctx.indexed)
@@ -2786,6 +2818,11 @@ async function indexOneFile(fs, entry, previousFiles, allowReuse) {
   if (text.length > MAX_FILE_BYTES) return { file: null, kind: 'skipped', reason: 'too-large' }
   // `.v` 与 Coq 共用扩展名：按内容识别，避免把证明脚本标成 Verilog
   if (ext === 'v' && lang === 'verilog' && isCoqSource(text)) lang = 'coq'
+  // `.h` 里的 Objective-C 声明（@interface/@protocol）改判为 objc，
+  // 提取器仍合并 C/C++ 符号，因此不会丢失结构体/函数
+  if (ext === 'h' && lang === 'c' && isObjCSource(text)) lang = 'objc'
+  // `.m` 同时被 MATLAB 使用：无 Objective-C 标记而有 MATLAB 标记时改判
+  if (ext === 'm' && lang === 'objc' && !isObjCSource(text) && isMatlabSource(text)) lang = 'matlab'
   const digest = digestText(text)
   const cached = previousFiles.get(rel)
   let symbols

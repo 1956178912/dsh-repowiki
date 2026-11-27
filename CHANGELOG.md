@@ -5,6 +5,35 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.239.0] - 2026-11-28
+
+### Added
+
+- **Objective-C indexing (42nd language)**: `.m`/`.mm` files are indexed.
+  `@interface`/`@implementation` become classes (class extensions
+  `@interface Foo ()` keep their members non-exported; categories collapse to
+  the owning class), `@protocol` becomes an interface, `-`/`+` methods carry
+  full selectors (`insert:at:`), prototypes end at `;` while implementations
+  span their brace block, and `@property` declarations become variables
+  (block properties `(^name)` included). C/C++ declarations in the same file
+  are merged, so structs, typedefs and functions are not lost.
+- **Content-based classification for shared extensions**: `.h` files with
+  `@interface`/`@protocol`/`@property` are reclassified as Objective-C without
+  dropping their C symbols; `.m` files written in MATLAB (`function`/
+  `classdef` or a line-leading `%`) are classified as `matlab` and never
+  mislabelled as Objective-C. `.mm` is Objective-C++ by extension.
+- **Objective-C dependency edges**: `#import "…"`/`#include "…"` resolve from
+  the importing file's directory through `include`/`src`/`inc` roots, while
+  angle-bracket framework headers stay edge-free; `@import Module;` is a module
+  import and creates no file edge.
+
+### Tests
+
+- 760 cases pass (LANG=en and LANG=zh); new coverage for protocol/class/
+  extension ranges, selectors and method bodies, block properties, merged C
+  declarations, `#import` extraction, `.h` content reclassification, MATLAB
+  `.m` classification and Objective-C++ edges.
+
 ## [0.238.0] - 2026-11-28
 
 ### Added
