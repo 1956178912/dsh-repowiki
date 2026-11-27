@@ -11,7 +11,7 @@ import { makeFakeFs } from './fake-fs.mjs'
 import { documentationCoverage, assessHealth, healthGrade } from '../src/health.js'
 import { repowikiIndexTool } from '../src/tool-index.js'
 import { repowikiStatusTool } from '../src/tool-status.js'
-import { writeCard } from '../src/knowledge.js'
+import { writeCard, writeWikiPage, writeWikiManifest } from '../src/knowledge.js'
 import { encodeFrontmatter } from '../src/util.js'
 
 /** 最小 ctx。 */
@@ -98,6 +98,39 @@ test('health：环、告警与跳过文件拉低分数并有待办', () => {
   assert.match(result.issues[0], /8 eligible/)
 })
 
+test('health：引用缺失/越界/漂移扣 Wiki 分量并进入待办', () => {
+  const base = {
+    coverage: { eligible: 4, documented: 4, fresh: 4, stale: 0, percent: 100 },
+    wiki: { count: 4, stale: 0, orphaned: 0 },
+    cycles: [],
+    hubs: [],
+    warnings: [],
+    skipped: 0,
+  }
+  const clean = assessHealth(base)
+  assert.equal(clean.score, 100)
+  assert.equal(clean.components[1].score, 100)
+
+  const broken = assessHealth({ ...base, citations: { broken: 2 } })
+  assert.equal(broken.components[1].score, 80, '缺失路径 10 分/条')
+  assert.equal(broken.score, 95)
+  assert.match(broken.issues[0], /2 wiki citation path\(s\) are missing/)
+  assert.match(broken.components[1].detail, /2 citation issue\(s\)/)
+
+  const all = assessHealth({ ...base, citations: { broken: 1, outOfRange: 1, drift: 1 } })
+  assert.equal(all.components[1].score, 80, '缺失 10 + 越界 5 + 漂移 5')
+  assert.match(all.issues.join(' '), /line range/)
+  assert.match(all.issues.join(' '), /changed since generation/)
+
+  const capped = assessHealth({
+    ...base,
+    citations: { broken: 99, outOfRange: 99, drift: 99 },
+  })
+  assert.equal(capped.components[1].score, 20, '引用扣分上限 80，Wiki 分量不归零')
+  assert.equal(capped.score, 80)
+  assert.ok(capped.grade === 'B')
+})
+
 test('health：等级边界', () => {
   assert.equal(healthGrade(100), 'A')
   assert.equal(healthGrade(85), 'A')
@@ -138,6 +171,49 @@ test('status：输出覆盖率与健康分并渲染两行', async () => {
   const rendered = repowikiStatusTool(ctx).output.render({}, out)
   assert.match(rendered[0].text, /Docs coverage: 2\/3 eligible file\(s\) \(67%\)/)
   assert.match(rendered[0].text, /Health: \d+\/100 \([ABCD]\)/)
+})
+
+test('status：健康分把引用缺陷计入 Wiki 分量', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-health-citations-'))
+  for (const name of ['a', 'b', 'c']) {
+    nodefs.writeFileSync(
+      path.join(dir, `${name}.ts`),
+      `export function ${name}1() {}\nexport function ${name}2() {}\nexport function ${name}3() {}\n`,
+    )
+  }
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  await writeWikiPage(ctx.fs, dir, 'overview', 'zh', '# Overview\n')
+  await writeWikiManifest(ctx.fs, dir, 'zh', {
+    schemaVersion: 3,
+    generatedAt: 'now',
+    inputDigest: '',
+    memoryDigest: '',
+    pages: [{
+      slug: 'overview',
+      path: 'wiki/zh/overview.md',
+      title: 'Overview',
+      module: '',
+      order: 0,
+      sources: ['a.ts#L1', 'missing.ts#L1'],
+      sections: [{ heading: 'S', sources: ['a.ts#L1', 'missing.ts#L1'] }],
+      citationDigests: { 'a.ts#L1': 'deadbeefdead', 'missing.ts#L1': 'cafebabecafe' },
+      generatedAt: 'now',
+    }],
+  })
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.brokenCitations.total, 1, 'missing.ts 是缺失引用')
+  assert.equal(out.citationDrift.total, 1, 'a.ts 内容指纹不匹配')
+  const wiki = out.health.components.find(item => item.key === 'wiki')
+  assert.equal(wiki.score, 85, '缺失 10 分 + 漂移 5 分')
+  assert.match(wiki.detail, /2 citation issue\(s\)/)
+  assert.match(out.health.issues.join(' '), /1 wiki citation path\(s\) are missing/)
+  assert.match(out.health.issues.join(' '), /changed since generation/)
+  const hygiene = out.health.components.find(item => item.key === 'hygiene')
+  assert.equal(hygiene.score, 95, '引用告警不重复计入卫生分量')
+  assert.equal(out.health.score, 56)
+  assert.ok(out.warnings.some(item => /do not exist/.test(item)), '文本告警仍保留引用问题')
 })
 
 test('status：无索引时仍给出覆盖率对象但不给健康分', async () => {

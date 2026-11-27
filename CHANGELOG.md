@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.130.0] - 2026-11-27
+
+### Added
+
+- **Citation-aware health score**: `repowiki-status` now feeds citation
+  integrity into the weighted health score. Missing citation paths cost 10
+  points each (capped at 40); out-of-range citation lines and content drift
+  cost 5 each (capped at 20 each) against the wiki component, and the cap
+  keeps that component at 20 or above. Citation defects appear in the top
+  issues, and the wiki component detail names the issue count. `unchecked`
+  citations are reported but not penalized, because they are unverified
+  rather than known-bad.
+
+### Tests
+
+- 483 cases pass (LANG=en and LANG=zh); new tests cover penalty arithmetic,
+  the component cap and a status integration with both a missing citation
+  path and a drifted digest.
+
 ## [0.129.0] - 2026-11-27
 
 ### Added

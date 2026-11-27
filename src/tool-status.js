@@ -104,7 +104,9 @@ const DESCRIPTION = [
   'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
   'Ca/Ce coupling and instability are reported for cross-module imports. Use it to diagnose',
   'why a panel or tool looks out of',
-  'date before re-running index/extract/generate. No model calls, no writes.',
+  'date before re-running index/extract/generate. The weighted health score also counts',
+  'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
+  'component. No model calls, no writes.',
 ].join(' ')
 
 /**
@@ -340,7 +342,7 @@ export function repowikiStatusTool(ctx) {
           },
           health: {
             type: 'object',
-            description: 'Weighted knowledge-base health score with explainable components and top issues.',
+            description: 'Weighted knowledge-base health score with explainable components and top issues. Missing citation paths, out-of-range citation lines and citation content drift lower the wiki component.',
             additionalProperties: false,
             properties: {
               score: { type: 'integer' },
@@ -667,6 +669,13 @@ export function repowikiStatusTool(ctx) {
       let brokenCitations = null
       let citationRanges = null
       let citationDrift = null
+      // 引用告警已由健康分的 Wiki 分量按缺陷类型扣分；从卫生分量的
+      // warnings 中排除，避免同一问题被重复计分。
+      const citationWarnings = []
+      const pushCitationWarning = message => {
+        warnings.push(message)
+        citationWarnings.push(message)
+      }
       if (manifest) {
         const known = new Set((index?.files ?? []).map(file => file.path))
         const cited = new Set()
@@ -702,11 +711,11 @@ export function repowikiStatusTool(ctx) {
         }
         if (capped) {
           for (const rel of cited) known.add(rel)
-          warnings.push(`Wiki citation existence check stopped after ${WIKI_CITATION_CHECK_LIMIT} filesystem probes; unverified citations are not reported as broken.`)
+          pushCitationWarning(`Wiki citation existence check stopped after ${WIKI_CITATION_CHECK_LIMIT} filesystem probes; unverified citations are not reported as broken.`)
         }
         brokenCitations = findBrokenWikiCitations(manifest, known)
         if (brokenCitations.total > 0) {
-          warnings.push(`${brokenCitations.total} wiki citation path(s) do not exist; regenerate the wiki or fix the cited paths.`)
+          pushCitationWarning(`${brokenCitations.total} wiki citation path(s) do not exist; regenerate the wiki or fix the cited paths.`)
         }
         // 行号越界：只对已有行数的索引文件判定；非索引/旧索引计入 unchecked。
         /** @type {Map<string, number>} */
@@ -719,7 +728,7 @@ export function repowikiStatusTool(ctx) {
         }
         citationRanges = findCitationRangeIssues(manifest, lineCounts, known)
         if (citationRanges.total > 0) {
-          warnings.push(`${citationRanges.total} wiki citation line range(s) exceed the cited file length.`)
+          pushCitationWarning(`${citationRanges.total} wiki citation line range(s) exceed the cited file length.`)
         }
 
         // 引用内容漂移：仅清单 v3 起有 citationDigests；旧清单返回 null。
@@ -731,7 +740,7 @@ export function repowikiStatusTool(ctx) {
           }
         })
         if (citationDrift && citationDrift.total > 0) {
-          warnings.push(`${citationDrift.total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
+          pushCitationWarning(`${citationDrift.total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
         }
       }
 
@@ -770,9 +779,15 @@ export function repowikiStatusTool(ctx) {
         ? assessHealth({
           coverage,
           wiki: { count: wikiPages.length, stale: wikiStale, orphaned: wikiOrphaned },
+          citations: {
+            broken: brokenCitations?.total ?? 0,
+            outOfRange: citationRanges?.total ?? 0,
+            drift: citationDrift?.total ?? 0,
+            unchecked: (citationRanges?.unchecked ?? 0) + (citationDrift?.unchecked ?? 0),
+          },
           cycles,
           hubs,
-          warnings,
+          warnings: warnings.filter(message => !citationWarnings.includes(message)),
           skipped: index.stats?.skipped ?? 0,
         })
         : null
