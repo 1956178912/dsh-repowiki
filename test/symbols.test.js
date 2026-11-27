@@ -1039,6 +1039,55 @@ test('Gleam：类型/别名/opaque/external、函数与常量', () => {
   assert.ok(!byName.has('name'), '函数体内 let 不登记')
 })
 
+test('Shell：函数三种写法、公开变量与注释/heredoc 屏蔽', () => {
+  const code = [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    '',
+    'export PROJECT_NAME="demo"',
+    'readonly MAX_RETRIES=3',
+    'declare -a TARGETS=(a b)',
+    'LOCAL_TMP=/tmp/x',
+    '',
+    'greet() {',
+    '  local who="$1"',
+    '  echo "Hello, $who"',
+    '}',
+    '',
+    'function deploy {',
+    '  echo "deploying ${PROJECT_NAME}"',
+    '}',
+    '',
+    'function cleanup()',
+    '{',
+    '  rm -f "${LOCAL_TMP}"',
+    '}',
+    '',
+    '# function commented() {',
+    'cat <<EOF',
+    'function fake() {',
+    '}',
+    'EOF',
+    '',
+    'run() { echo "done"; }',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'shell')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('PROJECT_NAME').kind, 'variable')
+  assert.equal(byName.get('MAX_RETRIES').kind, 'variable')
+  assert.equal(byName.get('TARGETS').kind, 'variable')
+  assert.ok(!byName.has('LOCAL_TMP'), '普通赋值不登记')
+  assert.equal(byName.get('greet').kind, 'function')
+  assert.equal(byName.get('greet').endLine, 12)
+  assert.equal(byName.get('deploy').endLine, 16)
+  assert.equal(byName.get('cleanup').endLine, 21, 'function name 与 { 分行')
+  assert.ok(!byName.has('who'), 'local 不登记')
+  assert.ok(!byName.has('commented'), '注释不产符号')
+  assert.ok(!byName.has('fake'), 'heredoc 内容不产符号')
+  assert.equal(byName.get('run').endLine, 29, '单行函数块')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

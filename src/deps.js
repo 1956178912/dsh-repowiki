@@ -8,6 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
+import { shellScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -778,6 +779,41 @@ function extractGleamImports(lines) {
 }
 
 /**
+ * 提取 Shell 的 `source` / `.` 引用。
+ * 只接受可静态确定的路径：含变量、命令替换、通配符或花括号展开的参数
+ * 无法在索引期求值，直接跳过（不猜测）；heredoc/字符串内的伪命令由
+ * `shellScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractShellImports(lines) {
+  const result = []
+  const rows = shellScan(lines)
+  const re = /(?:^|[;&|]\s*|\b(?:then|do)\s+)(?:source|\.)\s+/g
+  for (let i = 0; i < rows.length; i++) {
+    const { code, masked } = rows[i]
+    re.lastIndex = 0
+    let m
+    while ((m = re.exec(masked)) !== null) {
+      const rest = code.slice(m.index + m[0].length)
+      const arg = /^(?:"([^"]*)"|'([^']*)'|([^\s;|&)]+))/.exec(rest)
+      if (!arg) continue
+      const specifier = arg[1] ?? arg[2] ?? arg[3] ?? ''
+      if (specifier === '' || specifier.startsWith('-')) continue
+      if (/[$`*?[\]{}]/.test(specifier)) continue
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -900,6 +936,7 @@ export function extractImports(code, lang) {
   if (lang === 'lua') return extractLuaImports(lines)
   if (lang === 'zig') return extractZigImports(lines)
   if (lang === 'gleam') return extractGleamImports(lines)
+  if (lang === 'shell') return extractShellImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -429,6 +429,27 @@ test('Gleam：跨行未限定导入', () => {
   ])
 })
 
+test('Shell：source/点命令、动态路径与 heredoc 跳过', () => {
+  const code = [
+    'source ./lib/util.sh',
+    '. lib/config.sh',
+    'source "$DIR/dynamic.sh"',
+    'if true; then source ./lib/extra.sh; fi',
+    '# source ./commented.sh',
+    'cat <<EOF',
+    'source ./heredoc.sh',
+    'EOF',
+    'bash ./lib/util.sh',
+  ].join('\n')
+  const imports = extractImports(code, 'shell')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['./lib/util.sh', 1],
+    ['lib/config.sh', 2],
+    ['./lib/extra.sh', 4],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

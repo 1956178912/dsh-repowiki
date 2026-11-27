@@ -2088,6 +2088,155 @@ function extractGleam(lines) {
 }
 
 /**
+ * 扫描 Shell 源码行：去除 `#` 注释，屏蔽 heredoc 内容，并分别返回
+ * “保留字符串内容的代码行”（依赖提取读取路径）与“字符串内容替换为空格的
+ * 掩码行”（符号匹配与花括号配平）。引号状态跨行延续（Shell 字符串可跨行）。
+ * heredoc 结束行按 `<<-` 规则允许前导制表符。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 等长的代码行/掩码行。
+ */
+export function shellScan(lines) {
+  const out = []
+  let quote = null
+  let heredoc = null
+  for (const raw of lines) {
+    if (heredoc) {
+      const candidate = heredoc.stripTabs ? raw.replace(/^\t+/, '') : raw
+      if (candidate.trimEnd() === heredoc.delim) heredoc = null
+      out.push({ code: '', masked: '' })
+      continue
+    }
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        code += ch
+        if (ch === '\\' && quote === '"' && i + 1 < raw.length) {
+          code += raw[i + 1]
+          masked += '  '
+          i++
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      // `#` 仅在行首或空白/分隔符之后才是注释（`${x#p}` 与 `foo#bar` 不是）
+      if (ch === '#' && (i === 0 || /\s|;|&|\||\(/.test(raw[i - 1]))) break
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      if (ch === '<' && raw[i + 1] === '<' && raw[i + 2] !== '<') {
+        const m = /^<<(-)?\s*(['"]?)([\w.-]+)\2/.exec(raw.slice(i))
+        if (m) {
+          heredoc = { delim: m[3], stripTabs: Boolean(m[1]) }
+          code += m[0]
+          masked += m[0]
+          i += m[0].length - 1
+          continue
+        }
+      }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 计算一行 Shell 代码的花括号增量：`${...}` 参数扩展整体跳过，
+ * 不参与块配平（否则单个 `${x}` 会让块提前结束）。
+ * @param {string} masked - 已屏蔽字符串/注释的代码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function shellBraceDelta(masked) {
+  let delta = 0
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] === '$' && masked[i + 1] === '{') {
+      let depth = 0
+      for (; i < masked.length; i++) {
+        if (masked[i] === '{') depth++
+        else if (masked[i] === '}') {
+          depth--
+          if (depth === 0) break
+        }
+      }
+      continue
+    }
+    if (masked[i] === '{') delta++
+    else if (masked[i] === '}') delta--
+  }
+  return delta
+}
+
+/**
+ * 计算 Shell 函数块的结束行：按花括号配平；声明行无 `{` 时继续向后
+ * 查找（`function foo` 换行写 `{`）。找不到块体时返回声明行。
+ * @param {string[]} maskedLines - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function shellBlockEnd(maskedLines, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < maskedLines.length; i++) {
+    depth += shellBraceDelta(maskedLines[i])
+    if (depth > 0) opened = true
+    if (opened && depth <= 0) return i + 1
+  }
+  return opened ? maskedLines.length : startIdx + 1
+}
+
+/**
+ * 提取 Shell 符号：函数定义（`function foo`、`function foo()`、`foo() {`）
+ * 与显式公开变量（`export` / `readonly` / `declare` / `typeset` 带赋值）。
+ * 只在函数体外的顶层识别；普通赋值与 `local` 不登记，避免脚本临时变量
+ * 淹没符号表。Shell 没有可见性关键字，函数与显式声明统一视为导出。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractShell(lines) {
+  const rows = shellScan(lines)
+  const maskedLines = rows.map(row => row.masked)
+  const symbols = []
+  const fnRe = /^(?:function\s+)?([A-Za-z_][\w-]*)\s*(?:\(\s*\))?\s*\{/
+  const bareFnRe = /^function\s+([A-Za-z_][\w-]*)\s*(?:\(\s*\))?\s*$/
+  const exportRe = /^(?:export|readonly)\s+([A-Za-z_]\w*)=/
+  const declareRe = /^(?:declare|typeset)\s+(?:-[A-Za-z]+\s+)*([A-Za-z_]\w*)=/
+  let depth = 0
+  for (let i = 0; i < maskedLines.length; i++) {
+    const line = maskedLines[i].trim()
+    if (depth === 0 && line !== '') {
+      const fn = fnRe.exec(line)
+      const bare = fn ? null : bareFnRe.exec(line)
+      if (fn || bare) {
+        symbols.push({
+          name: (fn ?? bare)[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: shellBlockEnd(maskedLines, i),
+          exported: true,
+        })
+        depth += shellBraceDelta(maskedLines[i])
+        continue
+      }
+      const variable = exportRe.exec(line) ?? declareRe.exec(line)
+      if (variable) {
+        symbols.push({
+          name: variable[1],
+          kind: 'variable',
+          line: i + 1,
+          endLine: i + 1,
+          exported: true,
+        })
+      }
+    }
+    depth += shellBraceDelta(maskedLines[i])
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -2218,6 +2367,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'lua') return extractLua(lines)
   if (lang === 'zig') return extractZig(lines)
   if (lang === 'gleam') return extractGleam(lines)
+  if (lang === 'shell') return extractShell(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.191.0] - 2026-11-28
+
+### Added
+
+- **Shell indexing (20th language)**: `.sh`/`.bash`/`.zsh` files produce
+  function symbols in all three declaration forms (`function foo`,
+  `function foo()`, `foo() {`), including a `{` on the following line, and
+  explicit public variables (`export`/`readonly`/`declare`/`typeset` with
+  assignment). Plain assignments and `local` stay out so script temporaries
+  do not flood the symbol table. `#` comments, quoted strings (multi-line
+  included) and heredoc bodies are masked before brace matching; `${…}`
+  parameter expansions are skipped so a single expansion cannot close a
+  function block early. `source path` / `. path` resolve relative to the
+  script directory first, then the project root, trying the literal path
+  plus `.sh`/`.bash`; dynamic arguments (variables, command substitution,
+  globs) stay edge-free. Prompt fences and the panel language filter know
+  `shell`.
+
+### Tests
+
+- 580 cases pass (LANG=en and LANG=zh); new coverage pins the three
+  function forms, split `{`, single-line bodies, explicit-variable
+  filtering, comment/heredoc shielding, `source`/dot imports with dynamic
+  arguments skipped, and an indexer fixture proving script-relative,
+  project-root and `../` resolution.
+
 ## [0.190.0] - 2026-11-28
 
 ### Fixed

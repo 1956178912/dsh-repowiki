@@ -1340,6 +1340,33 @@ test('Gleam：src/test 源根解析、未限定导入与技术栈', async () => 
   assert.ok(user.symbols.some(s => s.name === 'User' && s.kind === 'class'))
 })
 
+test('Shell：source 相对脚本目录与项目根解析', async () => {
+  const dir = makeProject({
+    'scripts/lib/util.sh': 'util_helper() { echo ok; }\n',
+    'scripts/lib/extra.sh': 'source ./util.sh\n',
+    'scripts/deploy.sh': [
+      '#!/usr/bin/env bash',
+      'source ./lib/util.sh',
+      '. lib/extra.sh',
+      'source "$SCRIPT_DIR/dynamic.sh"',
+      'deploy() { echo deploying; }',
+    ].join('\n'),
+    'tools/tool.sh': 'source ../scripts/lib/util.sh\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { shell: 4 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('scripts/deploy.sh', 'scripts/lib/util.sh')?.line, 2)
+  assert.equal(edge('scripts/deploy.sh', 'scripts/lib/extra.sh')?.line, 3, '点命令 + 项目根回退')
+  assert.equal(edge('scripts/lib/extra.sh', 'scripts/lib/util.sh')?.line, 1)
+  assert.equal(edge('tools/tool.sh', 'scripts/lib/util.sh')?.line, 1, '上跳相对路径归一')
+  assert.equal(doc.edges.filter(e => e.from === 'scripts/deploy.sh').length, 2, '动态路径不建边')
+
+  const deploy = doc.files.find(f => f.path === 'scripts/deploy.sh')
+  assert.ok(deploy.symbols.some(s => s.name === 'deploy' && s.kind === 'function'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

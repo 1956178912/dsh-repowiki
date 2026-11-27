@@ -340,6 +340,7 @@ const LANGUAGE_LABELS = {
   lua: 'Lua',
   zig: 'Zig',
   gleam: 'Gleam',
+  shell: 'Shell',
   c: 'C',
   cpp: 'C++',
 }

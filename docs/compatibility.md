@@ -45,6 +45,7 @@
 | Lua | `local M = {}` 模块表、`function` / `local function`、`M.foo` / `M:foo`（归一为 method + parent）、`M.foo = function` 赋值；`local` 形式非导出，函数体内局部变量不登记 | `require "a.b"` / `require([[a.b]])` 不支持（仅引号形式）→ 点分名换算路径，经每个 `lua/` 根与项目根匹配 `a/b.lua` / `a/b/init.lua`；外部模块不建边 |
 | Zig | `const Foo = struct/enum/union/opaque`（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn` / `extern fn` / `export fn`、具名 `test "…"` 块、顶层常量与变量、`pub const x = @import("x.zig")` 再导出；容器成员带 `parent`，`pub` 决定导出；私有 `@import`/`@cImport`/`@This` 别名不登记 | `@import("x.zig")` 相对引用文件所在目录归一解析并限制在项目内；`std`/`builtin`/`root` 与构建注入的模块名不建边；`@cImport`/`@cInclude` 不提取；`build.zig.zon` 提供项目名/版本/依赖计数，嵌套 monorepo 清单（上限 20）只累加依赖计数、项目名只取根 |
 | Gleam | `type` / `opaque type` / `external type` 容器、`type Name = …` 别名（kind type）、`fn` / `external fn`（跨行签名与单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记 | `import package/module`（含 `as` 别名与 `.{type Foo, Foo as F}` 未限定导入，跨行列表拼接到闭合 `}`）经每个 `src/`/`test/` 源根与项目根解析 `<module>.gleam`；`gleam/io` 等外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数，根与嵌套 monorepo 清单聚合依赖（嵌套上限 20，项目名只取根） |
+| Shell | `function foo` / `function foo()` / `foo() {`（含 `{` 写在下一行）与单行函数体；`export`/`readonly`/`declare`/`typeset` 带赋值的显式变量；普通赋值与 `local` 不登记 | `source path` / `. path` 先按脚本目录、再按项目根解析，尝试原路径与 `.sh`/`.bash`；变量/命令替换/通配符参数不建边；`#` 注释、引号（含跨行）与 heredoc 内容在配平前屏蔽 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -93,7 +94,10 @@ Dart 约定标记私有。Lua 为轻量行级解析：块范围按 `function/if/
 `external` 声明按单行处理（跨行别名只给首行范围）；跨行未限定导入拼接
 上限 50 行，超出后只保留已拼接部分；`gleam.toml` 只读根级
 `name`/`version` 与 `[dependencies]`/`[dev-dependencies]` 的键，不解析
-版本约束；嵌套清单聚合以 20 个为限。
+版本约束；嵌套清单聚合以 20 个为限。Shell 为轻量行级解析：heredoc 只识别
+`<<`/`<<-` 与简单分隔符（含引号），`eval`/动态拼接的 `source` 与函数体内
+单边 `}` 不解析；`bin/` 属构建产物目录默认排除，脚本放在 `scripts/` 等
+目录才会进入索引；`${…}` 参数扩展不参与块配平。
 
 ## 升级检查清单
 
