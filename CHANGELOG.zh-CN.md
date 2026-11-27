@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.198.0] - 2026-11-28
+
+- **Julia 宏修饰声明**：`@kwdef struct` / `Base.@kwdef mutable struct` 识别
+  为类符号且块范围正确（宏前缀不再隐藏 struct 或破坏配平），
+  `@enum Color red green` 登记枚举类型与枚举值（枚举值为非导出变量）。
+  `INDEX_PARSER_VERSION` 提升到 5，旧索引会重新解析 Julia 文件。
+- **测试**：593 例在 LANG=en 与 LANG=zh 下全通过；夹具覆盖宏前缀 struct
+  （含模块限定宏）、枚举类型/值、导出过滤与块范围。
+
 ## [0.197.0] - 2026-11-28
 
 - **R S4 声明**：`setGeneric("name", …)` 登记为函数符号（经 `NAMESPACE`

@@ -2533,7 +2533,10 @@ function juliaBlockDelta(masked) {
   if (trimmed === '') return 0
   if (/^(?:abstract|primitive)\s+type\b/.test(trimmed)) return 0
   let delta = (masked.match(/\b(?:function|begin|let|try|quote)\b/g) ?? []).length
-  if (/^(?:struct|mutable\s+struct|module|baremodule|if|for|while|macro)\b/.test(trimmed)) delta++
+  if (/^(?:\w+(?:\.\w+)*\.)?@\w+\s+(?:(?:mutable\s+)?struct|module|baremodule|if|for|while|macro)\b/.test(trimmed)
+    || /^(?:struct|mutable\s+struct|module|baremodule|if|for|while|macro)\b/.test(trimmed)) {
+    delta++
+  }
   delta += (masked.match(/\bdo\b/g) ?? []).length
   delta -= (masked.match(/(?:^|[\s;])end\b(?!\s*\])/g) ?? []).length
   return delta
@@ -2600,9 +2603,10 @@ function extractJulia(lines) {
   const symbols = []
   const fnRe = /^function\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/
   const macroRe = /^macro\s+([A-Za-z_]\w*)\s*\(/
-  const structRe = /^(?:mutable\s+)?struct\s+([A-Za-z_]\w*)/
+  const structRe = /^(?:\w+(?:\.\w+)*\.)?@\w+\s+(?:mutable\s+)?struct\s+([A-Za-z_]\w*)|^(?:mutable\s+)?struct\s+([A-Za-z_]\w*)/
   const moduleRe = /^(?:baremodule|module)\s+([A-Za-z_]\w*)/
   const abstractRe = /^(?:abstract|primitive)\s+type\s+([A-Za-z_]\w*)/
+  const enumRe = /^(?:\w+(?:\.\w+)*\.)?@enum\s+([A-Za-z_]\w*)(?:::[A-Za-z_]\w*)?\s*(.*)$/
   const shortFnRe = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\([^)]*\)\s*=(?!=)/
   const constRe = /^const\s+([A-Za-z_]\w*)\s*=/
   const isExported = name => (hasModule ? exportedNames.has(name) : true)
@@ -2654,15 +2658,41 @@ function extractJulia(lines) {
     }
     const struct = structRe.exec(line)
     if (struct) {
+      const name = struct[1] ?? struct[2]
       const end = juliaBlockEnd(maskedLines, i)
       symbols.push({
-        name: struct[1],
+        name,
         kind: 'class',
         line: i + 1,
         endLine: end,
-        exported: isExported(struct[1]),
+        exported: isExported(name),
       })
       skipUntil = end
+      continue
+    }
+    const enumDecl = enumRe.exec(line)
+    if (enumDecl) {
+      const name = enumDecl[1]
+      symbols.push({
+        name,
+        kind: 'class',
+        line: i + 1,
+        endLine: i + 1,
+        exported: isExported(name),
+      })
+      // 枚举值是类型的成员，按类访问，不作为独立导出
+      for (const part of enumDecl[2].trim().split(/\s+/)) {
+        const value = /^([A-Za-z_]\w*)/.exec(part)?.[1]
+        if (value) {
+          symbols.push({
+            name: value,
+            kind: 'variable',
+            line: i + 1,
+            endLine: i + 1,
+            exported: false,
+          })
+        }
+      }
       continue
     }
     const abstract = abstractRe.exec(line)

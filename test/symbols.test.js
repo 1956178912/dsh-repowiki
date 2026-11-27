@@ -1245,6 +1245,38 @@ test('R：S4 泛型与方法符号', () => {
   ])
 })
 
+test('Julia：@kwdef struct 与 @enum 符号', () => {
+  const code = [
+    'module Demo',
+    '@kwdef struct Config',
+    '    name::String',
+    '    size::Int',
+    'end',
+    '',
+    'Base.@kwdef mutable struct State',
+    '    value::Int = 0',
+    'end',
+    '',
+    '@enum Color::UInt8 red green blue',
+    '',
+    'export Config, Color',
+    'end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'julia')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Config').kind, 'class')
+  assert.equal(byName.get('Config').endLine, 5, '宏前缀不影响块范围')
+  assert.equal(byName.get('State').kind, 'class')
+  assert.equal(byName.get('State').endLine, 9)
+  assert.equal(byName.get('Color').kind, 'class')
+  assert.equal(byName.get('Color').endLine, 11)
+  assert.equal(byName.get('Color').exported, true)
+  assert.equal(byName.get('red').kind, 'variable')
+  assert.equal(byName.get('red').exported, false, '枚举值经类型访问')
+  assert.equal(byName.get('blue').line, 11)
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

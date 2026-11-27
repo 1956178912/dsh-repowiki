@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.198.0] - 2026-11-28
+
+### Added
+
+- **Julia macro-decorated declarations**: `@kwdef struct` /
+  `Base.@kwdef mutable struct` are recognised as class symbols with correct
+  block ranges (the macro prefix no longer hides the struct or breaks brace
+  balancing), and `@enum Color red green` registers the enum type plus its
+  values as non-exported variables. `INDEX_PARSER_VERSION` moves to 5 so
+  existing indexes re-parse Julia files.
+
+### Tests
+
+- 593 cases pass (LANG=en and LANG=zh); a fixture pins macro-prefixed
+  structs (including a module-qualified macro), enum type/values, export
+  filtering and block ranges.
+
 ## [0.197.0] - 2026-11-28
 
 ### Added
