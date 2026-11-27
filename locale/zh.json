@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "仓库 Wiki",
-    "description": "把仓库索引为随 Git 共享的符号级知识库（.dsh-repowiki），任意会话无需重读源码即可查询。repowiki-index 做确定性符号索引（不调用模型）；repowiki-extract 与 repowiki-generate 派生继承会话模型的子代理生成卡片与 Wiki；repowiki-cards 跨会话检索符号和文档并自动回退到有资产的语言；repowiki-context 按字符预算一次打包带行号源码、静态关系、知识命中、符号锚点与带标注的 repo map 兜底；repowiki-impact 分析文件级或符号级变更影响（符号级附词法使用点与受影响测试）、循环、文档与风险；repowiki-status 给出文档覆盖率、健康分与 PageRank 核心文件；repowiki-edit、-export、-import、-memory 覆盖人工编辑、快照与会话记忆审核。资产随 Git 共享。工具：repowiki-index、repowiki-cards、repowiki-context、repowiki-extract、repowiki-generate、repowiki-impact、repowiki-edit、repowiki-export、repowiki-import、repowiki-memory、repowiki-status。",
+    "description": "把仓库索引为随 Git 共享的符号级知识库（.dsh-repowiki），任意会话无需重读源码即可查询。repowiki-index 做确定性符号索引（不调用模型）；repowiki-extract 与 repowiki-generate 派生继承会话模型的子代理生成卡片与 Wiki；repowiki-cards 跨会话检索符号和文档并自动回退到有资产的语言；repowiki-context 按字符预算一次打包带行号源码、静态关系、知识命中、符号锚点与带标注的 repo map 兜底；repowiki-impact 分析文件级或符号级变更影响（符号级附词法使用点与受影响测试）、循环、文档与风险；repowiki-status 给出文档覆盖率、健康分、Wiki 引用完整性与 PageRank 核心文件；repowiki-edit、-export、-import、-memory 覆盖人工编辑、快照与会话记忆审核。资产随 Git 共享。工具：repowiki-index、repowiki-cards、repowiki-context、repowiki-extract、repowiki-generate、repowiki-impact、repowiki-edit、repowiki-export、repowiki-import、repowiki-memory、repowiki-status。",
     "detail": "docs/detail/DETAIL.zh.md"
   }
 }

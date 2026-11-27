@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.123.0] - 2026-11-27
+
+### Added
+
+- **Wiki citation integrity**: `repowiki-status` now verifies every manifest
+  citation (page- and section-level `sources`) against the index and, for
+  non-indexed citations such as README files, against the filesystem. It
+  returns `brokenCitations` with the distinct missing paths, citation
+  occurrences, up to 10 affected pages with up to 10 sources each, and a
+  truncation flag; the text report adds a `Broken citations` line and a
+  warning points at regeneration. Absolute paths and `..` segments are never
+  probed and are reported as broken. When more than 200 filesystem probes
+  would be needed, unverified citations are treated as known instead of
+  being misreported, with an explicit warning. No manifest means no
+  integrity claim.
+
+### Tests
+
+- 457 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.122.0] - 2026-11-27
 
 ### Added

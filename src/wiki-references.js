@@ -14,6 +14,12 @@
 /** 单次反查返回的条目上限。 */
 export const MAX_WIKI_REFERENCE_ENTRIES = 100
 
+/** 引用完整性报告里返回的页面上限。 */
+export const MAX_BROKEN_CITATION_PAGES = 10
+
+/** 引用完整性报告中每个页面列出的缺失源文件上限。 */
+export const MAX_BROKEN_CITATION_SOURCES = 10
+
 /**
  * Wiki 清单中的页面（v1 无 sections，v2 起有）。
  * @typedef {{slug?:string, path?:string, title?:string, sources?:string[],
@@ -115,4 +121,72 @@ export function wikiReferencesFor(index, paths = [], limit = MAX_WIKI_REFERENCE_
     if (truncated) break
   }
   return { wikiReferences, truncated }
+}
+
+/**
+ * 找出 Wiki 清单中指向不存在文件的引用（引用完整性）。
+ *
+ * 只读取页面级与章节级 `sources`，剥离 `#Lx-Ly` 片段；存在性由调用方
+ * 提供（索引文件 + 文件系统确认），本函数保持纯函数。`total` 是去重后的
+ * 缺失路径数，`references` 是引用出现次数（页面级与章节级分别计数），
+ * 页面明细有界，不因截断而改变前两个总数。
+ * @param {{pages?:WikiManifestPage[]}|null} manifest - Wiki 清单。
+ * @param {Set<string>|Iterable<string>} [existingPaths] - 已确认存在的相对路径。
+ * @returns {{total:number, references:number,
+ *   pages:Array<{slug:string, title:string, sources:string[]}>, truncated:boolean}}
+ *   缺失引用统计与有界明细。
+ */
+export function findBrokenWikiCitations(manifest, existingPaths = []) {
+  const known = existingPaths instanceof Set ? existingPaths : new Set(existingPaths)
+  /** @type {Map<string, {slug:string, title:string, sources:Set<string>}>} */
+  const byPage = new Map()
+  /** @type {Set<string>} */
+  const missingPaths = new Set()
+  let references = 0
+  for (const page of Array.isArray(manifest?.pages) ? manifest.pages : []) {
+    if (!page || typeof page !== 'object') continue
+    const slug = typeof page.slug === 'string' ? page.slug : ''
+    const title = typeof page.title === 'string' && page.title ? page.title : slug
+    const pageKey = `${slug}\u0000${title}`
+    /** @type {Set<string>} */
+    const missing = new Set()
+    /** @param {unknown} source */
+    const check = (source) => {
+      const path = normalizeWikiSource(source)
+      if (!path || known.has(path)) return
+      missing.add(path)
+      missingPaths.add(path)
+      references++
+    }
+    for (const source of Array.isArray(page.sources) ? page.sources : []) check(source)
+    for (const section of Array.isArray(page.sections) ? page.sections : []) {
+      if (!section || typeof section !== 'object') continue
+      for (const source of Array.isArray(section.sources) ? section.sources : []) check(source)
+    }
+    if (missing.size === 0) continue
+    let entry = byPage.get(pageKey)
+    if (!entry) {
+      entry = { slug, title, sources: new Set() }
+      byPage.set(pageKey, entry)
+    }
+    for (const path of missing) entry.sources.add(path)
+  }
+  const pages = [...byPage.values()]
+    .map(page => ({
+      slug: page.slug,
+      title: page.title,
+      sources: [...page.sources].sort(),
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title) || a.slug.localeCompare(b.slug))
+  const truncated = pages.length > MAX_BROKEN_CITATION_PAGES
+    || pages.some(page => page.sources.length > MAX_BROKEN_CITATION_SOURCES)
+  return {
+    total: missingPaths.size,
+    references,
+    pages: pages.slice(0, MAX_BROKEN_CITATION_PAGES).map(page => ({
+      ...page,
+      sources: page.sources.slice(0, MAX_BROKEN_CITATION_SOURCES),
+    })),
+    truncated,
+  }
 }

@@ -20,6 +20,7 @@ import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
+import { findBrokenWikiCitations, normalizeWikiSource } from './wiki-references.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -35,6 +36,9 @@ const CYCLE_RENDER_FILES = 3
 
 /** 渲染警告的条数上限（结构化输出保留全量，避免文本报告过长）。 */
 const RENDERED_WARNINGS = 3
+
+/** Wiki 引用存在性检查的文件系统探测上限。 */
+const WIKI_CITATION_CHECK_LIMIT = 200
 
 /**
  * 渲染循环依赖组：`a.ts ↔ b.ts (+2)`，组间以分号分隔；短环附加具体
@@ -60,7 +64,8 @@ const DESCRIPTION = [
   'compatibility, card stale/orphan counts, wiki manifest and stale pages, memory review counts,',
   'plan source, the current in-process write-lock queue, and architecture signals (top cross-module',
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
-  'that weigh indirect importance rather than fan-in alone). Use it to diagnose',
+  'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
+  'against the index and the filesystem. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. No model calls, no writes.',
 ].join(' ')
@@ -166,6 +171,31 @@ export function repowikiStatusTool(ctx) {
               orphaned: { type: 'integer' },
             },
             required: ['count', 'manifest', 'stale', 'orphaned'],
+          },
+          brokenCitations: {
+            type: 'object',
+            description: 'Wiki citations whose normalized source path does not exist in the index or on disk. Present only when a manifest exists.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Distinct missing source paths.' },
+              references: { type: 'integer', description: 'Citation occurrences (page-level and section-level counted separately).' },
+              pages: {
+                type: 'array',
+                description: 'Affected pages (up to 10) with up to 10 missing sources each.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    slug: { type: 'string' },
+                    title: { type: 'string' },
+                    sources: { type: 'array', items: { type: 'string' } },
+                  },
+                  required: ['slug', 'title', 'sources'],
+                },
+              },
+              truncated: { type: 'boolean' },
+            },
+            required: ['total', 'references', 'pages', 'truncated'],
           },
           coverage: {
             type: 'object',
@@ -318,6 +348,11 @@ export function repowikiStatusTool(ctx) {
           `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
           `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, orphaned ${value.wiki.orphaned}`,
+          ...(value.brokenCitations
+            ? [`Broken citations: ${value.brokenCitations.total === 0
+              ? '(none)'
+              : `${value.brokenCitations.total} path(s) in ${value.brokenCitations.pages.length} page(s)${value.brokenCitations.truncated ? ' (bounded)' : ''}${value.brokenCitations.pages.length > 0 ? ` — e.g. ${value.brokenCitations.pages[0].title}: ${value.brokenCitations.pages[0].sources.join(', ')}` : ''}`}`]
+            : []),
           ...(value.index.exists
             ? [`Docs coverage: ${value.coverage.documented}/${value.coverage.eligible} eligible file(s) (${value.coverage.percent}%)${value.coverage.stale ? `, ${value.coverage.stale} stale` : ''}${value.coverage.gaps.length > 0 ? `; largest gap: ${value.coverage.gaps[0].module} (${value.coverage.gaps[0].eligible - value.coverage.gaps[0].documented})` : ''}`]
             : []),
@@ -434,6 +469,53 @@ export function repowikiStatusTool(ctx) {
         }
       }
 
+      // Wiki 引用完整性：清单里的 sources 必须能落到索引文件或磁盘文件。
+      // 非索引引用（README 等）用 fs 探测确认；超过探测上限时视为"未验证"，
+      // 不冒充缺失。
+      let brokenCitations = null
+      if (manifest) {
+        const known = new Set((index?.files ?? []).map(file => file.path))
+        const cited = new Set()
+        for (const page of Array.isArray(manifest.pages) ? manifest.pages : []) {
+          for (const source of Array.isArray(page?.sources) ? page.sources : []) {
+            const rel = normalizeWikiSource(source)
+            if (rel) cited.add(rel)
+          }
+          for (const section of Array.isArray(page?.sections) ? page.sections : []) {
+            for (const source of Array.isArray(section?.sources) ? section.sources : []) {
+              const rel = normalizeWikiSource(source)
+              if (rel) cited.add(rel)
+            }
+          }
+        }
+        let probed = 0
+        let capped = false
+        for (const rel of cited) {
+          if (known.has(rel)) continue
+          // 绝对路径与上跳路径不是合法引用：不做文件系统探测，按缺失报告。
+          if (rel.startsWith('/') || /^[A-Za-z]:\//.test(rel) || rel.split('/').includes('..')) continue
+          if (probed >= WIKI_CITATION_CHECK_LIMIT) {
+            capped = true
+            break
+          }
+          probed++
+          try {
+            const stat = await fs.stat(await fs.resolve(rel, { cwd: root }))
+            if (stat && stat.type !== 'directory') known.add(rel)
+          } catch {
+            // 不存在/不可读：保留为缺失引用
+          }
+        }
+        if (capped) {
+          for (const rel of cited) known.add(rel)
+          warnings.push(`Wiki citation existence check stopped after ${WIKI_CITATION_CHECK_LIMIT} filesystem probes; unverified citations are not reported as broken.`)
+        }
+        brokenCitations = findBrokenWikiCitations(manifest, known)
+        if (brokenCitations.total > 0) {
+          warnings.push(`${brokenCitations.total} wiki citation path(s) do not exist; regenerate the wiki or fix the cited paths.`)
+        }
+      }
+
       const memories = await listMemory(fs, root, locale)
       const memoryCounts = { pending: 0, accepted: 0, rejected: 0, total: memories.length }
       for (const entry of memories) {
@@ -505,6 +587,7 @@ export function repowikiStatusTool(ctx) {
           stale: wikiStale,
           orphaned: wikiOrphaned,
         },
+        ...(brokenCitations ? { brokenCitations } : {}),
         memory: memoryCounts,
         plan: { source: planSource, ...(planError ? { error: planError } : {}) },
         lock: { pending: pendingLocks() },

@@ -82,11 +82,16 @@ test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Gi
   assert.equal(out.wiki.orphaned, 0)
   assert.equal(out.memory.pending, 1)
   assert.equal(out.memory.total, 1)
-  assert.equal(out.warnings.length, 0)
+  // 模块页会引用孤儿卡片 gone.ts（源文件不存在）→ 引用完整性必须报告
+  assert.equal(out.brokenCitations.total, 1)
+  assert.deepEqual(out.brokenCitations.pages[0].sources, ['gone.ts'])
+  assert.equal(out.warnings.length, 1)
+  assert.match(out.warnings[0], /do not exist/)
 
   const rendered = repowikiStatusTool(ctx).output.render({}, out)
   assert.match(rendered[0].text, /Index: v5 compatible/)
   assert.match(rendered[0].text, /Wiki: 1 page\(s\), manifest present/)
+  assert.match(rendered[0].text, /Broken citations: 1 path\(s\) in 1 page\(s\)/)
   assert.match(rendered[0].text, /Git: main@ccccccc/)
 })
 
@@ -301,4 +306,40 @@ test('repowiki-status：文件级 fan-in hub（按不同依赖方数量排名）
   const rendered = repowikiStatusTool(ctx).output.render({}, out)
   assert.match(rendered[0].text, /Fan-in hubs: lib\.ts \(3\); a\.ts \(1\)/)
   assert.match(rendered[0].text, /Core files \(PageRank\): lib\.ts \(\d\.\d{4}\)/)
+})
+
+test('repowiki-status：Wiki 引用完整性（缺失路径与非索引但存在的文件）', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-citations-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki/wiki/zh'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/a.ts'), 'export const a = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'README.md'), '# readme\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'), JSON.stringify({
+    schemaVersion: 2,
+    pages: [{
+      slug: 'overview',
+      title: '总览',
+      sources: ['src/a.ts#L1-L3', 'README.md'],
+      sections: [{ heading: '核心', sources: ['src/missing.ts'] }],
+    }],
+  }))
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.wiki.manifest, true)
+  assert.equal(out.brokenCitations.total, 1)
+  assert.equal(out.brokenCitations.references, 1)
+  assert.deepEqual(out.brokenCitations.pages, [
+    { slug: 'overview', title: '总览', sources: ['src/missing.ts'] },
+  ])
+  assert.equal(out.brokenCitations.truncated, false)
+  assert.ok(out.warnings.some(warning => warning.includes('do not exist')))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Broken citations: 1 path\(s\) in 1 page\(s\) — e\.g\. 总览: src\/missing\.ts/)
+
+  nodefs.rmSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'))
+  const noManifest = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(noManifest.brokenCitations, undefined)
+  assert.ok(!repowikiStatusTool(ctx).output.render({}, noManifest)[0].text.includes('Broken citations'))
 })

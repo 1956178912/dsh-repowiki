@@ -6,7 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   normalizeWikiSource, buildWikiReferenceIndex, wikiReferencesFor,
-  MAX_WIKI_REFERENCE_ENTRIES,
+  findBrokenWikiCitations, MAX_WIKI_REFERENCE_ENTRIES,
 } from '../src/wiki-references.js'
 
 test('normalizeWikiSource：去空白并剥离行号片段', () => {
@@ -88,4 +88,42 @@ test('wikiReferencesFor：保持文件顺序并按上限截断', () => {
 test('MAX_WIKI_REFERENCE_ENTRIES 是有界输出常量', () => {
   assert.equal(typeof MAX_WIKI_REFERENCE_ENTRIES, 'number')
   assert.ok(MAX_WIKI_REFERENCE_ENTRIES > 0 && MAX_WIKI_REFERENCE_ENTRIES <= 500)
+})
+
+test('findBrokenWikiCitations：缺失路径按页面归并、去重并保留引用次数', () => {
+  const broken = findBrokenWikiCitations({
+    pages: [
+      {
+        slug: 'overview', title: 'Overview',
+        sources: ['src/a.ts', 'src/missing.ts#L1-L5'],
+        sections: [
+          { heading: 'Core', sources: ['src/missing.ts', 'gone.md'] },
+          { heading: 'Flow', sources: ['src/a.ts'] },
+        ],
+      },
+      { slug: 'empty', title: 'Empty', sources: ['src/a.ts'] },
+    ],
+  }, new Set(['src/a.ts']))
+  assert.equal(broken.total, 2)
+  assert.equal(broken.references, 3)
+  assert.deepEqual(broken.pages, [
+    { slug: 'overview', title: 'Overview', sources: ['gone.md', 'src/missing.ts'] },
+  ])
+  assert.equal(broken.truncated, false)
+  const none = findBrokenWikiCitations({ pages: [] }, [])
+  assert.deepEqual(none, { total: 0, references: 0, pages: [], truncated: false })
+  assert.deepEqual(findBrokenWikiCitations(null), { total: 0, references: 0, pages: [], truncated: false })
+})
+
+test('findBrokenWikiCitations：页面明细有界但总数不受展示截断影响', () => {
+  const pages = Array.from({ length: 12 }, (_, index) => ({
+    slug: `p${index}`,
+    title: `P${index}`,
+    sources: [`missing-${index}.ts`],
+  }))
+  const broken = findBrokenWikiCitations({ pages }, [])
+  assert.equal(broken.total, 12)
+  assert.equal(broken.references, 12)
+  assert.equal(broken.pages.length, 10)
+  assert.equal(broken.truncated, true)
 })
