@@ -680,7 +680,7 @@ test('增量重建：解析器版本变化使旧 imports 缓存失效且保留�
   const first = await buildIndex(fs, dir)
   assert.equal(first.parserVersion, INDEX_PARSER_VERSION)
   const legacy = JSON.parse(JSON.stringify(first))
-  delete legacy.parserVersion
+  legacy.parserVersion = INDEX_PARSER_VERSION - 1
   legacy.files.find(file => file.path === 'src/b.ts').imports = []
   legacy.edges = []
 

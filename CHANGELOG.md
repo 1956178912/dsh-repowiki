@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.190.0] - 2026-11-28
+
+### Fixed
+
+- **Stale parse caches across upgrades**: `INDEX_PARSER_VERSION` had stayed
+  at 1 since v0.117, while the extractors gained 15+ languages and several
+  parsing fixes (Zig public re-exports, Gleam multi-line imports, earlier
+  Dart/PHP/Ruby/Swift/Scala corrections). An index built by an older
+  version would reuse unchanged files' stale `symbols`/`imports` until
+  their content changed, hiding new language support from existing
+  projects. The version is now 2, so the first reindex after upgrade
+  re-parses every file (`changed` = file count, `reused` = 0) and then
+  resumes incremental reuse as usual.
+
+### Tests
+
+- 577 cases pass (LANG=en and LANG=zh); the incremental-cache fixture now
+  uses an explicit previous `parserVersion`
+  (`INDEX_PARSER_VERSION - 1`) instead of deleting the field, matching a
+  real upgrade and pinning the re-parse-then-reuse behavior.
+
 ## [0.189.0] - 2026-11-28
 
 ### Added
