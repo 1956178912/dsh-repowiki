@@ -343,3 +343,25 @@ test('repowiki-status：Wiki 引用完整性（缺失路径与非索引但存在
   assert.equal(noManifest.brokenCitations, undefined)
   assert.ok(!repowikiStatusTool(ctx).output.render({}, noManifest)[0].text.includes('Broken citations'))
 })
+
+test('repowiki-status：导出审计只报告可判定的文件', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-unused-'))
+  nodefs.writeFileSync(path.join(dir, 'lib.ts'),
+    'export const used = 1\nexport const unused = 2\n')
+  nodefs.writeFileSync(path.join(dir, 'use.ts'),
+    "import { used } from './lib'\nconsole.log(used)\n")
+  nodefs.writeFileSync(path.join(dir, 'standalone.ts'), 'export const solo = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'lib2.ts'), 'export const s = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'side.ts'), "import './lib2'\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.unusedExports.total, 1)
+  assert.equal(out.unusedExports.files[0].path, 'lib.ts')
+  assert.deepEqual(out.unusedExports.files[0].symbols.map(symbol => symbol.name), ['unused'])
+  assert.equal(out.unusedExports.skippedFiles, 2, 'standalone.ts 与 lib2.ts 不具备判定条件')
+  assert.equal(out.unusedExports.truncated, false)
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Unused export candidates: 1 symbol\(s\) in 1 file\(s\) — e\.g\. lib\.ts#unused; 2 file\(s\) not assessed/)
+})

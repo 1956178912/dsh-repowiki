@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.124.0] - 2026-11-27
+
+### Added
+
+- **Conservative unused-export audit**: `repowiki-status` reports exported
+  symbols that have no named-import evidence. A file is only assessed when it
+  has at least one inbound edge and every inbound edge carries named symbols;
+  files with no inbound edge (possible entry points) or any unnamed import
+  (default, side-effect, C/Go-style) are counted as `skippedFiles` rather
+  than guessed. `default` names are ignored, counting is exact even when the
+  detail list is capped (10 files, 10 symbols each), and the text report adds
+  an `Unused export candidates` line with the skipped count. Output describes
+  this as import-evidence, never as dead code.
+
+### Tests
+
+- 462 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.123.0] - 2026-11-27
 
 ### Added

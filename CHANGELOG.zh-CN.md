@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.124.0] - 2026-11-27
+
+- **保守导出审计**：`repowiki-status` 报告没有具名 import 证据的导出符号。
+  只有"至少一条入边且所有入边都带具名符号"的文件才被审计；无入边（可能是
+  入口）或存在无名导入（默认/副作用/C/Go 风格）的文件计入 `skippedFiles`
+  而不猜测。忽略 `default` 名称；明细有界（10 文件 × 10 符号）但总数精确；
+  文本新增 `Unused export candidates` 行并显示未审计文件数。输出措辞为
+  "无 import 证据"，绝不宣称死代码。
+- **测试**：462 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
 ## [0.123.0] - 2026-11-27
 
 - **Wiki 引用完整性**：`repowiki-status` 校验清单中的页面级/章节级引用：

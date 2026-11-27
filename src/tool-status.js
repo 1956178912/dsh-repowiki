@@ -21,6 +21,7 @@ import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
 import { findBrokenWikiCitations, normalizeWikiSource } from './wiki-references.js'
+import { unusedExports } from './unused-exports.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -65,7 +66,8 @@ const DESCRIPTION = [
   'plan source, the current in-process write-lock queue, and architecture signals (top cross-module',
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
-  'against the index and the filesystem. Use it to diagnose',
+  'against the index and the filesystem; export candidates without named-import evidence are',
+  'reported conservatively (files with any unnamed inbound edge are skipped). Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. No model calls, no writes.',
 ].join(' ')
@@ -336,6 +338,44 @@ export function repowikiStatusTool(ctx) {
               required: ['path', 'score', 'inDegree', 'outDegree'],
             },
           },
+          unusedExports: {
+            type: 'object',
+            description: 'Conservative export audit: exported symbols without named-import evidence. Only files whose inbound edges all carry named symbols are assessed; files with no inbound edges or any unnamed import are counted as skipped, not as unused.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Exported symbols without named-import evidence (exact, even when detail is truncated).' },
+              exportedTotal: { type: 'integer', description: 'Exported symbols in assessed files.' },
+              skippedFiles: { type: 'integer', description: 'Files with exports that could not be assessed (no inbound edge or an unnamed inbound import).' },
+              files: {
+                type: 'array',
+                description: 'Assessed files with candidates (up to 10 files, 10 symbols each).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    path: { type: 'string' },
+                    symbols: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          name: { type: 'string' },
+                          kind: { type: 'string' },
+                          line: { type: 'integer' },
+                        },
+                        required: ['name', 'kind', 'line'],
+                      },
+                    },
+                    hidden: { type: 'integer', description: 'Candidates in this file not listed because of the per-file cap.' },
+                  },
+                  required: ['path', 'symbols', 'hidden'],
+                },
+              },
+              truncated: { type: 'boolean' },
+            },
+            required: ['total', 'exportedTotal', 'skippedFiles', 'files', 'truncated'],
+          },
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
@@ -372,6 +412,11 @@ export function repowikiStatusTool(ctx) {
           `Core files (PageRank): ${value.coreFiles.length > 0
             ? value.coreFiles.map(entry => `${entry.path} (${entry.score.toFixed(4)})`).join('; ')
             : '(none)'}`,
+          ...(value.unusedExports
+            ? [`Unused export candidates: ${value.unusedExports.total === 0
+              ? '(none)'
+              : `${value.unusedExports.total} symbol(s) in ${value.unusedExports.files.length} file(s)${value.unusedExports.truncated ? ' (bounded)' : ''}${value.unusedExports.files.length > 0 ? ` — e.g. ${value.unusedExports.files[0].path}#${value.unusedExports.files[0].symbols[0].name}` : ''}`}${value.unusedExports.skippedFiles > 0 ? `; ${value.unusedExports.skippedFiles} file(s) not assessed` : ''}`]
+            : []),
           value.lastExtract
             ? `Last extract: ${value.lastExtract.extracted} new / ${value.lastExtract.skippedExisting} unchanged / ${value.lastExtract.skippedManual} manual / ${value.lastExtract.skippedSimple} trivial, ${value.lastExtract.failed} failed, ${value.lastExtract.retried} retried, concurrency ${value.lastExtract.concurrency}, ${value.lastExtract.durationMs}ms${value.lastExtract.generatedAt ? ` (${value.lastExtract.generatedAt})` : ''}`
             : 'Last extract: none',
@@ -537,6 +582,8 @@ export function repowikiStatusTool(ctx) {
       const coreFiles = (index?.edges ?? []).length > 0
         ? computeFileRank(index.edges, { limit: MAX_CORE_FILES }).entries
         : []
+      // 导出审计：只审计"所有入边都带具名符号"的文件，其余计入 skippedFiles。
+      const unused = index ? unusedExports(index) : null
       // 文档覆盖率的分母是"有资格生成卡片"的文件（plan 的阈值/includeOnly），
       // 否则简单文件会永久拉低分数，健康度失真
       const eligiblePaths = selectCandidates(
@@ -595,6 +642,7 @@ export function repowikiStatusTool(ctx) {
         cycles,
         topDependents: hubs,
         coreFiles,
+        ...(unused ? { unusedExports: unused } : {}),
         warnings,
         durationMs: Date.now() - startedAt,
       }
