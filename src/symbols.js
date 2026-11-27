@@ -4039,6 +4039,135 @@ function extractGroovy(lines) {
 }
 
 /**
+ * 扫描 PowerShell 源码行：`#` 行注释、`<# … #>` 块注释、单/双引号字符串
+ * （`` ` `` 转义与 `''` 双写转义）以及 here-string（`@'…'@` / `@"…"@`，
+ * 起始标记须在行尾、结束标记须在行首）内容替换为空格。
+ *
+ * 返回双视图：`masked` 供符号提取配平（字符串/注释全屏蔽）；`code`
+ * 保留字符串原文、仅屏蔽注释，供依赖提取读取 `using module` /
+ * `Import-Module` / dot-source 的路径。
+ * @param {string[]} lines - 源码行。
+ * @returns {{code:string[], masked:string[]}} 双视图（行注释后截断）。
+ */
+export function powershellScan(lines) {
+  const codeOut = []
+  const maskedOut = []
+  let inBlock = false
+  let quote = null
+  /** @type {string|null} here-string 结束标记（`'@` 或 `"@`）。 */
+  let here = null
+  for (const raw of lines) {
+    if (here) {
+      const trimmed = raw.trimStart()
+      if (trimmed.startsWith(here) && trimmed.slice(here.length).trim() === '') here = null
+      codeOut.push(' '.repeat(raw.length))
+      maskedOut.push(' '.repeat(raw.length))
+      continue
+    }
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '#' && next === '>') { inBlock = false; i++; code += '  '; masked += '  ' }
+        else { code += ' '; masked += ' ' }
+        continue
+      }
+      if (quote) {
+        if (ch === '`' && quote === '"') { i++; code += raw.slice(i - 1, i + 1); masked += '  ' }
+        else if (ch === quote) {
+          // PowerShell 单引号字符串用 `''` 表示一个引号
+          if (raw[i + 1] === quote) { i++; code += raw.slice(i - 1, i + 1); masked += '  ' }
+          else { quote = null; code += ch; masked += ch }
+        } else { code += ch; masked += ' ' }
+        continue
+      }
+      if (ch === '@' && (next === "'" || next === '"') && raw.slice(i + 2).trim() === '') {
+        here = `${next}@`
+        code += ' '.repeat(raw.length - i)
+        masked += ' '.repeat(raw.length - i)
+        break
+      }
+      if (ch === '<' && next === '#') { inBlock = true; i++; code += '  '; masked += '  '; continue }
+      if (ch === '#') break
+      if (ch === "'" || ch === '"') { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    codeOut.push(code)
+    maskedOut.push(masked)
+  }
+  return { code: codeOut, masked: maskedOut }
+}
+
+/** PowerShell 控制流/结构性关键字——禁止被误识别为方法名。 */
+const POWERSHELL_KEYWORDS = new Set([
+  'if', 'elseif', 'else', 'foreach', 'for', 'while', 'do', 'switch', 'try',
+  'catch', 'finally', 'function', 'filter', 'class', 'enum', 'return',
+  'throw', 'param', 'trap', 'begin', 'process', 'end', 'using', 'workflow',
+  'configuration', 'data', 'in', 'and', 'or', 'not',
+])
+
+/**
+ * 提取 PowerShell 符号：`function`/`filter`/`workflow`/`configuration`
+ * 定义（函数名可含 `-`，支持 `global:`/`script:`/`local:`/`private:`
+ * 作用域前缀）与顶层 `class`/`enum`；类内第一层方法（含构造器）带
+ * `parent`，`hidden` 成员标记非导出。方法体内、属性与调用表达式不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractPowershell(lines) {
+  const { masked } = powershellScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const containers = []
+  let depth = 0
+  for (let i = 0; i < masked.length; i++) {
+    while (containers.length > 0 && containers[containers.length - 1].end <= i + 1) containers.pop()
+    const line = masked[i].trim()
+    if (line === '') { depth += braceDeltaOf(masked[i]); continue }
+    const parent = containers.length > 0 ? containers[containers.length - 1].name : undefined
+
+    if (depth === 0) {
+      const typeMatch = /^(?:class|enum)\s+([A-Za-z_]\w*)/.exec(line)
+      if (typeMatch) {
+        const end = findBlockEnd(masked, i)
+        symbols.push({
+          name: typeMatch[1], kind: 'class', line: i + 1, endLine: end, exported: true,
+        })
+        containers.push({ name: typeMatch[1], end })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+      const fn = /^(?:function|filter|workflow|configuration)\s+(?:(global|script|local|private):)?([A-Za-z_][\w-]*)/i.exec(line)
+      if (fn) {
+        symbols.push({
+          name: fn[2], kind: 'function', line: i + 1,
+          endLine: findBlockEnd(masked, i),
+          exported: (fn[1] ?? '').toLowerCase() !== 'private',
+        })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+    } else if (depth === 1 && parent) {
+      const hidden = /^hidden\s+/i.test(line)
+      const member = /^(?:hidden\s+)?(?:(?:static|public|protected)\s+)*(?:\[[^\]]*\]\s*)*([A-Za-z_][\w-]*)\s*\(/i.exec(line)
+      if (member && !POWERSHELL_KEYWORDS.has(member[1].toLowerCase())) {
+        symbols.push({
+          name: member[1], kind: 'method', line: i + 1,
+          endLine: findBlockEnd(masked, i), exported: !hidden, parent,
+        })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+    }
+    depth += braceDeltaOf(masked[i])
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4180,6 +4309,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'clojure') return extractClojure(lines)
   if (lang === 'hcl') return extractHcl(lines)
   if (lang === 'groovy') return extractGroovy(lines)
+  if (lang === 'powershell') return extractPowershell(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

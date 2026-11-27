@@ -1733,6 +1733,60 @@ test('Groovy：class/trait/方法/脚本函数与可见性', () => {
   assert.ok(!byName.has('Hidden'), '注释内类不登记')
 })
 
+test('PowerShell：function/filter/class/enum 与类内方法、作用域可见性', () => {
+  const code = [
+    '# function FakeComment { }',
+    '<#',
+    'function FakeBlock { }',
+    '#>',
+    "$here = @'",
+    'function FakeHere { }',
+    "'@",
+    'function Get-Thing {',
+    '    param($x)',
+    '    Write-Output "}"',
+    '}',
+    'function private:Get-Secret { }',
+    'function script:Invoke-Build($name) { }',
+    'filter Select-Thing { $_ }',
+    'class Widget {',
+    '    [string]$Name',
+    '    [OutputType([string])]',
+    '    [string] Render() {',
+    '        return "}"',
+    '    }',
+    '    hidden [void] Reset() { }',
+    '    static [Widget] Create() { return $null }',
+    '    Widget() { }',
+    '}',
+    'enum Color { Red, Blue }',
+    'configuration ServerConfig { }',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'powershell')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Get-Thing').kind, 'function')
+  assert.equal(byName.get('Get-Thing').exported, true)
+  assert.equal(byName.get('Get-Thing').endLine, 11)
+  assert.equal(byName.get('Get-Secret').exported, false, 'private: 作用域非导出')
+  assert.equal(byName.get('Invoke-Build').exported, true, 'script: 作用域仍导出')
+  assert.equal(byName.get('Select-Thing').kind, 'function', 'filter')
+  const widget = symbols.find(s => s.name === 'Widget' && s.kind === 'class')
+  assert.equal(widget.kind, 'class')
+  assert.equal(widget.endLine, 24)
+  assert.equal(byName.get('Render').kind, 'method')
+  assert.equal(byName.get('Render').parent, 'Widget')
+  assert.equal(byName.get('Render').endLine, 20, '字符串内花括号不越过方法边界')
+  assert.equal(byName.get('Reset').exported, false, 'hidden 成员非导出')
+  assert.equal(byName.get('Create').kind, 'method')
+  assert.ok(symbols.some(s => s.name === 'Widget' && s.kind === 'method' && s.parent === 'Widget'), '构造器')
+  assert.equal(byName.get('Color').kind, 'class')
+  assert.equal(byName.get('ServerConfig').kind, 'function')
+  assert.ok(!byName.has('FakeComment'), '行注释不登记')
+  assert.ok(!byName.has('FakeBlock'), '块注释不登记')
+  assert.ok(!byName.has('FakeHere'), 'here-string 不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

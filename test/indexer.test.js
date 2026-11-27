@@ -1741,6 +1741,32 @@ test('Groovy：点分 import 解析到 Groovy/Java 文件', async () => {
   ])
 })
 
+test('PowerShell：模块/脚本路径解析到 psm1/ps1 与模块目录形式', async () => {
+  const dir = makeProject({
+    'Modules/Logger.psm1': 'function Write-Log { param($m) }\n',
+    'Modules/Other/Other.psm1': 'function Get-Other { }\n',
+    'scripts/Common.psm1': 'function Invoke-Common { }\n',
+    'scripts/Shared.ps1': 'function Get-Shared { }\n',
+    'scripts/Build.ps1': [
+      'using module ../Modules/Logger.psm1',
+      'Import-Module ./Common.psm1 -Force',
+      '. ./Shared.ps1',
+      'Import-Module ../Modules/Other',
+      'Import-Module Pester',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { powershell: 5 })
+
+  const edges = doc.edges.filter(e => e.from === 'scripts/Build.ps1')
+  assert.deepEqual(edges.map(e => [e.line, e.to]).sort(), [
+    [1, 'Modules/Logger.psm1'],
+    [2, 'scripts/Common.psm1'],
+    [3, 'scripts/Shared.ps1'],
+    [4, 'Modules/Other/Other.psm1'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

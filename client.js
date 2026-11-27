@@ -351,6 +351,7 @@ const LANGUAGE_LABELS = {
   clojure: 'Clojure',
   hcl: 'HCL',
   groovy: 'Groovy',
+  powershell: 'PowerShell',
   c: 'C',
   cpp: 'C++',
 }

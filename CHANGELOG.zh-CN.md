@@ -3,6 +3,24 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.218.0] - 2026-11-28
+
+- **PowerShell 支持（第 31 种语言）**：`.ps1`/`.psm1` 提取 `function`/
+  `filter`/`workflow`/`configuration` 定义（连字符 `Verb-Noun` 名称，
+  `global:`/`script:`/`local:`/`private:` 作用域前缀，`private:` 非导出）
+  与顶层 `class`/`enum`；类内第一层成员登记为带 `parent` 的方法（含
+  构造器），`hidden` 成员非导出，属性声明不登记。
+- **PowerShell 屏蔽**：`#` 行注释、`<# … #>` 块注释、单引号（`''` 转义）
+  与双引号（反引号转义）字符串、`@'…'@`/`@"…"@` here-string 在配平前
+  屏蔽，内部花括号与伪声明不会登记。
+- **PowerShell 依赖边**：`using module ./X.psm1`、`Import-Module ./X` 与
+  dot-source（`. ./X.ps1`）相对引用脚本解析，尝试原路径、`.ps1`/`.psm1`/
+  `.psd1` 后缀与 `Foo/Foo.psm1` 模块目录形式；纯模块名（`Pester`）与
+  越出项目的路径不建边。
+- **测试**：638 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖函数/filter/
+  类/方法/构造器、作用域可见性、`hidden` 成员、注释与 here-string 屏蔽
+  及三种引用形式。
+
 ## [0.217.0] - 2026-11-28
 
 - **Groovy 支持（第 30 种语言）**：`.groovy` 提取顶层 `class`/`interface`/

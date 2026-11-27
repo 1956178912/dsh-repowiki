@@ -202,6 +202,8 @@ export const EXTENSION_LANGS = {
   cljc: 'clojure',
   tf: 'hcl',
   groovy: 'groovy',
+  ps1: 'powershell',
+  psm1: 'powershell',
   c: 'c',
   h: 'c',
   cc: 'cpp',

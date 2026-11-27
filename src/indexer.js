@@ -1132,6 +1132,32 @@ function resolveSolidityImport(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 PowerShell 的 `using module` / `Import-Module` / dot-source 路径：
+ * 反斜杠归一后按引用文件目录解析，尝试原路径、`.ps1`/`.psm1`/`.psd1`
+ * 后缀与模块目录形式（`Foo/Foo.psm1`）；纯模块名与外部路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 脚本/模块路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolvePowershellModule(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim().replace(/\\/g, '/')
+  const bareScript = /\.(?:ps1|psm1|psd1)$/i.test(raw)
+  if (raw === '' || (!raw.startsWith('.') && !raw.includes('/') && !bareScript)) return null
+  const base = path.posix.dirname(fromRel)
+  const target = path.posix.normalize(path.posix.join(base, raw))
+  if (target === '..' || target.startsWith('../') || target === '.') return null
+  const name = path.posix.basename(target)
+  const candidates = [target, `${target}.ps1`, `${target}.psm1`, `${target}.psd1`]
+  if (!name.includes('.')) candidates.push(`${target}/${name}.psm1`, `${target}/${name}.psd1`)
+  for (const candidate of candidates) {
+    if (indexed.has(candidate)) return candidate
+  }
+  return null
+}
+
+/**
  * 解析 Terraform 本地模块：`source = "./modules/x"` 按引用文件目录归一，
  * 优先 `<dir>/main.tf`，否则取该目录字典序最小的 `.tf`；外部（registry/
  * git）与插值路径不建边。
@@ -2274,6 +2300,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'clojure') return resolveClojureSpecifier(imp.specifier, fromRel, ctx.clojureRoots, ctx.indexed)
   if (lang === 'hcl') return resolveHclModule(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'groovy') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.groovy)
+  if (lang === 'powershell') return resolvePowershellModule(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)

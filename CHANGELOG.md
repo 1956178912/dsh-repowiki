@@ -5,6 +5,33 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.218.0] - 2026-11-28
+
+### Added
+
+- **PowerShell indexing (31st language)**: `.ps1`/`.psm1` files produce
+  `function`/`filter`/`workflow`/`configuration` definitions (hyphenated
+  `Verb-Noun` names, `global:`/`script:`/`local:`/`private:` scope
+  prefixes; `private:` is non-exported) and top-level `class`/`enum`
+  containers. First-level class members become `method` symbols with
+  `parent` ownership (constructors included), `hidden` members are
+  non-exported, and property declarations stay unindexed.
+- **PowerShell masking**: `#` line comments, `<# … #>` block comments,
+  single-quoted (`''` escaping) and double-quoted (backtick escaping)
+  strings, and `@'…'@`/`@"…"@` here-strings are masked before range
+  matching, so braces and fake declarations inside them never register.
+- **PowerShell dependency edges**: `using module ./X.psm1`,
+  `Import-Module ./X` and dot-sourcing (`. ./X.ps1`) resolve relative to
+  the importing script, trying the literal path plus `.ps1`/`.psm1`/
+  `.psd1` suffixes and the `Foo/Foo.psm1` module-directory form; bare
+  module names (`Pester`) and paths escaping the project stay edge-free.
+
+### Tests
+
+- 638 cases pass (LANG=en and LANG=zh); new coverage for functions,
+  filters, classes, methods, constructors, scope visibility, `hidden`
+  members, comment/here-string masking and all three reference forms.
+
 ## [0.217.0] - 2026-11-28
 
 ### Added

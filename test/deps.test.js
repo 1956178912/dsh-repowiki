@@ -629,6 +629,25 @@ test('Groovy：import 与 static import', () => {
   ])
 })
 
+test('PowerShell：using module / Import-Module / dot-source 路径', () => {
+  const code = [
+    'using module ./Modules/Logger.psm1',
+    'Import-Module ./Tasks/Build.psd1 -Force',
+    '. ./Common/Helpers.ps1',
+    'Import-Module Pester',
+    '# Import-Module ./Commented.psm1',
+    '$s = "Import-Module ./InString.psm1"',
+    "Import-Module './Quoted.psm1'",
+  ].join('\n')
+  const imports = extractImports(code, 'powershell')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['./Modules/Logger.psm1', 1, true],
+    ['./Tasks/Build.psd1', 2, true],
+    ['./Common/Helpers.ps1', 3, true],
+    ['./Quoted.psm1', 7, true],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

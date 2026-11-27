@@ -10,7 +10,7 @@
 import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
-  clojureScan, hclScan, groovyScan,
+  clojureScan, hclScan, groovyScan, powershellScan,
 } from './symbols.js'
 
 /**
@@ -1179,6 +1179,49 @@ function extractGroovyImports(lines) {
 }
 
 /**
+ * 提取 PowerShell 的 `using module`、`Import-Module` 与 dot-source
+ * （`. ./x.ps1`）路径引用：只登记文件/相对路径形式，纯模块名
+ * （如 `Pester`）不建边；注释/字符串内的伪语句由 `powershellScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractPowershellImports(lines) {
+  const result = []
+  const { code } = powershellScan(lines)
+  /**
+   * 从语句剩余部分取第一个路径 token（去引号）。
+   * @param {string} rest - 路径起始的剩余文本。
+   * @returns {string} 路径文本。
+   */
+  const firstToken = (rest) => {
+    const quoted = /^(["'])(.+?)\1/.exec(rest.trim())
+    if (quoted) return quoted[2]
+    return rest.trim().split(/\s+/)[0] ?? ''
+  }
+  for (let i = 0; i < code.length; i++) {
+    const line = code[i].trim()
+    /** @type {string|null} */
+    let rawPath = null
+    const usingModule = /^using\s+module\s+(.+)$/i.exec(line)
+    if (usingModule) rawPath = firstToken(usingModule[1])
+    if (rawPath === null) {
+      const importModule = /^Import-Module\s+(?:-Name\s+)?(.+)$/i.exec(line)
+      if (importModule) rawPath = firstToken(importModule[1])
+    }
+    if (rawPath === null) {
+      const dotSource = /^\.\s+(.+)$/.exec(line)
+      if (dotSource) rawPath = firstToken(dotSource[1])
+    }
+    if (rawPath === null) continue
+    // 纯模块名（无路径分隔符、无脚本后缀）指向已安装模块，不建边
+    if (!rawPath.startsWith('.') && !rawPath.includes('/') && !rawPath.includes('\\')
+      && !/\.(?:ps1|psm1|psd1)$/i.test(rawPath)) continue
+    result.push({ specifier: rawPath, line: i + 1, kind: 'import', relative: true, imported: [] })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1292,6 +1335,7 @@ export function extractImports(code, lang) {
   if (lang === 'clojure') return extractClojureImports(lines)
   if (lang === 'hcl') return extractHclImports(lines)
   if (lang === 'groovy') return extractGroovyImports(lines)
+  if (lang === 'powershell') return extractPowershellImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }
