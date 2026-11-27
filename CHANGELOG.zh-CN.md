@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.125.0] - 2026-11-27
+
+- **模块耦合与不稳定性**：新增纯函数 `src/coupling.js`，按跨模块静态 import
+  计算 Martin 指标——Ca（有多少个其他模块依赖本模块）、Ce（本模块依赖多少
+  个其他模块）与不稳定性 `Ce/(Ca+Ce)`。同模块内部边、自引用与无 module
+  字段的文件忽略；模块对去重。`repowiki-status` 输出 `moduleCoupling`
+  （按不稳定性降序、同分按耦合总量、再按模块名，前 10），并在模块依赖
+  热点旁渲染 `Module instability` 行。
+- **测试**：466 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
 ## [0.124.0] - 2026-11-27
 
 - **保守导出审计**：`repowiki-status` 报告没有具名 import 证据的导出符号。

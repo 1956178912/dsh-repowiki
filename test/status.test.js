@@ -365,3 +365,23 @@ test('repowiki-status：导出审计只报告可判定的文件', async () => {
   const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
   assert.match(rendered, /Unused export candidates: 1 symbol\(s\) in 1 file\(s\) — e\.g\. lib\.ts#unused; 2 file\(s\) not assessed/)
 })
+
+test('repowiki-status：模块耦合与不稳定性（跨模块 import）', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-coupling-'))
+  nodefs.mkdirSync(path.join(dir, 'pkg'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, 'app'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'pkg/base.ts'), 'export const base = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'app/use.ts'),
+    "import { base } from '../pkg/base'\nexport const use = base\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.deepEqual(out.moduleCoupling.modules, [
+    { module: 'app', ca: 0, ce: 1, instability: 1 },
+    { module: 'pkg', ca: 1, ce: 0, instability: 0 },
+  ])
+  assert.equal(out.moduleCoupling.truncated, false)
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Module instability: app \(1\.00, Ca 0\/Ce 1\); pkg \(0\.00, Ca 1\/Ce 0\)/)
+})

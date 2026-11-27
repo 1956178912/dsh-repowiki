@@ -22,6 +22,7 @@ import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
 import { findBrokenWikiCitations, normalizeWikiSource } from './wiki-references.js'
 import { unusedExports } from './unused-exports.js'
+import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -67,7 +68,8 @@ const DESCRIPTION = [
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
   'against the index and the filesystem; export candidates without named-import evidence are',
-  'reported conservatively (files with any unnamed inbound edge are skipped). Use it to diagnose',
+  'reported conservatively (files with any unnamed inbound edge are skipped); module Ca/Ce',
+  'coupling and instability are reported for cross-module imports. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. No model calls, no writes.',
 ].join(' ')
@@ -291,6 +293,30 @@ export function repowikiStatusTool(ctx) {
               required: ['from', 'to', 'count'],
             },
           },
+          moduleCoupling: {
+            type: 'object',
+            description: 'Module-level afferent (Ca) / efferent (Ce) coupling and instability = Ce/(Ca+Ce), from cross-module static imports only.',
+            additionalProperties: false,
+            properties: {
+              modules: {
+                type: 'array',
+                description: 'Modules ordered by instability (desc), then total coupling, then name; capped at 10.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    module: { type: 'string' },
+                    ca: { type: 'integer', description: 'Distinct modules importing this one.' },
+                    ce: { type: 'integer', description: 'Distinct modules this one imports.' },
+                    instability: { type: 'number', description: 'Ce/(Ca+Ce), rounded to 3 decimals; 0 when uncoupled.' },
+                  },
+                  required: ['module', 'ca', 'ce', 'instability'],
+                },
+              },
+              truncated: { type: 'boolean' },
+            },
+            required: ['modules', 'truncated'],
+          },
           cycles: {
             type: 'array',
             description: 'File-level import cycles as strongly connected components (size ≥ 2), largest first, capped at 10 groups; each group lists at most 30 files.',
@@ -405,6 +431,11 @@ export function repowikiStatusTool(ctx) {
           `Module dependencies: ${value.moduleDependencies.length > 0
             ? value.moduleDependencies.map(d => `${d.from} → ${d.to} (${d.count})`).join('; ')
             : '(none)'}`,
+          ...(value.moduleCoupling
+            ? [`Module instability: ${value.moduleCoupling.modules.length > 0
+              ? value.moduleCoupling.modules.map(item => `${item.module} (${item.instability.toFixed(2)}, Ca ${item.ca}/Ce ${item.ce})`).join('; ')
+              : '(none)'}`]
+            : []),
           `Import cycles: ${formatCycles(value.cycles)}`,
           `Fan-in hubs: ${value.topDependents.length > 0
             ? value.topDependents.map(d => `${d.path} (${d.dependents})`).join('; ')
@@ -584,6 +615,8 @@ export function repowikiStatusTool(ctx) {
         : []
       // 导出审计：只审计"所有入边都带具名符号"的文件，其余计入 skippedFiles。
       const unused = index ? unusedExports(index) : null
+      // 模块耦合：跨模块 import 的 Ca/Ce 与不稳定性（描述性统计）。
+      const coupling = index ? moduleCoupling(index.files ?? [], index.edges ?? []) : null
       // 文档覆盖率的分母是"有资格生成卡片"的文件（plan 的阈值/includeOnly），
       // 否则简单文件会永久拉低分数，健康度失真
       const eligiblePaths = selectCandidates(
@@ -639,6 +672,7 @@ export function repowikiStatusTool(ctx) {
         plan: { source: planSource, ...(planError ? { error: planError } : {}) },
         lock: { pending: pendingLocks() },
         moduleDependencies,
+        ...(coupling ? { moduleCoupling: coupling } : {}),
         cycles,
         topDependents: hubs,
         coreFiles,

@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.125.0] - 2026-11-27
+
+### Added
+
+- **Module coupling and instability**: new pure `src/coupling.js` computes
+  Martin metrics from cross-module static imports — afferent coupling (Ca,
+  distinct modules importing a module), efferent coupling (Ce, distinct
+  modules it imports) and instability `Ce/(Ca+Ce)`. Same-module edges,
+  self-references and files without a module id are ignored; duplicate module
+  pairs count once. `repowiki-status` returns `moduleCoupling` (top 10 by
+  instability, then total coupling, then name) and renders a
+  `Module instability` line next to module dependency hotspots.
+
+### Tests
+
+- 466 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.124.0] - 2026-11-27
 
 ### Added
