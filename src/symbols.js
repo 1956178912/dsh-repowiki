@@ -2942,8 +2942,9 @@ function extractNim(lines) {
 }
 
 /**
- * 扫描 OCaml 源码行：注释 `(* … *)`（可嵌套）与字符串内容（`"` 转义）
- * 替换为空格，保留行数与列位；返回掩码后的行数组。
+ * 扫描 OCaml 源码行：注释 `(* … *)`（可嵌套）、字符串内容（`"` 转义）
+ * 与原始字符串 `{|…|}`/`{id|…|id}` 替换为空格，保留行数与列位；返回
+ * 掩码后的行数组。
  * @param {string[]} lines - 源码行。
  * @returns {string[]} 等长掩码行。
  */
@@ -2951,11 +2952,23 @@ export function ocamlScan(lines) {
   const out = []
   let commentDepth = 0
   let inString = false
+  let rawId = null
   for (const raw of lines) {
     let masked = ''
     for (let i = 0; i < raw.length; i++) {
       const ch = raw[i]
       const next = raw[i + 1]
+      if (rawId !== null) {
+        const token = `|${rawId}}`
+        if (raw.startsWith(token, i)) {
+          masked += token
+          i += token.length - 1
+          rawId = null
+        } else {
+          masked += ' '
+        }
+        continue
+      }
       if (commentDepth > 0) {
         if (ch === '(' && next === '*') { commentDepth++; i++; masked += '  ' }
         else if (ch === '*' && next === ')') { commentDepth--; i++; masked += '  ' }
@@ -2968,9 +2981,18 @@ export function ocamlScan(lines) {
         else masked += ' '
         continue
       }
-      if (ch === '(' && next === '*') { commentDepth = 1; i++; masked += '  ' }
-      else if (ch === '"') { inString = true; masked += '"' }
-      else masked += ch
+      if (ch === '(' && next === '*') { commentDepth = 1; i++; masked += '  '; continue }
+      if (ch === '{') {
+        const open = /^\{([a-z_]*)\|/.exec(raw.slice(i))
+        if (open) {
+          masked += open[0]
+          i += open[0].length - 1
+          rawId = open[1]
+          continue
+        }
+      }
+      if (ch === '"') { inString = true; masked += '"'; continue }
+      masked += ch
     }
     out.push(masked)
   }
@@ -3011,37 +3033,64 @@ function extractOcaml(lines) {
   const masked = ocamlScan(lines)
   /** @type {Array<{name:string, kind:string, index:number, opensBlock:boolean}>} */
   const decls = []
+  /** 上一个声明族（let/type），用于 `and` 续接定义（否则为 null）。 */
+  let lastDeclKind = null
   for (let i = 0; i < masked.length; i++) {
     const rawLine = masked[i]
     const line = rawLine.trim()
     if (line === '') continue
-    if (rawLine !== line) continue // 只识别缩进 0 的顶层声明
+    if (rawLine !== rawLine.trimStart()) continue // 只识别缩进 0 的顶层声明
     const letMatch = /^let(?:\[@[^\]]*\])?(?:%[a-z_]\w*)?(?:\s+rec)?\s+([a-z_][\w']*)\b/.exec(line)
     if (letMatch) {
       const name = letMatch[1]
       if (name === '_' || name === 'module' || name === 'open' || name === 'exception'
         || name === 'include' || name === 'class' || name === 'external') continue
       decls.push({ name, kind: 'function', index: i, opensBlock: false })
+      lastDeclKind = 'let'
       continue
+    }
+    // `and` 续接：`let rec f … and g …`（函数）或 `type a = … and b = …`（类型）
+    if (lastDeclKind === 'let') {
+      const andFn = /^and\s+([a-z_][\w']*)\b/.exec(line)
+      if (andFn) {
+        decls.push({ name: andFn[1], kind: 'function', index: i, opensBlock: false })
+        continue
+      }
+    }
+    if (lastDeclKind === 'type' && line.startsWith('and ')) {
+      const eq = line.indexOf('=')
+      if (eq > 0) {
+        const head = line.slice(0, eq).replace(/\+$/, '').trim()
+        const tokens = head.split(/\s+/)
+        const name = tokens[tokens.length - 1]
+        if (/^[a-z_][\w']*$/.test(name)) {
+          decls.push({ name, kind: 'class', index: i, opensBlock: false })
+          continue
+        }
+      }
     }
     const moduleMatch = /^module(?:\s+type)?\s+([A-Z][\w']*)\b/.exec(line)
     if (moduleMatch) {
       decls.push({ name: moduleMatch[1], kind: 'class', index: i, opensBlock: true })
+      lastDeclKind = null
       continue
     }
     const classMatch = /^class(?:\s+type)?\s+(?:virtual\s+)?(?:\[[^\]]*\]\s*)?([a-z_][\w']*)\b/.exec(line)
     if (classMatch) {
       decls.push({ name: classMatch[1], kind: 'class', index: i, opensBlock: true })
+      lastDeclKind = null
       continue
     }
     const exceptionMatch = /^exception\s+([A-Z][\w']*)\b/.exec(line)
     if (exceptionMatch) {
       decls.push({ name: exceptionMatch[1], kind: 'type', index: i, opensBlock: false })
+      lastDeclKind = null
       continue
     }
     const valMatch = /^(?:val|external)\s+(?:\([^)]*\)\s*)?([a-z_][\w']*)\s*:/.exec(line)
     if (valMatch) {
       decls.push({ name: valMatch[1], kind: 'function', index: i, opensBlock: false })
+      lastDeclKind = null
       continue
     }
     // `type [params] name =`：取 `=` 左侧最后一个标识符（跳过类型变量/参数）
@@ -3053,9 +3102,12 @@ function extractOcaml(lines) {
         const name = tokens[tokens.length - 1]
         if (/^[a-z_][\w']*$/.test(name)) {
           decls.push({ name, kind: 'class', index: i, opensBlock: false })
+          lastDeclKind = 'type'
+          continue
         }
       }
     }
+    lastDeclKind = null
   }
   const symbols = []
   for (let k = 0; k < decls.length; k++) {

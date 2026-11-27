@@ -51,8 +51,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v3：R6/S4 类内方法登记为 method + parent（R 符号提取规则变化）。
  *  v4：R S4 `setGeneric`/`setMethod`/`setRefClass` 符号（R 提取规则变化）。
  *  v5：Julia `@kwdef struct` 与 `@enum` 符号（Julia 提取规则变化）。
- *  v6：Nim `type` 块成员符号（Nim 提取规则变化）。 */
-export const INDEX_PARSER_VERSION = 6
+ *  v6：Nim `type` 块成员符号（Nim 提取规则变化）。
+ *  v7：OCaml `and` 续接定义与 `{|…|}` 原始字符串屏蔽（OCaml 提取规则变化）。 */
+export const INDEX_PARSER_VERSION = 7
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

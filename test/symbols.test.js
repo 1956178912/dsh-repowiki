@@ -1413,6 +1413,33 @@ test('OCaml：let rec、let%ppx、属性、class 与私有前缀', () => {
   assert.equal(byName.get('_private').exported, false)
 })
 
+test('OCaml：and 续接与原始字符串屏蔽（含跨行）', () => {
+  const code = [
+    'let rec even n = n = 0 || odd (n - 1)',
+    'and odd n = n <> 0 && even (n - 1)',
+    'type a = A',
+    'and b = B',
+    "let query = {sql| select \"x\" (* not a comment *) |sql}",
+    'let doc = {html|',
+    '  <p>(* also not a comment *)</p>',
+    '|html}',
+    'let after = 1',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ocaml')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('even').kind, 'function')
+  assert.equal(byName.get('even').endLine, 1)
+  assert.equal(byName.get('odd').kind, 'function')
+  assert.equal(byName.get('odd').line, 2)
+  assert.equal(byName.get('a').kind, 'class')
+  assert.equal(byName.get('b').kind, 'class')
+  assert.equal(byName.get('b').line, 4)
+  assert.equal(byName.get('query').line, 5)
+  assert.equal(byName.get('doc').endLine, 8, '原始字符串体内注释标记不截断')
+  assert.equal(byName.get('after').line, 9)
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

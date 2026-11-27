@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.202.0] - 2026-11-28
+
+### Added
+
+- **OCaml `and` continuations and raw strings**: `let rec f … and g …`
+  now registers every mutually recursive function, and
+  `type a = … and b = …` registers every continued type, reusing the
+  primary definition's line numbers and ranges. `{|…|}` and `{id|…|id}`
+  raw strings are masked across lines (open/close delimiters kept for
+  range measurement), so embedded `(* … *)` or `let` text can no longer
+  hide later declarations. Indentation is now judged by leading
+  whitespace only, fixing top-level lines whose masked body ends in
+  spaces. `INDEX_PARSER_VERSION` moves to 7 so existing indexes re-parse
+  OCaml files.
+
+### Tests
+
+- 604 cases pass (LANG=en and LANG=zh); a fixture pins mutually recursive
+  functions, continued types, single-line and multi-line raw strings,
+  embedded comment markers and the following declaration's line number.
+
 ## [0.201.0] - 2026-11-28
 
 ### Added
