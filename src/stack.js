@@ -679,10 +679,11 @@ export function detectStack(manifests) {
         const name = PUB_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'pub', source: path })
       }
-    } else if (path === 'mix.exs') {
+    } else if (path === 'mix.exs' || path.endsWith('/mix.exs')) {
       const deps = mixDependencies(text)
-      info.dependencyCounts.mix = deps.length
-      if (!info.projectName) info.projectName = mixAppName(text)
+      // umbrella：根清单通常只管 app，依赖分布在各 app 的 mix.exs
+      info.dependencyCounts.mix = (info.dependencyCounts.mix ?? 0) + deps.length
+      if (path === 'mix.exs' && !info.projectName) info.projectName = mixAppName(text)
       for (const dep of deps) {
         const name = MIX_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'mix', source: path })

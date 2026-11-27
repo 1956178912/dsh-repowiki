@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.178.0] - 2026-11-28
+
+- **Elixir umbrella 依赖聚合**：嵌套 `apps/*/mix.exs`（单次最多 20 个）
+  的 Hex 依赖现在计入 `dependencyCounts.mix` 与技术栈识别，每条技术记录
+  保留来源清单。项目名仍取根 `mix.exs`——依赖都在各 app 里的 umbrella
+  不再显示 `mix: 0`、也不会丢失 Phoenix/Ecto/Plug。
+- **测试**：561 例在 LANG=en 与 LANG=zh 下全通过；Elixir 索引夹具新增
+  两个子 app 清单，断言合并后的 mix 计数（5）、Plug 来源
+  `apps/web/mix.exs`、Oban 来源 `apps/api/mix.exs`，以及项目名仍取根清单。
+
 ## [0.177.0] - 2026-11-28
 
 - **Elixir 支持（第 16 种语言）**：`.ex` 文件提取 `defmodule`（嵌套

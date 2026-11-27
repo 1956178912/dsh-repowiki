@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.177.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.178.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.177.0）；测试 561/561（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.06%、分支 86.54%、函数 95.38%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.178.0）；测试 561/561（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 86.70%、函数 95.38%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -232,4 +232,4 @@
 | 依赖目录排除 | `EXCLUDE_DIRS` 无条件排除 `node_modules`、`vendor`（Composer/Go 第三方代码）、`.dart_tool`（Dart/Flutter 生成缓存）等目录，已安装依赖不参与索引、不消耗文件预算 | v0.169.0 |
 | 快照完整性 | `repowiki-export` 每个文件写后回读校验，再写 `_snapshot.json`（路径 + sha256-16 + `partial`）；`repowiki-import` 复制前以 8 路有界并发逐文件校验（上限 2 万），指纹不符/缺失/不可读/路径非法/部分导出默认拒绝，`allowCorrupt=true` 强制；旧快照无清单仍可导入并提示未校验，清单文件不进入资产目录；导入只复制清单登记的相对路径，快照里多出的文本文件跳过并计数（`snapshotUnlisted`，前 5 条路径），清单路径先归一、绝对/越界条目丢弃；清单本身也校验 schemaVersion（非当前判无效）、显式 count 与 files 长度一致、JSON 必须是对象，并按 stat 大小拒绝超过 8 MiB 的清单 | v0.163.0 / v0.165.0 / v0.168.0 / v0.172.0 |
 | Dart 支持 | 15 语言：class/mixin/enum/extension/extension type/typedef、构造器/方法/getter、顶层函数与变量、`_` 私有；相对 `import`/`export`/`part` 边（含 `show` 符号）；`pubspec.yaml` → `pub` 项目名/依赖计数/技术映射；`package:<仓库内包名>/x.dart` 解析到 `<包根>/lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边 | v0.166.0 / v0.167.0 |
-| Elixir 支持 | 16 语言：`defmodule`（嵌套完整名）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`，do/end 配平、`do:` 单行、多行函数头与私有可见性；`alias`/`import`/`require`/`use` 经模块名映射到声明文件（含分组/重命名 alias），外部模块不建边；`mix.exs` → mix 项目名/依赖计数/技术映射 | v0.177.0 |
+| Elixir 支持 | 16 语言：`defmodule`（嵌套完整名）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`，do/end 配平、`do:` 单行、多行函数头与私有可见性；`alias`/`import`/`require`/`use` 经模块名映射到声明文件（含分组/重命名 alias），外部模块不建边；根与 `apps/*/mix.exs` → mix 项目名（根）/依赖计数/技术映射（嵌套合并，来源可追溯） | v0.177.0 / v0.178.0 |

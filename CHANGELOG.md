@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.178.0] - 2026-11-28
+
+### Added
+
+- **Elixir umbrella dependency aggregation**: nested `apps/*/mix.exs`
+  manifests (up to 20 per index) now contribute their Hex dependencies to
+  `dependencyCounts.mix` and to technology detection, with each technology
+  carrying the manifest it came from. The project name still comes from the
+  root `mix.exs`, so an umbrella whose apps hold all the dependencies no
+  longer reports `mix: 0` with no Phoenix/Ecto/Plug entries.
+
+### Tests
+
+- 561 cases pass (LANG=en and LANG=zh); the Elixir indexer fixture now
+  includes two nested app manifests and asserts the merged mix count (5),
+  Plug sourced from `apps/web/mix.exs`, Oban from `apps/api/mix.exs`, and
+  the root-only project name.
+
 ## [0.177.0] - 2026-11-28
 
 ### Added

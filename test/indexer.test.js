@@ -1125,6 +1125,28 @@ test('Elixir：defmodule 模块索引解析 alias/import，mix.exs 技术栈', a
     ].join('\n'),
     'apps/web/lib/web/router.ex': 'defmodule Web.Router do\n  use Plug.Router\nend\n',
     'apps/web/lib/web/endpoint.ex': 'defmodule Web.Endpoint do\n  alias Web.Router\nend\n',
+    'apps/web/mix.exs': [
+      'defmodule Web.MixProject do',
+      '  use Mix.Project',
+      '  def project do',
+      '    [app: :web, deps: deps()]',
+      '  end',
+      '  defp deps do',
+      '    [{:phoenix, "~> 1.7"}, {:plug, "~> 1.15"}]',
+      '  end',
+      'end',
+    ].join('\n'),
+    'apps/api/mix.exs': [
+      'defmodule Api.MixProject do',
+      '  use Mix.Project',
+      '  def project do',
+      '    [app: :api, deps: deps()]',
+      '  end',
+      '  defp deps do',
+      '    [{:oban, "~> 2.17"}]',
+      '  end',
+      'end',
+    ].join('\n'),
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
   assert.deepEqual(doc.stats.languages, { elixir: 7 })
@@ -1143,9 +1165,11 @@ test('Elixir：defmodule 模块索引解析 alias/import，mix.exs 技术栈', a
     .some(s => s.name === 'MyApp.Outer.Inner' && s.kind === 'class'), '嵌套模块记录完整名')
 
   assert.equal(doc.stack.projectName, 'demo')
-  assert.equal(doc.stack.dependencyCounts.mix, 2)
+  assert.equal(doc.stack.dependencyCounts.mix, 5, 'umbrella 各 app 的依赖合并计数')
   assert.ok(doc.stack.technologies.some(t => t.name === 'Phoenix' && t.ecosystem === 'mix'))
   assert.ok(doc.stack.technologies.some(t => t.name === 'Ecto' && t.ecosystem === 'mix'))
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Plug' && t.source === 'apps/web/mix.exs'), '子 app 技术栈可追溯')
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Oban' && t.source === 'apps/api/mix.exs'))
 })
 
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {

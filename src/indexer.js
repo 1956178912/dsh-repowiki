@@ -79,6 +79,12 @@ const MAX_INTERNAL_WARNINGS = 50
 const MAX_COMPOSER_MANIFESTS = 50
 
 /**
+ * 单次索引最多读取的嵌套 `mix.exs` 数（Elixir umbrella 的各 app）。
+ * 根清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_MIX_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -97,7 +103,7 @@ function isJsConfigName(name) {
  */
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
-    || name === 'pubspec.yaml' || name === 'composer.json'
+    || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
 }
 
 /**
@@ -1677,6 +1683,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let cmakeManifestsRead = 0
   let goModsRead = 0
   let composerManifestsRead = 0
+  let mixManifestsRead = 0
   for (const { abs, rel } of manifests) {
     const baseName = path.posix.basename(rel)
     const nestedConfig = !MANIFEST_FILES[rel] && isJsConfigName(baseName)
@@ -1698,6 +1705,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedComposer) {
       if (composerManifestsRead >= MAX_COMPOSER_MANIFESTS) continue
       composerManifestsRead++
+    }
+    const nestedMix = !MANIFEST_FILES[rel] && baseName === 'mix.exs'
+    if (nestedMix) {
+      if (mixManifestsRead >= MAX_MIX_MANIFESTS) continue
+      mixManifestsRead++
     }
     try {
       const target = await fs.resolve(abs)
