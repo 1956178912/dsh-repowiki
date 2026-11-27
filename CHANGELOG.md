@@ -5,6 +5,33 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.219.0] - 2026-11-28
+
+### Added
+
+- **Fortran indexing (32nd language)**: `.f`/`.for`/`.f77`/`.f90`/`.f95`/
+  `.f03`/`.f08` (plus upper-case preprocessed variants) produce `module`
+  and `program` units, `subroutine`/`function` definitions (type prefixes
+  and `pure`/`recursive`/`elemental`/`module` modifiers included), derived
+  types (`type [::] name`, `type, extends(…) :: name`) and named
+  `interface` blocks. `end`/`end <unit>` close ranges, procedures inside a
+  module carry `parent`, and `end do`/`end if`/`end select`/`end where`
+  never close a unit.
+- **Fortran masking**: `!` line comments and single/double-quoted strings
+  (doubled-quote escaping) are masked, so quoted text and comments cannot
+  register fake units.
+- **Fortran `use` edges**: `use name`, `use :: name`, `use name, only: …`
+  and `use, non_intrinsic :: name` resolve through a case-insensitive
+  module-name map, so module names need not match file names;
+  `use, intrinsic :: …` (standard library) and external modules stay
+  edge-free.
+
+### Tests
+
+- 641 cases pass (LANG=en and LANG=zh); new coverage for units, type
+  prefixes, derived types, interfaces, `end do`/`end if` handling, comment
+  masking, intrinsic filtering and case-insensitive module resolution.
+
 ## [0.218.0] - 2026-11-28
 
 ### Added

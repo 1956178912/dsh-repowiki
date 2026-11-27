@@ -10,7 +10,7 @@
 import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
-  clojureScan, hclScan, groovyScan, powershellScan,
+  clojureScan, hclScan, groovyScan, powershellScan, fortranScan,
 } from './symbols.js'
 
 /**
@@ -1222,6 +1222,26 @@ function extractPowershellImports(lines) {
 }
 
 /**
+ * 提取 Fortran 的 `use <module>` 引用：支持 `use :: name`、
+ * `use name, only: …` 与 `use, non_intrinsic :: name`；
+ * `use, intrinsic :: …`（标准库内建模块）不建边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractFortranImports(lines) {
+  const result = []
+  const masked = fortranScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const code = masked[i].trim()
+    const m = /^use\s*(?:,\s*([A-Za-z_]\w*)\s*)?(?:::)?\s*([A-Za-z_]\w*)/i.exec(code)
+    if (!m) continue
+    if ((m[1] ?? '').toLowerCase() === 'intrinsic') continue
+    result.push({ specifier: m[2], line: i + 1, kind: 'import', relative: false, imported: [] })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1336,6 +1356,7 @@ export function extractImports(code, lang) {
   if (lang === 'hcl') return extractHclImports(lines)
   if (lang === 'groovy') return extractGroovyImports(lines)
   if (lang === 'powershell') return extractPowershellImports(lines)
+  if (lang === 'fortran') return extractFortranImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

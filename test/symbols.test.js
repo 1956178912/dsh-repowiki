@@ -1787,6 +1787,64 @@ test('PowerShell：function/filter/class/enum 与类内方法、作用域可见�
   assert.ok(!byName.has('FakeHere'), 'here-string 不登记')
 })
 
+test('Fortran：module/program/subroutine/function/type/interface 与 end 配平', () => {
+  const code = [
+    'module math_utils',
+    '  implicit none',
+    'contains',
+    '  integer function add(a, b)',
+    '    integer, intent(in) :: a, b',
+    '    add = a + b',
+    '  end function add',
+    '  subroutine print_sum(n)',
+    '    print *, n',
+    '  end subroutine',
+    'end module math_utils',
+    '',
+    'program main',
+    '  use math_utils',
+    '  call print_sum(1)',
+    'end program main',
+    '',
+    'type :: point',
+    '  real :: x, y',
+    'end type point',
+    '',
+    '! module fake_mod',
+    'type, extends(point) :: point3d',
+    '  real :: z',
+    'end type point3d',
+    '',
+    'interface swap',
+    '  module procedure swap_int',
+    'end interface swap',
+    '',
+    'type(point) :: origin',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'fortran')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('math_utils').kind, 'class')
+  assert.equal(byName.get('math_utils').endLine, 11)
+  assert.equal(byName.get('add').kind, 'function')
+  assert.equal(byName.get('add').parent, 'math_utils')
+  assert.equal(byName.get('add').endLine, 7)
+  assert.equal(byName.get('print_sum').kind, 'function')
+  assert.equal(byName.get('print_sum').parent, 'math_utils')
+  assert.equal(byName.get('print_sum').endLine, 10)
+  assert.equal(byName.get('main').kind, 'function')
+  assert.equal(byName.get('main').endLine, 16)
+  assert.equal(byName.get('point').kind, 'type')
+  assert.equal(byName.get('point').endLine, 20)
+  assert.equal(byName.get('point3d').kind, 'type')
+  assert.equal(byName.get('point3d').endLine, 25)
+  assert.equal(byName.get('swap').kind, 'interface')
+  assert.equal(byName.get('swap').endLine, 29)
+  assert.ok(!byName.has('fake_mod'), '注释内 module 不登记')
+  assert.ok(!byName.has('swap_int'), 'module procedure 不登记')
+  assert.ok(!byName.has('origin'), 'type(...) 变量声明不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

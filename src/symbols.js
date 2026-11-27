@@ -4168,6 +4168,129 @@ function extractPowershell(lines) {
 }
 
 /**
+ * 扫描 Fortran 源码行：`!` 行注释截断、单/双引号字符串（`''`/`""`
+ * 双写转义）内容替换为空格。固定格式（`.f`/`.f77`）的列首 `C`/`*`
+ * 注释不特殊处理，避免把自由格式的 `C = 1` 赋值误当注释。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function fortranScan(lines) {
+  const out = []
+  for (const raw of lines) {
+    let masked = ''
+    let quote = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        if (ch === quote) {
+          if (raw[i + 1] === quote) { i++; masked += '  ' }
+          else { quote = null; masked += ch }
+        } else masked += ' '
+        continue
+      }
+      if (ch === '!') break
+      if (ch === "'" || ch === '"') { quote = ch; masked += ch; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/** Fortran `end` 语句中不关闭程序单元的构造名（`end do`/`end if` 等）。 */
+const FORTRAN_NON_UNIT_ENDS = new Set([
+  'do', 'if', 'select', 'where', 'forall', 'associate', 'block', 'critical',
+  'team', 'enum', 'file',
+])
+
+/**
+ * 提取 Fortran 符号：`module`/`program`/`subroutine`/`function`（含类型
+ * 前缀与 `pure`/`recursive`/`module` 修饰）、派生类型 `type [::] name`
+ * 与具名 `interface`。范围按 `end`/`end <unit>` 配平，模块内子程序带
+ * `parent` 归属；`use`、声明语句与 `end do`/`end if` 等构造不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractFortran(lines) {
+  const masked = fortranScan(lines)
+  const symbols = []
+  /** @type {Array<{kind:string, name:string, symbol:object}>} */
+  const stack = []
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    const endMatch = /^end\s*([A-Za-z]+)?\b/i.exec(line)
+    if (endMatch) {
+      const word = (endMatch[1] ?? '').toLowerCase()
+      if (word === '' || !FORTRAN_NON_UNIT_ENDS.has(word)) {
+        for (let k = stack.length - 1; k >= 0; k--) {
+          if (word === '' || stack[k].kind === word) {
+            stack[k].symbol.endLine = i + 1
+            stack.length = k
+            break
+          }
+        }
+      }
+      continue
+    }
+
+    const parent = stack.length > 0 ? stack[stack.length - 1].name : undefined
+    /**
+     * 登记符号并按需入栈。
+     * @param {string} name - 符号名。
+     * @param {string} kind - 符号种类。
+     * @param {string} unit - `end` 配对使用的单元关键字。
+     * @returns {void}
+     */
+    const push = (name, kind, unit) => {
+      if (!/^[A-Za-z_]\w*$/.test(name)) return
+      /** @type {object} */
+      const symbol = { name, kind, line: i + 1, endLine: i + 1, exported: true }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      stack.push({ kind: unit, name, symbol })
+    }
+
+    const moduleMatch = /^module\s+([A-Za-z_]\w*)/i.exec(line)
+    if (moduleMatch && !/^module\s+(?:procedure|function|subroutine)\b/i.test(line)) {
+      push(moduleMatch[1], 'class', 'module')
+      continue
+    }
+    const programMatch = /^program\s+([A-Za-z_]\w*)/i.exec(line)
+    if (programMatch) {
+      push(programMatch[1], 'function', 'program')
+      continue
+    }
+    const subroutineMatch = /\bsubroutine\s+([A-Za-z_]\w*)/i.exec(line)
+    if (subroutineMatch) {
+      push(subroutineMatch[1], 'function', 'subroutine')
+      continue
+    }
+    const functionMatch = /\bfunction\s+([A-Za-z_]\w*)/i.exec(line)
+    if (functionMatch) {
+      push(functionMatch[1], 'function', 'function')
+      continue
+    }
+    const typeWithColons = /^type\s*(?:,[^:]*)?::\s*([A-Za-z_]\w*)/i.exec(line)
+    if (typeWithColons) {
+      push(typeWithColons[1], 'type', 'type')
+      continue
+    }
+    const typeBare = /^type\s+(?!is\b)([A-Za-z_]\w*)\s*(?:\(|$)/i.exec(line)
+    if (typeBare) {
+      push(typeBare[1], 'type', 'type')
+      continue
+    }
+    const interfaceMatch = /^interface\s+([A-Za-z_]\w*)/i.exec(line)
+    if (interfaceMatch && !/^interface\s+(?:operator|assignment)\b/i.test(line)) {
+      push(interfaceMatch[1], 'interface', 'interface')
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4310,6 +4433,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'hcl') return extractHcl(lines)
   if (lang === 'groovy') return extractGroovy(lines)
   if (lang === 'powershell') return extractPowershell(lines)
+  if (lang === 'fortran') return extractFortran(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

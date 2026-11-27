@@ -648,6 +648,23 @@ test('PowerShell：using module / Import-Module / dot-source 路径', () => {
   ])
 })
 
+test('Fortran：use 模块引用与 intrinsic 过滤', () => {
+  const code = [
+    'use iso_c_binding, only: c_int',
+    'use, intrinsic :: iso_fortran_env',
+    "use, non_intrinsic :: my_mod, only: thing",
+    'use My_Other_Mod',
+    '! use commented_mod',
+    'print *, "use string_mod"',
+  ].join('\n')
+  const imports = extractImports(code, 'fortran')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['iso_c_binding', 1],
+    ['my_mod', 3],
+    ['My_Other_Mod', 4],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

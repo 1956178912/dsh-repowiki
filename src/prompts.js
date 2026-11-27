@@ -178,6 +178,7 @@ export function fenceLang(lang) {
     case 'hcl': return 'hcl'
     case 'groovy': return 'groovy'
     case 'powershell': return 'powershell'
+    case 'fortran': return 'fortran'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

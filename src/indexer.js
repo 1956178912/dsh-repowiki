@@ -696,6 +696,39 @@ function buildElixirModules(files) {
 }
 
 /**
+ * 建立 Fortran 模块名（小写，语言大小写不敏感）→ 文件索引：使用
+ * `module` 符号（模块名与文件名无约定），同名模块取字典序最小文件，
+ * 保证确定性。
+ * @param {Array<{path:string, lang:string, symbols?:Array}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 小写模块名 → 文件相对路径。
+ */
+function buildFortranModules(files) {
+  const modules = new Map()
+  for (const file of files) {
+    if (file.lang !== 'fortran') continue
+    for (const symbol of file.symbols ?? []) {
+      if (symbol?.kind !== 'class' || typeof symbol.name !== 'string') continue
+      const key = symbol.name.toLowerCase()
+      const existing = modules.get(key)
+      if (existing === undefined || file.path < existing) modules.set(key, file.path)
+    }
+  }
+  return modules
+}
+
+/**
+ * 解析 Fortran `use`：模块名大小写不敏感；标准库/第三方模块未在索引中
+ * 声明，返回 null（不建边）。
+ * @param {string} specifier - 模块名。
+ * @param {Map<string,string>} modules - 小写模块名 → 文件。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveFortranUse(specifier, modules) {
+  if (typeof specifier !== 'string') return null
+  return modules.get(specifier.toLowerCase()) ?? null
+}
+
+/**
  * 建立 Lua `require` 的加载根：任意层级的 `lua/` 目录（Neovim 插件布局），
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2248,6 +2281,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
  *   ocamlModules:Map<string,string[]>,
+ *   fortranModules:Map<string,string>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   clojureRoots:string[],
@@ -2294,6 +2328,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
+  if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
@@ -2583,6 +2618,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
     ocamlModules: buildOcamlModules(files),
+    fortranModules: buildFortranModules(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
     clojureRoots: buildClojureRoots(indexed),

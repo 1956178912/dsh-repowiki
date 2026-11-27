@@ -33,12 +33,12 @@ test('extractPrompt：python 围栏、方法父级与未知语言空围栏', () 
   assert.match(py, /- f \(method, line 2, in Service\)/)
   assert.match(py, /```python/)
 
-  // Ruby/Swift/Scala 使用各自围栏，未知语言保持无语言标识
-  for (const lang of ['ruby', 'swift', 'scala']) {
+  // Ruby/Swift/Scala/Fortran 使用各自围栏，未知语言保持无语言标识
+  for (const lang of ['ruby', 'swift', 'scala', 'fortran']) {
     const fenced = extractPrompt({ path: `a.${lang}`, lang, source: 'x', symbols: [], truncated: false }, 'en')
     assert.match(fenced, new RegExp('````' + lang), `${lang} 围栏`)
   }
-  const other = extractPrompt({ path: 'a.f90', lang: 'fortran', source: 'print *, 1', symbols: [], truncated: false }, 'en')
+  const other = extractPrompt({ path: 'a.xyz', lang: 'unknown-lang', source: 'print *, 1', symbols: [], truncated: false }, 'en')
   assert.match(other, /````\nprint \*, 1/)
 })
 

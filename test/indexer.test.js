@@ -1767,6 +1767,36 @@ test('PowerShell：模块/脚本路径解析到 psm1/ps1 与模块目录形式',
   ])
 })
 
+test('Fortran：use 模块名解析（大小写不敏感、模块名与文件名无关）', async () => {
+  const dir = makeProject({
+    'src/math/math_utils.f90': [
+      'module Math_Utils',
+      'contains',
+      '  integer function add(a, b)',
+      '    add = a + b',
+      '  end function add',
+      'end module Math_Utils',
+    ].join('\n'),
+    'src/other/case_mod.F90': 'module Case_Mod\nend module Case_Mod\n',
+    'src/other/user.f90': 'use case_mod\n',
+    'src/app/main.f90': [
+      'program main',
+      '  use math_utils',
+      '  use, intrinsic :: iso_fortran_env',
+      'end program main',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { fortran: 4 })
+
+  const mainEdge = doc.edges.find(e => e.from === 'src/app/main.f90')
+  assert.equal(mainEdge?.to, 'src/math/math_utils.f90')
+  assert.equal(mainEdge?.line, 2)
+  const caseEdge = doc.edges.find(e => e.from === 'src/other/user.f90')
+  assert.equal(caseEdge?.to, 'src/other/case_mod.F90', '大小写不敏感')
+  assert.equal(doc.stats.edges, 2, 'intrinsic 模块不建边')
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

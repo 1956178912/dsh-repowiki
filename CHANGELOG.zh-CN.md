@@ -3,6 +3,23 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.219.0] - 2026-11-28
+
+- **Fortran 支持（第 32 种语言）**：`.f`/`.for`/`.f77`/`.f90`/`.f95`/`.f03`/
+  `.f08`（含大写预处理变体）提取 `module`/`program` 单元、`subroutine`/
+  `function`（含类型前缀与 `pure`/`recursive`/`elemental`/`module` 修饰）、
+  派生类型（`type [::] name`、`type, extends(…) :: name`）与具名
+  `interface`；`end`/`end <unit>` 配平范围，模块内过程带 `parent`，
+  `end do`/`end if`/`end select`/`end where` 不关闭程序单元。
+- **Fortran 屏蔽**：`!` 行注释与单/双引号字符串（双写转义）屏蔽，引号内
+  文本与注释不会登记伪单元。
+- **Fortran `use` 边**：`use name`、`use :: name`、`use name, only: …` 与
+  `use, non_intrinsic :: name` 经大小写不敏感的模块名映射解析（模块名与
+  文件名无需一致）；`use, intrinsic :: …`（标准库）与外部模块不建边。
+- **测试**：641 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖程序单元、类型
+  前缀、派生类型、interface、`end do`/`end if`、注释屏蔽、intrinsic 过滤
+  与大小写不敏感解析。
+
 ## [0.218.0] - 2026-11-28
 
 - **PowerShell 支持（第 31 种语言）**：`.ps1`/`.psm1` 提取 `function`/
