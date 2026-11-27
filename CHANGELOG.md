@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.254.0] - 2026-11-28
+
+### Added
+
+- **Aliased re-exports**: JS/TS `export { parse as parseValue } from`,
+  Python `from .core import parse as parse_value` and Rust
+  `pub use … as Renamed` now carry the original→exported mapping on index
+  edges. References and symbol impact attribute consumers to the original
+  symbol, and lexical usage scans search the importer's actual local name
+  (aliases) instead of the definition name.
+- **No fabricated targets**: an alias only resolves when the target file
+  really defines the original name; alias names never become synthetic
+  symbols. Parser v12 re-parses cached imports.
+
+### Tests
+
+- 799 cases pass (LANG=en); new coverage for JS/Python/Rust alias
+  extraction and metadata, alias references/usages, alias-aware lexical
+  scanning and a real-index cards integration.
+
 ## [0.253.0] - 2026-11-28
 
 ### Added

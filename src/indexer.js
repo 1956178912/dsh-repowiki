@@ -3237,6 +3237,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
           // import/use/require 所在行：反向引用可定位到具体语句（v5）
           line: imp.line,
           symbols: imp.imported,
+          ...(Array.isArray(imp.aliases) && imp.aliases.length > 0 ? { aliases: imp.aliases } : {}),
         })
         // Go internal 规则：跨边界导入在真实构建中会编译失败，索引阶段告警
         if (file.lang === 'go') {

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.253.0）；测试 794/794（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 87.86%、函数 95.64%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.254.0）；测试 799/799（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.12%、分支 87.89%、函数 95.53%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| 别名再导出 | deps 在 JS `export { x as y } from`、Python `from .x import a as b`、Rust `pub use … as y` 上记录 `aliases: [{from, to}]`，indexer 透传到 `edges[].aliases`；`buildReexportMaps` 把别名放进独立映射，`resolveReexportOrigins` 返回 `{path, name}` 原名位置；引用/影响面归到原名，使用点把导入方实际使用的别名传给 `findSymbolUsages`（`aliasNames`）；目标文件未定义原名时不解析（不伪造符号）；解析器 v12 | v0.254.0 |
 | Rust `pub use` 再导出 | `deps.js` 把 `pub use`（含 `::*`，符号记 `*`、路径去除 `::*`）记为 `kind: 'reexport'`；indexer 的 `buildRustRootExports` 汇总 crate 入口的公开符号与再导出名，`resolveRustUse` 在 `crate::` 模块路径未命中时仅对入口确实导出的叶子名回退 `lib.rs`/`main.rs`；引用/使用点/影响面经 `reexports.js` 沿链归到定义文件；解析器 v11 | v0.253.0 |
 | Python 包 barrel | `buildReexportMaps(edges, files)` 把 Python 文件（`lang: 'python'`）的具名 `from .x import y` 当作同名再导出，`from .x import *` 记为星号再导出；`exportedNamesByFile` 对 Python 按"非 method"纳入模块级符号（该语言提取器统一 `exported: false`）；`__all__` 未解析，星号潜在引用由词法扫描确认；解析器 v10 使旧导入缓存失效 | v0.252.0 |
 | 通配引用证据 | `import * as ns` 与 `export * from` 在 `deps.js` 记为 `*`（不再当作无符号副作用导入）：`referencesFor` 把 `*` 合并到目标全部符号（与具名引用去重排序），`usageImporters` 接受 `*` 作为潜在导入方（`usages` 仍经词法扫描确认实际使用），`computeSymbolImpact` 把 `*` 展开为所选符号的直接影响；默认导入保持文件级边、不猜默认导出名 | v0.243.0 |

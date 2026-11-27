@@ -33,7 +33,8 @@ export const MAX_IMPACT_DOCS = 50
 
 /**
  * 索引边。
- * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[]}} IndexEdge
+ * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[],
+ *   aliases?:Array<{from:string, to:string}>}} IndexEdge
  */
 
 /**

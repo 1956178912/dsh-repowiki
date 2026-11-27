@@ -18,7 +18,8 @@ export const MAX_BARREL_DEPTH = 4
 
 /**
  * 索引边子集（与 references/usages 共用）。
- * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[]}} ReexportEdge
+ * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[],
+ *   aliases?:Array<{from:string, to:string}>}} ReexportEdge
  */
 
 /**
@@ -50,20 +51,47 @@ export function exportedNamesByFile(files = []) {
 
 /**
  * 汇总再导出边：
- * - JS/TS：`export * from` 与同名 `export { x } from`；
+ * - JS/TS：`export * from`、同名 `export { x } from` 与别名
+ *   `export { x as y } from`；
  * - Python：具名 `from .x import y`（y 进入当前模块命名空间，等价于
- *   同名再导出）。
+ *   同名再导出；`as` 别名记为导出名）；
+ * - Rust：`pub use`（别名同样记录）。
  * @param {ReexportEdge[]} edges - 索引边。
  * @param {Array<{path?:string, lang?:string}>} [files] - 索引文件（用于
- *   识别 Python barrel；缺省时只处理 JS `export-from`）。
- * @returns {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>}}
- *   barrel → 星号目标列表；barrel → 符号名 → 具名再导出目标。
+ *   识别 Python barrel；缺省时只处理显式再导出）。
+ * @returns {{stars:Map<string, string[]>,
+ *   named:Map<string, Map<string, Set<string>>>,
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}}
+ *   barrel → 星号目标；barrel → 同名导出 → 目标；barrel → 别名导出 →
+ *   {目标文件, 目标原名}。
  */
 export function buildReexportMaps(edges = [], files = []) {
   /** @type {Map<string, string[]>} */
   const stars = new Map()
   /** @type {Map<string, Map<string, Set<string>>>} */
   const named = new Map()
+  /** @type {Map<string, Map<string, Array<{target:string, local:string}>>>} */
+  const aliases = new Map()
+  /**
+   * 登记别名导出（同目标同原名只保留一项）。
+   * @param {string} barrel - 再导出方。
+   * @param {string} exported - 导出名。
+   * @param {string} target - 目标文件。
+   * @param {string} local - 目标原名。
+   * @returns {void}
+   */
+  const addAlias = (barrel, exported, target, local) => {
+    let byName = aliases.get(barrel)
+    if (!byName) {
+      byName = new Map()
+      aliases.set(barrel, byName)
+    }
+    const list = byName.get(exported) ?? []
+    if (!list.some(item => item.target === target && item.local === local)) {
+      list.push({ target, local })
+      byName.set(exported, list)
+    }
+  }
   const pythonFiles = new Set(
     files
       .filter(file => file && file.path && file.lang === 'python')
@@ -86,13 +114,24 @@ export function buildReexportMaps(edges = [], files = []) {
       } else stars.set(edge.from, [edge.to])
       continue
     }
-    let byName = named.get(edge.from)
-    if (!byName) {
-      byName = new Map()
-      named.set(edge.from, byName)
+    const aliasByLocal = new Map()
+    for (const alias of Array.isArray(edge.aliases) ? edge.aliases : []) {
+      if (!alias || typeof alias.from !== 'string' || typeof alias.to !== 'string') continue
+      if (!alias.from || !alias.to) continue
+      aliasByLocal.set(alias.from, alias.to)
     }
     for (const name of names) {
       if (name === '*') continue
+      const exported = aliasByLocal.get(name)
+      if (exported && exported !== name) {
+        addAlias(edge.from, exported, edge.to, name)
+        continue
+      }
+      let byName = named.get(edge.from)
+      if (!byName) {
+        byName = new Map()
+        named.set(edge.from, byName)
+      }
       let targets = byName.get(name)
       if (!targets) {
         targets = new Set()
@@ -101,47 +140,65 @@ export function buildReexportMaps(edges = [], files = []) {
       targets.add(edge.to)
     }
   }
-  return { stars, named }
+  return { stars, named, aliases }
 }
 
 /**
  * 沿再导出链解析符号来源：barrel 自身定义该符号时不返回（本地导出遮蔽
- * 星号再导出，调用方不应把引用记到下游）；具名再导出优先于星号；多个
- * 来源视为歧义，返回空。
+ * 星号再导出，调用方不应把引用记到下游）；具名/别名再导出优先于星号；
+ * 多个来源视为歧义，返回空。
  * @param {string} barrel - 起始 barrel 文件。
- * @param {string} name - 符号名。
- * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>}} maps
+ * @param {string} name - barrel 导出的符号名。
+ * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>,
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}} maps
  *   再导出映射。
  * @param {Map<string, Set<string>>} definitions - 文件 → 导出符号。
- * @returns {string[]} 唯一来源文件（升序，0 或 1 项）。
+ * @returns {Array<{path:string, name:string}>} 唯一定义位置（0 或 1 项）。
  */
 export function resolveReexportOrigins(barrel, name, maps, definitions) {
-  /** @type {Array<{path:string, depth:number}>} */
-  const queue = [{ path: barrel, depth: 0 }]
-  const visited = new Set([barrel])
-  const origins = new Set()
+  /** @type {Array<{path:string, name:string, depth:number}>} */
+  const queue = [{ path: barrel, name, depth: 0 }]
+  const visited = new Set([`${barrel}\u0000${name}`])
+  /** @type {Map<string, {path:string, name:string}>} */
+  const origins = new Map()
+  /**
+   * 入队一个待解析位置。
+   * @param {string} path - 文件。
+   * @param {string} nextName - 该文件中的符号名。
+   * @param {number} depth - 当前跳数。
+   * @returns {void}
+   */
+  const push = (path, nextName, depth) => {
+    const key = `${path}\u0000${nextName}`
+    if (visited.has(key)) return
+    visited.add(key)
+    queue.push({ path, name: nextName, depth })
+  }
   for (let head = 0; head < queue.length; head++) {
     const current = queue[head]
-    if (definitions.get(current.path)?.has(name)) {
-      origins.add(current.path)
+    if (definitions.get(current.path)?.has(current.name)) {
+      origins.set(`${current.path}\u0000${current.name}`, { path: current.path, name: current.name })
       continue
     }
     if (current.depth >= MAX_BARREL_DEPTH) continue
-    const namedTargets = maps.named.get(current.path)?.get(name)
-    const targets = namedTargets ? [...namedTargets] : (maps.stars.get(current.path) ?? [])
-    for (const target of targets) {
-      if (visited.has(target)) continue
-      visited.add(target)
-      queue.push({ path: target, depth: current.depth + 1 })
+    for (const target of maps.named.get(current.path)?.get(current.name) ?? []) {
+      push(target, current.name, current.depth + 1)
+    }
+    for (const alias of maps.aliases.get(current.path)?.get(current.name) ?? []) {
+      push(alias.target, alias.local, current.depth + 1)
+    }
+    for (const target of maps.stars.get(current.path) ?? []) {
+      push(target, current.name, current.depth + 1)
     }
   }
-  return origins.size === 1 ? [...origins] : []
+  return origins.size === 1 ? [...origins.values()] : []
 }
 
 /**
- * 收集 barrel 可再导出的全部下游文件（星号 + 具名），供通配引用使用。
+ * 收集 barrel 可再导出的全部下游文件（星号/具名/别名），供通配引用使用。
  * @param {string} barrel - 起始 barrel 文件。
- * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>}} maps
+ * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>,
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}} maps
  *   再导出映射。
  * @returns {string[]} 下游文件（不含自身，去重升序）。
  */
@@ -156,6 +213,7 @@ export function reexportTargets(barrel, maps) {
     const targets = [
       ...(maps.stars.get(current.path) ?? []),
       ...[...(maps.named.get(current.path)?.values() ?? [])].flatMap(set => [...set]),
+      ...[...(maps.aliases.get(current.path)?.values() ?? [])].flatMap(list => list.map(item => item.target)),
     ]
     for (const target of targets) {
       if (visited.has(target)) continue
@@ -169,12 +227,13 @@ export function reexportTargets(barrel, maps) {
 
 /**
  * 列出参与再导出的 barrel 文件。
- * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>}} maps
+ * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>,
+ *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>}} maps
  *   再导出映射。
  * @returns {string[]} barrel 路径（升序）。
  */
 export function barrelFiles(maps) {
-  return [...new Set([...maps.stars.keys(), ...maps.named.keys()])].sort()
+  return [...new Set([...maps.stars.keys(), ...maps.named.keys(), ...maps.aliases.keys()])].sort()
 }
 
 /**
@@ -186,27 +245,44 @@ export function barrelFiles(maps) {
  * @param {string} targetPath - 符号定义文件。
  * @param {string} name - 符号名。
  * @param {{includeReexports?:boolean}} [options] - 是否包含再导出边。
- * @returns {Array<{path:string, line?:number}>} 导入方位置（按路径、行号排序）。
+ * @returns {Array<{path:string, line?:number, names?:string[]}>} 导入方位置
+ *   （别名导入时带导入方实际使用的名字；按路径、行号排序）。
  */
 export function reexportImportSites(edges, files, targetPath, name, options = {}) {
   const maps = buildReexportMaps(edges, files)
   const definitions = exportedNamesByFile(files)
-  /** @type {Array<{path:string, line?:number}>} */
-  const sites = []
+  /** @type {Map<string, {path:string, line?:number, names:Set<string>}>} */
+  const sites = new Map()
   for (const barrel of barrelFiles(maps)) {
     if (barrel === targetPath) continue
-    const origins = resolveReexportOrigins(barrel, name, maps, definitions)
-    if (origins.length !== 1 || origins[0] !== targetPath) continue
-    for (const edge of edges) {
-      if (!edge || edge.to !== barrel || edge.from === targetPath) continue
-      if (!options.includeReexports && edge.kind === 'export-from') continue
-      const names = Array.isArray(edge.symbols) ? edge.symbols : []
-      if (!names.includes(name) && !names.includes('*')) continue
-      sites.push({
-        path: edge.from,
-        ...(Number.isInteger(edge.line) && edge.line > 0 ? { line: edge.line } : {}),
-      })
+    // 候选导出名：定义名本身（同名/星号链）+ 该 barrel 的别名导出名
+    const candidates = new Set([name])
+    for (const exported of maps.named.get(barrel)?.keys() ?? []) candidates.add(exported)
+    for (const exported of maps.aliases.get(barrel)?.keys() ?? []) candidates.add(exported)
+    for (const exported of candidates) {
+      const origins = resolveReexportOrigins(barrel, exported, maps, definitions)
+      if (origins.length !== 1) continue
+      const origin = origins[0]
+      if (origin.path !== targetPath || origin.name !== name) continue
+      for (const edge of edges) {
+        if (!edge || edge.to !== barrel || edge.from === targetPath) continue
+        if (!options.includeReexports && (edge.kind === 'export-from' || edge.kind === 'reexport')) continue
+        const names = Array.isArray(edge.symbols) ? edge.symbols : []
+        if (!names.includes(exported) && !names.includes('*')) continue
+        const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
+        const key = `${edge.from}\u0000${line ?? 0}`
+        const site = sites.get(key) ?? { path: edge.from, ...(line ? { line } : {}), names: new Set() }
+        // 通配导入方按定义名扫描；别名导入方按它实际使用的名字扫描
+        if (!names.includes('*') && exported !== name) site.names.add(exported)
+        sites.set(key, site)
+      }
     }
   }
-  return sites.sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0))
+  return [...sites.values()]
+    .map(site => ({
+      path: site.path,
+      ...(site.line ? { line: site.line } : {}),
+      ...(site.names.size > 0 ? { names: [...site.names].sort() } : {}),
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0))
 }

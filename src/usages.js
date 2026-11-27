@@ -104,14 +104,19 @@ function displayLine(line) {
  * 一次首个命中位置。空行、整行注释与 `skipLines`（import/定义行）跳过。
  * @param {string} source - 源码文本。
  * @param {string} symbolName - 精确符号名。
- * @param {{skipLines?:Iterable<number>, skipRanges?:Array<[number, number]>, limit?:number}}
- *   [options] - 需排除的行号/闭区间（1 起）与返回上限。
+ * @param {{skipLines?:Iterable<number>, skipRanges?:Array<[number, number]>, limit?:number,
+ *   aliasNames?:string[]}} [options] - 需排除的行号/闭区间（1 起）、返回上限
+ *   与别名（再导出后导入方使用的本地名）。
  * @returns {{usages:Array<{line:number, text:string}>, truncated:boolean}}
  *   使用点与截断标记。
  */
 export function findSymbolUsages(source, symbolName, options = {}) {
   const name = String(symbolName ?? '')
   if (!name) return { usages: [], truncated: false }
+  const aliasNames = [...new Set(
+    (Array.isArray(options.aliasNames) ? options.aliasNames : [])
+      .filter(alias => typeof alias === 'string' && alias && alias !== name),
+  )]
   const limit = Number.isInteger(options.limit) && options.limit > 0
     ? Math.floor(options.limit)
     : MAX_USAGES_PER_SYMBOL
@@ -127,7 +132,8 @@ export function findSymbolUsages(source, symbolName, options = {}) {
     ranges.push([start, end])
   }
   // 通用标识符字符集：JS/PHP 的 `$`、Python/Go/Rust 的 `_` 均覆盖。
-  const pattern = new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(name)}($|[^A-Za-z0-9_$])`)
+  const alternatives = [name, ...aliasNames].map(escapeRegExp).join('|')
+  const pattern = new RegExp(`(^|[^A-Za-z0-9_$])(?:${alternatives})($|[^A-Za-z0-9_$])`)
   const lines = String(source ?? '').split('\n')
   /** @type {Array<{line:number, text:string}>} */
   const usages = []
@@ -163,30 +169,36 @@ export function findSymbolUsages(source, symbolName, options = {}) {
  * 引用同文件其他符号的边不属于本符号的使用者。自引用忽略。提供索引
  * 文件条目时，还会沿 `export * from`/同名具名再导出链把"从 barrel
  * 导入该符号"的文件纳入扫描；barrel 自身的再导出边不算使用点。
- * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[]}>} edges
+ * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[],
+ *   aliases?:Array<{from:string, to:string}>}>} edges
  *   index.json 的依赖边。
  * @param {{path:string, name:string}} symbol - 已解析的符号定义。
  * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
  *   索引文件条目（用于解析再导出链）。
- * @returns {Array<{path:string, importLines:number[]}>} 按路径排序的依赖方。
+ * @returns {Array<{path:string, importLines:number[], names?:string[]}>}
+ *   按路径排序的依赖方；别名导入时 `names` 为导入方实际使用的名字。
  */
 export function usageImporters(edges = [], symbol, files = []) {
   if (!symbol || typeof symbol.path !== 'string' || typeof symbol.name !== 'string') return []
-  /** @type {Map<string, Set<number>>} */
+  /** @type {Map<string, {lines:Set<number>, names:Set<string>}>} */
   const byPath = new Map()
   /**
-   * 登记一个依赖方及其 import 行号。
+   * 登记一个依赖方、import 行号与别名（导入方实际使用的名字）。
    * @param {string} path - 依赖方文件。
    * @param {number|undefined} line - import 行号。
+   * @param {string[]} [names] - 别名导入名（与定义名不同）。
    * @returns {void}
    */
-  const addImporter = (path, line) => {
-    let lines = byPath.get(path)
-    if (!lines) {
-      lines = new Set()
-      byPath.set(path, lines)
+  const addImporter = (path, line, names = []) => {
+    let entry = byPath.get(path)
+    if (!entry) {
+      entry = { lines: new Set(), names: new Set() }
+      byPath.set(path, entry)
     }
-    if (Number.isInteger(line) && line > 0) lines.add(line)
+    if (Number.isInteger(line) && line > 0) entry.lines.add(line)
+    for (const name of names) {
+      if (typeof name === 'string' && name && name !== symbol.name) entry.names.add(name)
+    }
   }
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
@@ -199,11 +211,15 @@ export function usageImporters(edges = [], symbol, files = []) {
   }
   if (files.length > 0) {
     for (const site of reexportImportSites(edges, files, symbol.path, symbol.name)) {
-      addImporter(site.path, site.line)
+      addImporter(site.path, site.line, site.names)
     }
   }
   return [...byPath.entries()]
-    .map(([path, lines]) => ({ path, importLines: [...lines].sort((a, b) => a - b) }))
+    .map(([path, entry]) => ({
+      path,
+      importLines: [...entry.lines].sort((a, b) => a - b),
+      ...(entry.names.size > 0 ? { names: [...entry.names].sort() } : {}),
+    }))
     .sort((a, b) => a.path.localeCompare(b.path))
 }
 
@@ -237,7 +253,8 @@ export const MAX_USAGE_TARGETS = 5
  * 计入 `skippedFiles` 并把相关符号标记为 truncated。
  * @param {any} fs - ctx.fs 服务。
  * @param {string} root - 项目根。
- * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[]}>} edges - 索引依赖边。
+ * @param {Array<{from:string, to:string, kind?:string, line?:number, symbols?:string[],
+ *   aliases?:Array<{from:string, to:string}>}>} edges - 索引依赖边。
  * @param {Array<{path:string, symbols?:Array<{name:string, line?:number, endLine?:number}>}>} matches
  *   - 定义文件命中（searchIndex 结果或符号锚点）。
  * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
@@ -268,13 +285,14 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
   /** @type {Map<string, Array<{path:string, importLines:number[]}>>} */
   const importersByTarget = new Map()
   /** 文件 → 符号 → 跳过行/闭区间（import 行与定义范围）。 */
-  /** @type {Map<string, Map<string, {lines:Set<number>, ranges:Array<[number, number]>}>>} */
+  /** @type {Map<string, Map<string, {lines:Set<number>, ranges:Array<[number, number]>, aliases:Set<string>}>>} */
   const scanPlan = new Map()
   /**
    * 登记一次文件扫描；同一文件可同时是定义文件与多个符号的导入方。
    * @param {string} filePath - 待读文件。
    * @param {string} name - 符号名。
-   * @param {{lines?:Iterable<number>, range?:[number, number]|null}} [skip] - 跳过行与定义闭区间。
+   * @param {{lines?:Iterable<number>, range?:[number, number]|null, aliases?:string[]}} [skip]
+   *   - 跳过行、定义闭区间与导入方别名。
    * @returns {void}
    */
   const planScan = (filePath, name, skip = {}) => {
@@ -283,9 +301,12 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
       names = new Map()
       scanPlan.set(filePath, names)
     }
-    const entry = names.get(name) ?? { lines: new Set(), ranges: [] }
+    const entry = names.get(name) ?? { lines: new Set(), ranges: [], aliases: new Set() }
     for (const line of skip.lines ?? []) {
       if (Number.isInteger(line) && line > 0) entry.lines.add(line)
+    }
+    for (const alias of skip.aliases ?? []) {
+      if (typeof alias === 'string' && alias && alias !== name) entry.aliases.add(alias)
     }
     const range = skip.range
     if (Array.isArray(range) && range.length === 2
@@ -311,7 +332,7 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
         : null,
     })
     for (const importer of importers) {
-      planScan(importer.path, target.name, { lines: importer.importLines })
+      planScan(importer.path, target.name, { lines: importer.importLines, aliases: importer.names })
     }
   }
   /** @type {Set<string>} */
@@ -363,6 +384,7 @@ export async function collectSymbolUsages(fs, root, edges, matches, files = []) 
       const found = findSymbolUsages(source, name, {
         skipLines: skip.lines,
         skipRanges: skip.ranges,
+        aliasNames: [...skip.aliases],
         limit: Math.min(MAX_USAGES_PER_SYMBOL, budget),
       })
       const sites = sitesByName.get(name) ?? []

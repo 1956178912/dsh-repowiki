@@ -19,11 +19,14 @@ import {
  * @typedef {Object} ImportInfo
  * @property {string} specifier - 源码中的原始模块说明符（如 './foo'、'react'、'.pkg.mod'）。
  * @property {number} line - 语句所在行（1-based）。
- * @property {'import'|'export-from'|'require'|'mod'} kind - 引用形态
- *   （`mod` 仅 Rust：`mod foo;` 模块声明）。
+ * @property {'import'|'export-from'|'require'|'mod'|'reexport'} kind - 引用形态
+ *   （`mod` 仅 Rust：`mod foo;` 模块声明；`reexport` 仅 Rust `pub use`）。
  * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
  *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
+ * @property {Array<{from:string, to:string}>} [aliases] - 再导出别名：
+ *   `from` 为目标符号原名，`to` 为 barrel 导出的名字（仅 export-from /
+ *   Rust pub use / Python from-import 记录）。
  */
 
 /**
@@ -57,6 +60,26 @@ function jsImportedNames(line) {
     names.add('*')
   }
   return [...names]
+}
+
+/**
+ * 从 `export { a as b } from` 提取别名映射（原名 → 导出名）。
+ * 无别名、`export *` 与多行注释内容不产生条目。
+ * @param {string} line - 源码语句（可跨行）。
+ * @returns {Array<{from:string, to:string}>} 别名映射。
+ */
+function jsExportAliases(line) {
+  const cleanLine = line.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, '')
+  const brace = /\{(?<body>[^}]*)\}/.exec(cleanLine)
+  if (!brace) return []
+  const out = []
+  for (const part of brace.groups.body.split(',')) {
+    const trimmed = part.trim().replace(/^type\s+/, '')
+    if (!trimmed) continue
+    const m = /^([\w$]+)\s+as\s+([\w$]+)$/.exec(trimmed)
+    if (m && m[1] !== m[2]) out.push({ from: m[1], to: m[2] })
+  }
+  return out
 }
 
 /** 默认导入的临时符号前缀；索引器解析为真实导出名后不会留在索引里。 */
@@ -130,12 +153,14 @@ function extractJsImports(lines) {
     if (em) {
       // `export * from` 再导出目标文件的全部符号（无 as 别名时记为通配符）
       const reexportAll = /^\s*export\s+\*\s*from\b/.test(line)
+      const aliases = reexportAll ? [] : jsExportAliases(line)
       result.push({
         specifier: em.groups.mod,
         line: i + 1,
         kind: 'export-from',
         relative: isJsRelative(em.groups.mod),
         imported: reexportAll ? ['*'] : jsImportedNames(line),
+        ...(aliases.length > 0 ? { aliases } : {}),
       })
       i = statementEnd
       continue
@@ -170,10 +195,20 @@ function extractPythonImports(lines) {
     const fm = /^from\s+(?<mod>[.\w]+)\s+import\s+(?<names>.+)$/.exec(trimmed)
     if (fm) {
       const mod = fm.groups.mod
-      const imported = fm.groups.names
-        .split(',')
-        .map(s => s.trim().replace(/\s+as\s+\w+$/, '').replace(/\s+#.*$/, ''))
-        .filter(s => s && !s.startsWith('#'))
+      const imported = []
+      const aliases = []
+      for (const raw of fm.groups.names.split(',')) {
+        const part = raw.trim().replace(/\s+#.*$/, '')
+        if (!part || part.startsWith('#')) continue
+        if (part === '*') {
+          imported.push('*')
+          continue
+        }
+        const m = /^([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/.exec(part)
+        if (!m) continue
+        imported.push(m[1])
+        if (m[2] && m[2] !== m[1]) aliases.push({ from: m[1], to: m[2] })
+      }
       result.push({
         specifier: mod,
         line: i + 1,
@@ -181,6 +216,7 @@ function extractPythonImports(lines) {
         // 以点开头的相对 import（from . import x / from ..pkg import y）
         relative: mod.startsWith('.'),
         imported,
+        ...(aliases.length > 0 ? { aliases } : {}),
       })
       continue
     }
@@ -284,8 +320,10 @@ function expandRustUse(prefix, body) {
       const pathPart = rawPath.trim()
       if (!pathPart) continue
       const path = prefix ? `${prefix}::${pathPart}` : pathPart
-      const leaf = (alias ?? pathPart.split('::').pop() ?? '').trim()
-      out.push({ path, name: leaf === 'self' || leaf === 'super' ? '' : leaf })
+      const local = (pathPart.split('::').pop() ?? '').trim()
+      const leaf = (alias ?? local).trim()
+      const empty = leaf === 'self' || leaf === 'super'
+      out.push({ path, name: empty ? '' : leaf, local: empty ? '' : local })
       continue
     }
     const head = part.slice(0, braceAt).replace(/::$/, '').trim()
@@ -337,23 +375,39 @@ function extractRustImports(lines) {
       // `pub use crate::core::*;`：通配符不进入路径，符号记为 `*`
       const star = specifier.endsWith('::*')
       if (star) specifier = specifier.slice(0, -3)
-      const leaf = (alias ?? specifier.split('::').pop() ?? '').trim()
-      const imported = star
-        ? ['*']
-        : (/^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super' ? [leaf] : [])
-      result.push({ specifier, line: i + 1, kind, relative: true, imported })
+      const local = (specifier.split('::').pop() ?? '').trim()
+      const leaf = (alias ?? local).trim()
+      const valid = /^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super'
+      // pub use 记录目标原名 + 导出别名（引用归到原名）；普通 use 保持本地名
+      const imported = star ? ['*'] : (kind === 'reexport' ? (valid ? [local] : []) : (valid ? [leaf] : []))
+      const aliases = kind === 'reexport' && valid && local !== leaf ? [{ from: local, to: leaf }] : []
+      result.push({
+        specifier,
+        line: i + 1,
+        kind,
+        relative: true,
+        imported,
+        ...(aliases.length > 0 ? { aliases } : {}),
+      })
       continue
     }
     const prefix = raw.slice(0, braceAt).replace(/::$/, '').trim()
     const body = raw.slice(braceAt + 1, raw.lastIndexOf('}'))
     for (const leaf of expandRustUse(prefix, body)) {
       const star = leaf.name === '*'
+      const valid = /^[A-Za-z_]\w*$/.test(leaf.name)
+      const validLocal = /^[A-Za-z_]\w*$/.test(leaf.local)
+      const imported = star ? ['*'] : (kind === 'reexport' ? (validLocal ? [leaf.local] : []) : (valid ? [leaf.name] : []))
+      const aliases = kind === 'reexport' && valid && validLocal && leaf.local !== leaf.name
+        ? [{ from: leaf.local, to: leaf.name }]
+        : []
       result.push({
         specifier: star ? leaf.path.replace(/::\*$/, '') : leaf.path,
         line: i + 1,
         kind,
         relative: true,
-        imported: star ? ['*'] : (/^[A-Za-z_]\w*$/.test(leaf.name) ? [leaf.name] : []),
+        imported,
+        ...(aliases.length > 0 ? { aliases } : {}),
       })
     }
   }

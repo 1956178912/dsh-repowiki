@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.254.0] - 2026-11-28
+
+- **别名再导出**：JS/TS `export { parse as parseValue } from`、Python
+  `from .core import parse as parse_value` 与 Rust `pub use … as Renamed`
+  在索引边上记录原名→导出名映射；引用与符号影响面归到原名，词法使用点
+  按导入方实际使用的本地名扫描。
+- **不伪造目标**：只有目标文件确实定义原名时才解析别名；别名不会变成
+  合成符号。解析器 v12 重新解析缓存导入。
+- **测试**：799 例通过（LANG=en）；新增 JS/Python/Rust 别名提取与元数据、
+  别名引用/使用点、别名感知词法扫描与真实索引 cards 集成覆盖。
+
 ## [0.253.0] - 2026-11-28
 
 - **Rust `pub use` 再导出**：`pub use`（含 `pub use …::*`）记为

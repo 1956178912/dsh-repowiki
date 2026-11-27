@@ -112,6 +112,12 @@ test('usages：上限截断与超长行截断', () => {
   assert.equal(MAX_USAGES_PER_SYMBOL, 10)
 })
 
+test('usages：aliasNames 按导入方实际使用的别名定位', () => {
+  const source = ['import { parseValue } from "./core"', 'const x = parseValue()', 'const y = parse()'].join('\n')
+  const found = findSymbolUsages(source, 'parse', { skipLines: [1], aliasNames: ['parseValue'] })
+  assert.deepEqual(found.usages.map(item => item.line), [2, 3])
+})
+
 test('usages：正则特殊字符符号名按字面量匹配', () => {
   const source = ['const $ = 1', '$(el).hide()', 'const y = $x'].join('\n')
   const found = findSymbolUsages(source, '$', { skipLines: [1] })
@@ -219,6 +225,22 @@ test('usages：usageImporters 识别 Rust pub use 再导出', () => {
     { path: 'src/app.rs', importLines: [1] },
     { path: 'src/lib.rs', importLines: [2] },
   ])
+})
+
+test('usages：usageImporters 识别别名再导出', () => {
+  const edges = [
+    { from: 'src/index.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'parseValue' }] },
+    { from: 'src/app.ts', to: 'src/index.ts', kind: 'import', line: 1, symbols: ['parseValue'] },
+  ]
+  const files = [
+    { path: 'src/index.ts', symbols: [] },
+    { path: 'src/core.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'src/core.ts', name: 'parse' }, files), [
+    { path: 'src/app.ts', importLines: [1], names: ['parseValue'] },
+    { path: 'src/index.ts', importLines: [1] },
+  ], '别名导入方带实际扫描名')
 })
 
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {

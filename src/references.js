@@ -22,7 +22,8 @@ export const MAX_REFERENCE_ENTRIES = 100
 
 /**
  * 索引边（结构见 src/indexer.js 的 edges 输出；v5 起带 line）。
- * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[]}} IndexEdge
+ * @typedef {{from:string, to:string, kind?:string, line?:number, symbols?:string[],
+ *   aliases?:Array<{from:string, to:string}>}} IndexEdge
  */
 
 /**
@@ -134,7 +135,7 @@ export function buildReferenceIndex(edges = [], files = []) {
             if (definitions.get(barrel)?.has(name)) continue
             const origins = resolveReexportOrigins(barrel, name, maps, definitions)
             if (origins.length !== 1) continue
-            addSite(origins[0], name, site)
+            addSite(origins[0].path, origins[0].name, site)
           }
         }
       }

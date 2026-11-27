@@ -68,6 +68,17 @@ test('JS：多行 import/export-from 保留起始行与具名符号', () => {
   assert.equal(bySpec.get('./later').line, 14, '多行语句后的依赖行号不漂移')
 })
 
+test('JS：export-from 别名记录原名与导出名', () => {
+  const refs = extractImports([
+    "export { foo as bar, baz } from './x';",
+    "export { type T as U } from './types';",
+  ].join('\n'), 'typescript')
+  const bySpec = new Map(refs.map(ref => [ref.specifier, ref]))
+  assert.deepEqual(bySpec.get('./x').imported, ['foo', 'baz'])
+  assert.deepEqual(bySpec.get('./x').aliases, [{ from: 'foo', to: 'bar' }])
+  assert.deepEqual(bySpec.get('./types').aliases, [{ from: 'T', to: 'U' }])
+})
+
 test('JS：imported 为空时不是 undefined', () => {
   const refs = extractImports("import 'x';\n", 'javascript')
   assert.deepEqual(refs[0].imported, [])
@@ -100,6 +111,7 @@ test('Python：from x import * 保留通配符，别名仍归一为原名', () =
   const bySpec = new Map(refs.map(r => [r.specifier, r]))
   assert.deepEqual(bySpec.get('.core').imported, ['*'], '星号导入不再被丢弃')
   assert.deepEqual(bySpec.get('.util').imported, ['a', 'c'], '行尾注释不进入符号名')
+  assert.deepEqual(bySpec.get('.util').aliases, [{ from: 'a', to: 'b' }], '别名记录原名与本地名')
 })
 
 test('Go：单条 import、分组 import、别名与点导入', () => {
@@ -155,6 +167,8 @@ test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
     'use crate::core::Bar;',
     'pub use crate::core::*;',
     'pub use crate::core::{Baz, *};',
+    'pub use crate::core::Old as Renamed;',
+    'use crate::core::Local as Alias;',
   ].join('\n')
   const refs = extractImports(code, 'rust')
   assert.equal(refs.find(ref => ref.specifier === 'crate::core::Foo').kind, 'reexport')
@@ -164,6 +178,12 @@ test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
     ['crate::core', 'reexport'],
     ['crate::core', 'reexport'],
   ], '单条与分组星号都去掉 * 后按目标模块解析')
+  const renamed = refs.find(ref => ref.specifier === 'crate::core::Old')
+  assert.deepEqual([renamed.kind, renamed.imported, renamed.aliases], [
+    'reexport', ['Old'], [{ from: 'Old', to: 'Renamed' }],
+  ], 'pub use 别名记录目标原名并用于再导出解析')
+  const localAlias = refs.find(ref => ref.specifier === 'crate::core::Local')
+  assert.deepEqual([localAlias.kind, localAlias.imported, localAlias.aliases], ['import', ['Alias'], undefined], '普通 use 保持本地名')
 })
 
 test('Java：普通/静态/通配符 import', () => {

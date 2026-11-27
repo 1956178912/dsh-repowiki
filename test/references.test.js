@@ -199,6 +199,39 @@ test('buildReferenceIndex：Rust `pub use` 再导出链', () => {
   ], 'use crate::Foo 沿 lib.rs 的 pub use 归到 core.rs')
 })
 
+test('buildReferenceIndex：别名再导出归到目标原名', () => {
+  const jsEdges = [
+    { from: 'src/index.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'parseValue' }] },
+    { from: 'src/app.ts', to: 'src/index.ts', kind: 'import', line: 1, symbols: ['parseValue'] },
+  ]
+  const jsFiles = [
+    { path: 'src/index.ts', symbols: [] },
+    { path: 'src/core.ts', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'src/app.ts', symbols: [] },
+  ]
+  const jsRefs = buildReferenceIndex(jsEdges, jsFiles)
+  assert.deepEqual(jsRefs.get('src/core.ts').get('parse'), [
+    { path: 'src/app.ts', line: 1 },
+    { path: 'src/index.ts', line: 1 },
+  ], 'import { parseValue } 归到 core.ts 的 parse')
+  assert.equal(jsRefs.get('src/core.ts').get('parseValue'), undefined, '别名不伪造目标符号')
+
+  const rustEdges = [
+    { from: 'src/lib.rs', to: 'src/core.rs', kind: 'reexport', line: 2, symbols: ['Foo'], aliases: [{ from: 'Foo', to: 'Renamed' }] },
+    { from: 'src/app.rs', to: 'src/lib.rs', kind: 'import', line: 1, symbols: ['Renamed'] },
+  ]
+  const rustFiles = [
+    { path: 'src/lib.rs', lang: 'rust', symbols: [] },
+    { path: 'src/core.rs', lang: 'rust', symbols: [{ name: 'Foo', kind: 'class', exported: true }] },
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+  ]
+  const rustRefs = buildReferenceIndex(rustEdges, rustFiles)
+  assert.deepEqual(rustRefs.get('src/core.rs').get('Foo'), [
+    { path: 'src/app.rs', line: 1 },
+    { path: 'src/lib.rs', line: 2 },
+  ], 'pub use … as Renamed 归到 core.rs 的 Foo')
+})
+
 test('buildReferenceIndex：通配导入沿 barrel 链记为下游潜在引用', () => {
   const edges = [
     { from: 'src/barrel.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },

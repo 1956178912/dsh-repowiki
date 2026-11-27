@@ -840,6 +840,31 @@ test('repowiki-cards execute：引用与使用点穿过 barrel 再导出链', as
   assert.equal(out.symbolUsages[0].filesScanned, 3)
 })
 
+test('repowiki-cards execute：别名再导出链的引用与使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-alias-barrel-'))
+  nodefs.writeFileSync(path.join(dir, 'core.ts'), 'export function parse() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'index.ts'), "export { parse as parseValue } from './core'\n")
+  nodefs.writeFileSync(path.join(dir, 'app.ts'), "import { parseValue } from './index'\nexport const value = parseValue()\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'core.ts',
+    symbol: 'parse',
+    referencedBy: [{ path: 'app.ts', line: 1 }, { path: 'index.ts', line: 1 }],
+  }], 'import { parseValue } 经别名再导出归到 core.ts 的 parse')
+  assert.deepEqual(out.symbolUsages[0].importers, [
+    { path: 'app.ts', line: 1 },
+    { path: 'index.ts', line: 1 },
+  ])
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'app.ts', line: 2, text: 'export const value = parseValue()' },
+  ])
+  assert.equal(out.symbolUsages[0].filesScanned, 3)
+})
+
 test('repowiki-cards execute：Python 包 __init__ barrel 的引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-py-barrel-'))
   nodefs.mkdirSync(path.join(dir, 'pkg'), { recursive: true })
