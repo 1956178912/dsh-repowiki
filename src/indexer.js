@@ -729,6 +729,71 @@ function resolveFortranUse(specifier, modules) {
 }
 
 /**
+ * 建立 Perl 模块加载根：任意层级的 `lib/` 目录（含 `blib/lib` 的上一级
+ * `lib`），最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 加载根（末项为项目根 ''）。
+ */
+function buildPerlRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!/\.(?:pm|pl|t)$/.test(rel)) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'lib') roots.add(segments.slice(0, i + 1).join('/'))
+    }
+  }
+  return [
+    ...[...roots].filter(root => root !== '')
+      .sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Perl 引用：`Foo::Bar` 换算 `Foo/Bar.pm`（再试 `.pl`）在每个
+ * `lib/` 根与项目根下查找；`./x.pl` 按引用文件目录解析；`Foo/Bar.pm`
+ * 形式按各加载根解析。外部 CPAN 模块不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 模块名或路径。
+ * @param {string[]} roots - 加载根（末项为 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolvePerlSpecifier(fromRel, specifier, roots, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '') return null
+  if (raw.startsWith('.')) {
+    // Perl 的 `require "./x.pl"` 相对进程工作目录（通常项目根），
+    // 再回退脚本目录，两种布局都能命中
+    const scriptDir = path.posix.dirname(fromRel)
+    const bases = ['']
+    if (scriptDir !== '.') bases.push(scriptDir)
+    for (const base of bases) {
+      const target = path.posix.normalize(path.posix.join(base, raw))
+      if (target === '..' || target.startsWith('../')) continue
+      for (const candidate of [target, `${target}.pl`, `${target}.pm`]) {
+        if (indexed.has(candidate)) return candidate
+      }
+    }
+    return null
+  }
+  const modulePath = raw.includes('::')
+    ? raw.replace(/::/g, '/')
+    : raw
+  if (!/^[A-Za-z_][\w/.-]*$/.test(modulePath)) return null
+  for (const root of roots) {
+    const prefix = root === '' ? '' : `${root}/`
+    for (const suffix of ['.pm', '.pl', '']) {
+      const candidate = path.posix.normalize(`${prefix}${modulePath}${suffix}`)
+      if (indexed.has(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+/**
  * 建立 Lua `require` 的加载根：任意层级的 `lua/` 目录（Neovim 插件布局），
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2282,6 +2347,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   elixirModules:Map<string,string>,
  *   ocamlModules:Map<string,string[]>,
  *   fortranModules:Map<string,string>,
+ *   perlRoots:string[],
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   clojureRoots:string[],
@@ -2329,6 +2395,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
+  if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
@@ -2619,6 +2686,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     elixirModules: buildElixirModules(files),
     ocamlModules: buildOcamlModules(files),
     fortranModules: buildFortranModules(files),
+    perlRoots: buildPerlRoots(indexed),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
     clojureRoots: buildClojureRoots(indexed),

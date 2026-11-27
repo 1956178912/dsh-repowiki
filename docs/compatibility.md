@@ -53,6 +53,7 @@
 | Groovy | 顶层 `class`/`interface`/`trait`/`enum` 容器（容忍注解与 `public`/`private`/`protected`/`static`/`final`/`abstract` 修饰符）、类内第一层方法（含构造器）与 Gradle/Jenkinsfile 风格顶层 `def` 脚本方法；`private`/`protected` 非导出；控制流/调用关键字不登记；`//`、`/* */` 注释与单/双/三引号字符串（含插值文本）屏蔽 | `import a.b.C` 经点分路径后缀匹配，与 Java 文件共享同一索引（Groovy→Java 与 Java→Groovy 均可解析）；`import static a.b.C.member` 去掉末段成员后落到定义文件；`import a.b.*` 通配与外部包不建边 |
 | PowerShell | `function`/`filter`/`workflow`/`configuration` 定义（连字符 `Verb-Noun` 名称，`global:`/`script:`/`local:`/`private:` 作用域前缀，`private:` 非导出）与顶层 `class`/`enum`；类内第一层成员为带 `parent` 的 method（含构造器），`hidden` 成员非导出，属性声明不登记；控制流关键字不误登记；`#` 行注释、`<# … #>` 块注释、单/双引号字符串与 here-string 屏蔽 | `using module ./X.psm1`、`Import-Module ./X`（含 `-Name`）与 dot-source（`. ./X.ps1`）按引用脚本目录解析，尝试原路径、`.ps1`/`.psm1`/`.psd1` 后缀与 `Foo/Foo.psm1` 模块目录形式；反斜杠归一；纯模块名与越出项目的路径不建边 |
 | Fortran | `module`/`program`/`subroutine`/`function`（含 `integer function`/`real(kind=8) function` 等类型前缀与 `pure`/`recursive`/`elemental`/`module` 修饰）、派生类型 `type [::] name`/`type, extends(…) :: name`、具名 `interface`；`end`/`end <unit>` 配平范围，模块内过程带 `parent`，`end do`/`end if`/`end select`/`end where` 不关闭程序单元；`!` 注释与单/双引号字符串（双写转义）屏蔽 | `use name`、`use :: name`、`use name, only: …`、`use, non_intrinsic :: name` 经大小写不敏感的 `module` 符号映射解析（模块名与文件名无需一致，同名取字典序最小文件）；`use, intrinsic :: …` 与未索引的外部模块不建边 |
+| Perl | `package Foo::Bar;`（语句形式，后续声明归属直到下一个 package）与 `package Foo { … }` 块形式登记为 class；`sub name` 为 function，包内为 method + `parent`；`_` 前缀按惯例非导出；`#` 注释（`$#array` 除外）、`=pod … =cut`、heredoc 与引号字符串屏蔽 | `use`/`require Foo::Bar` 把 `::` 换算路径，在每个 `lib/` 根与项目根下尝试 `.pm`/`.pl`；`use parent 'Foo'`/`use base qw(Foo)` 记录父模块；`require './x.pl'` 先项目根再脚本目录；pragma 与版本声明跳过，外部 CPAN 模块不建边 |
 | Clojure | `ns`（class）、`defn`/`defn-`/`defmacro`/`defmacro-`/`defmulti`/`defmethod`（function）、`def`/`defonce`（variable）、`defrecord`/`deftype`/`defprotocol`/`definterface`（class）；`^:private` 与 `defn-`/`defmacro-` 非导出；`;` 注释、字符串屏蔽、`(comment …)` 整体跳过；形式范围按圆/方/花括号配平 | `(:require …)`/`(:use …)` 的 `[ns.name …]` 命名空间点分换算路径，在每个 `src/`/`test/` 根与项目根下尝试同类扩展优先的 `.clj`/`.cljc`/`.cljs`；外部命名空间不建边；`deps.edn` `:deps` 与 `project.clj` `:dependencies` 提供依赖计数/版本与技术映射 |
 | Solidity | `contract`/`library`/`interface`（含 `abstract contract`）容器；成员 `function`/`constructor`/`receive`/`fallback`/`modifier`/`event`/`error`/`struct`/`enum`/`type X is`（method/type/class，带 `parent`）；文件级函数与类型；`private`/`internal` 非导出；`//`、`/* */` 与字符串屏蔽；范围按花括号配平（`;` 声明单行） | 相对 `import`（`import "…"`、`import {A} from "…"`、`import * as X from "…"`）按引用文件目录解析并补 `.sol`；npm/`hardhat/…` 等外部路径不建边；`foundry.toml` 标记 Foundry 工具链 |
 | Erlang | `-module`、`-record`、`-type`/`-opaque`、`-define` 宏、顶层函数（多子句、`when` 守卫、跨行签名）；`-export([f/1])` 决定可见性（默认私有，同名不同 arity 合并），`-module` 自身公开；缩进体与匿名函数不登记；`%` 注释、字符串、引号原子与 `$x` 字符字面量屏蔽 | `-include("…")` 先按引用文件目录，再经每个 `src/`/`include/` 根与项目根（原路径与补 `.hrl`）；`-include_lib("app/…")` 额外尝试剥离首段应用名的路径；外部头文件不建边；`rebar.config` 的 `{deps, …}` 提供依赖计数与 rebar 技术映射 |
@@ -162,7 +163,11 @@ Fortran 为轻量行级解析：固定格式（`.f`/`.f77`）列首 `C`/`*` 注�
 （避免把 `C = 1` 赋值误当注释）；`include "x.h"` 与预处理 `#include` 不
 建边；`private`/`public` 语句不改变 `exported`（Fortran 符号全部视为
 模块可见）；`submodule`/`block data` 不登记；`end` 与声明同行的单行
-程序单元按首行登记范围起点。
+程序单元按首行登记范围起点。Perl 为轻量行级解析：只识别行首
+`package`/`sub`（`my $f = sub { … }` 匿名子程序不登记）；语句式 `package`
+的 `endLine` 延续到下一个 `package` 或文件尾，块式结束后恢复外层包；
+`use lib` 的额外加载路径不参与解析（只认 `lib/` 根与项目根）；`bin/`
+目录沿用既有排除规则，其中的脚本不索引（`script/`、根目录脚本正常索引）。
 
 ## 升级检查清单
 

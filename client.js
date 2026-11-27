@@ -353,6 +353,7 @@ const LANGUAGE_LABELS = {
   groovy: 'Groovy',
   powershell: 'PowerShell',
   fortran: 'Fortran',
+  perl: 'Perl',
   c: 'C',
   cpp: 'C++',
 }

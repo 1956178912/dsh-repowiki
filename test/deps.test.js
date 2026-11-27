@@ -665,6 +665,34 @@ test('Fortran：use 模块引用与 intrinsic 过滤', () => {
   ])
 })
 
+test('Perl：use/require、parent/base 与 pragma 过滤', () => {
+  const code = [
+    'use strict;',
+    'use warnings;',
+    'use My::App;',
+    'use My::Util qw(trim);',
+    "use parent 'Base::Class';",
+    'use base qw(Other::Base Legacy::Base);',
+    'require "./lib/Local.pm";',
+    "require 'Shared/Thing.pm';",
+    'use v5.36;',
+    '# use Commented::Mod;',
+    '=pod',
+    'use Pod::Mod;',
+    '=cut',
+  ].join('\n')
+  const imports = extractImports(code, 'perl')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.kind]), [
+    ['My::App', 3, 'import'],
+    ['My::Util', 4, 'import'],
+    ['Base::Class', 5, 'import'],
+    ['Other::Base', 6, 'import'],
+    ['Legacy::Base', 6, 'import'],
+    ['./lib/Local.pm', 7, 'require'],
+    ['Shared/Thing.pm', 8, 'require'],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

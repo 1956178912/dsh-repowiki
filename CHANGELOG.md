@@ -5,6 +5,35 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.220.0] - 2026-11-28
+
+### Added
+
+- **Perl indexing (33rd language)**: `.pl`/`.pm`/`.t` files produce
+  `package Foo::Bar;` classes (statement form, governing subsequent
+  declarations until the next package) and `package Foo { … }` block
+  classes (restoring the outer package afterwards); `sub name` becomes a
+  function, or a method with `parent` when inside a package, with
+  `_`-prefixed subs marked non-exported by convention.
+- **Perl masking**: `#` line comments (except `$#array`), `=pod … =cut`
+  blocks, `<<EOF`/`<<'EOF'`/`<<"EOF"`/`<<~EOF` heredoc bodies and
+  single/double-quoted strings are masked before range matching, so POD,
+  heredoc text and quoted braces never register symbols or break ranges.
+- **Perl dependency edges**: `use Foo::Bar` and `require Foo::Bar`
+  convert `::` to a path and resolve under every `lib/` root plus the
+  project root; `use parent 'Foo'`/`use base qw(Foo)` record parent
+  modules; `require './x.pl'` and `require 'Foo/Bar.pm'` resolve from the
+  project root with a script-directory fallback. Pragmas (`strict`,
+  `warnings`, …) and version declarations are skipped, and external CPAN
+  modules stay edge-free.
+
+### Tests
+
+- 644 cases pass (LANG=en and LANG=zh); new coverage for package
+  scoping, block packages, sub visibility, POD/heredoc masking, pragma
+  filtering, parent/base imports, `lib/` resolution and Perl `t/`/`*.t`
+  test-path detection.
+
 ## [0.219.0] - 2026-11-28
 
 ### Added

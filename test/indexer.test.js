@@ -1797,6 +1797,28 @@ test('Fortran：use 模块名解析（大小写不敏感、模块名与文件名
   assert.equal(doc.stats.edges, 2, 'intrinsic 模块不建边')
 })
 
+test('Perl：模块名经 lib/ 根解析、相对 require 与 t/ 测试路径', async () => {
+  const dir = makeProject({
+    'lib/My/App.pm': 'package My::App;\nsub new { return bless {}, shift; }\n1;\n',
+    'lib/My/Util.pm': 'package My::Util;\nsub trim { return $_[0]; }\n1;\n',
+    't/app.t': 'use My::App;\nuse My::Util;\n',
+    'scripts/run.pl': "require './lib/My/App.pm';\nuse My::Util;\n",
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { perl: 4 })
+
+  const testEdges = doc.edges.filter(e => e.from === 't/app.t')
+  assert.deepEqual(testEdges.map(e => [e.line, e.to]).sort(), [
+    [1, 'lib/My/App.pm'],
+    [2, 'lib/My/Util.pm'],
+  ])
+  const scriptEdges = doc.edges.filter(e => e.from === 'scripts/run.pl')
+  assert.deepEqual(scriptEdges.map(e => [e.line, e.to]).sort(), [
+    [1, 'lib/My/App.pm'],
+    [2, 'lib/My/Util.pm'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

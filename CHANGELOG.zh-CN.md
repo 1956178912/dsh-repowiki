@@ -3,6 +3,24 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.220.0] - 2026-11-28
+
+- **Perl 支持（第 33 种语言）**：`.pl`/`.pm`/`.t` 提取 `package Foo::Bar;`
+  （语句形式，作用于后续声明直到下一个 package）与 `package Foo { … }`
+  块类（结束后恢复外层包）；`sub name` 登记为 function，包内为 method 并
+  带 `parent`，`_` 前缀按惯例非导出。
+- **Perl 屏蔽**：`#` 行注释（`$#array` 除外）、`=pod … =cut` 块、`<<EOF`/
+  `<<'EOF'`/`<<"EOF"`/`<<~EOF` heredoc 内容与单/双引号字符串在配平前屏蔽，
+  POD、heredoc 文本与引号内花括号不会登记符号或破坏范围。
+- **Perl 依赖边**：`use Foo::Bar`/`require Foo::Bar` 把 `::` 换算为路径，
+  在每个 `lib/` 根与项目根下解析；`use parent 'Foo'`/`use base qw(Foo)`
+  记录父模块；`require './x.pl'` 与 `require 'Foo/Bar.pm'` 先按项目根、
+  再回退脚本目录解析；pragma（`strict`/`warnings` 等）与版本声明跳过，
+  外部 CPAN 模块不建边。
+- **测试**：644 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖包作用域、
+  块 package、sub 可见性、POD/heredoc 屏蔽、pragma 过滤、parent/base、
+  `lib/` 解析与 Perl `t/`/`*.t` 测试路径识别。
+
 ## [0.219.0] - 2026-11-28
 
 - **Fortran 支持（第 32 种语言）**：`.f`/`.for`/`.f77`/`.f90`/`.f95`/`.f03`/

@@ -10,7 +10,7 @@
 import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
-  clojureScan, hclScan, groovyScan, powershellScan, fortranScan,
+  clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan,
 } from './symbols.js'
 
 /**
@@ -1241,6 +1241,61 @@ function extractFortranImports(lines) {
   return result
 }
 
+/** Perl 编译指示（pragma）与标准库开关——不作为模块依赖记录。 */
+const PERL_PRAGMAS = new Set([
+  'strict', 'warnings', 'utf8', 'vars', 'lib', 'feature', 'experimental',
+  'bytes', 'integer', 'less', 'locale', 'overload', 'overloading', 're',
+  'sigtrap', 'subs', 'open', 'bigint', 'bignum', 'bigrat', 'blib',
+  'diagnostics', 'constant', 'parent', 'base', 'mro', 'sort', 'autodie',
+  'fields', 'if', 'threads', 'attributes', 'charnames', 'version', 'vars',
+])
+
+/**
+ * 提取 Perl 的 `use`/`require` 引用：
+ * - `use Foo::Bar` / `require Foo::Bar` 记录模块名；
+ * - `use parent 'Foo::Bar'` / `use base qw(Foo::Bar)` 记录父模块；
+ * - `require "./x.pl"` / `require 'Foo/Bar.pm'` 记录路径形式。
+ * 版本号、编译指示与注释/POD/heredoc 内的伪语句跳过。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractPerlImports(lines) {
+  const result = []
+  const { code, masked } = perlScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '') continue
+    const parentUse = /^(?:use|require)\s+(?:parent|base)\b(.*)$/.exec(line)
+    if (parentUse) {
+      const args = /^(?:use|require)\s+(?:parent|base)\b(.*)$/.exec(code[i].trim())
+      const text = args ? args[1] : ''
+      const names = new Set()
+      for (const m of text.matchAll(/['"]([A-Za-z_]\w*(?:::\w+)*)['"]/g)) names.add(m[1])
+      const qw = /\bqw\s*[({[]([^)}\]]*)[)}\]]/.exec(text)
+      if (qw) {
+        for (const token of qw[1].split(/\s+/)) {
+          if (/^[A-Za-z_]\w*(?:::\w+)*$/.test(token)) names.add(token)
+        }
+      }
+      for (const name of names) {
+        result.push({ specifier: name, line: i + 1, kind: 'import', relative: false, imported: [] })
+      }
+      continue
+    }
+    const relRequire = /^require\s+(['"])(.+?)\1/.exec(code[i].trim())
+    if (relRequire && (relRequire[2].startsWith('.') || relRequire[2].includes('/'))) {
+      result.push({ specifier: relRequire[2], line: i + 1, kind: 'require', relative: true, imported: [] })
+      continue
+    }
+    const moduleRef = /^(?:use|require)\s+([A-Za-z_]\w*(?:::\w+)*)/.exec(line)
+    if (!moduleRef) continue
+    const name = moduleRef[1]
+    if (/^v\d/i.test(name) || PERL_PRAGMAS.has(name)) continue
+    result.push({ specifier: name, line: i + 1, kind: 'import', relative: false, imported: [] })
+  }
+  return result
+}
+
 /**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
@@ -1357,6 +1412,7 @@ export function extractImports(code, lang) {
   if (lang === 'groovy') return extractGroovyImports(lines)
   if (lang === 'powershell') return extractPowershellImports(lines)
   if (lang === 'fortran') return extractFortranImports(lines)
+  if (lang === 'perl') return extractPerlImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

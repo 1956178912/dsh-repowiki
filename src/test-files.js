@@ -12,7 +12,7 @@ export const MAX_AFFECTED_TESTS = 50
 
 /** 视为测试目录的路径段（小写比较；testdata 等夹具目录不算）。 */
 const TEST_DIRECTORIES = new Set([
-  'test', 'tests', '__tests__', 'spec', 'specs', '__spec__', 'e2e', 'cypress',
+  'test', 'tests', '__tests__', 'spec', 'specs', '__spec__', 'e2e', 'cypress', 't',
 ])
 
 /**
@@ -20,7 +20,8 @@ const TEST_DIRECTORIES = new Set([
  * 命中任一规则即视为测试：测试目录下的文件、`*.test.*` / `*.spec.*`、
  * Python/Ruby/Go 的 `test_*` / `*_test.*` / `*_spec.rb`、JVM/C#/Swift 的
  * `FooTest`/`FooTests`/`FooSpec`/`FooIT`，以及 Erlang `*_SUITE.erl` /
- * `*_tests.erl`、R testthat `test-*.R` 与 Julia `runtests.jl`。
+ * `*_tests.erl`、R testthat `test-*.R`、Julia `runtests.jl` 与 Perl `t/`
+ * 目录 / `*.t` 脚本。
  * @param {unknown} value - 文件路径。
  * @returns {boolean} 是否为测试文件。
  */
@@ -38,6 +39,7 @@ export function isTestPath(value) {
   if (/_(?:SUITE|tests)\.erl$/i.test(file)) return true
   if (/^test-.+\.[Rr]$/.test(file)) return true
   if (/^runtests\.jl$/i.test(file)) return true
+  if (/\.t$/.test(file)) return true
   return false
 }
 

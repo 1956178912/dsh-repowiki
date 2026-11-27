@@ -1845,6 +1845,55 @@ test('Fortran：module/program/subroutine/function/type/interface 与 end 配平
   assert.ok(!byName.has('origin'), 'type(...) 变量声明不登记')
 })
 
+test('Perl：package/sub 归属、块 package、POD 与 heredoc 屏蔽', () => {
+  const code = [
+    '# package Fake; sub hidden {}',
+    'package My::App;',
+    '',
+    'sub new {',
+    '    my ($class) = @_;',
+    '    return bless {}, $class;',
+    '}',
+    '',
+    'sub _helper { return 1; }',
+    '',
+    'package My::Util {',
+    '    sub trim { my $s = shift; return $s; }',
+    '}',
+    '',
+    'sub top_level { return 1; }',
+    '',
+    '=pod',
+    'package Pod::Fake;',
+    'sub pod_sub {}',
+    '=cut',
+    '',
+    "my $here = <<'EOF';",
+    'package Here::Fake;',
+    'sub here_sub {}',
+    'EOF',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'perl')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('My::App').kind, 'class')
+  assert.equal(byName.get('My::App').endLine, 25, '块 package 结束后外层包延续到文件尾')
+  assert.equal(byName.get('new').kind, 'method')
+  assert.equal(byName.get('new').parent, 'My::App')
+  assert.equal(byName.get('new').endLine, 7)
+  assert.equal(byName.get('_helper').exported, false, '_ 前缀按惯例非导出')
+  assert.equal(byName.get('My::Util').kind, 'class')
+  assert.equal(byName.get('My::Util').endLine, 13)
+  assert.equal(byName.get('trim').parent, 'My::Util')
+  assert.equal(byName.get('top_level').kind, 'method', '块 package 结束后回到外层包')
+  assert.equal(byName.get('top_level').parent, 'My::App')
+  assert.ok(!byName.has('Fake'), '行注释不登记')
+  assert.ok(!byName.has('Pod::Fake'), 'POD 不登记')
+  assert.ok(!byName.has('pod_sub'), 'POD 内 sub 不登记')
+  assert.ok(!byName.has('Here::Fake'), 'heredoc 不登记')
+  assert.ok(!byName.has('here_sub'), 'heredoc 内 sub 不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

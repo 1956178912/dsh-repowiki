@@ -4291,6 +4291,134 @@ function extractFortran(lines) {
 }
 
 /**
+ * 扫描 Perl 源码行：`#` 行注释（`$#array` 除外）、行首 `=pod`…`=cut`
+ * POD 块、`<<'EOF'`/`<<"EOF"`/`<<EOF`/`<<~EOF` heredoc 内容与单/双引号
+ * 字符串（反斜杠转义）替换为空格。
+ *
+ * 返回双视图：`masked` 供符号提取配平；`code` 保留字符串原文、仅屏蔽
+ * 注释/POD/heredoc，供依赖提取读取 `use parent 'Foo'` 等引号参数。
+ * @param {string[]} lines - 源码行。
+ * @returns {{code:string[], masked:string[]}} 双视图（行注释后截断）。
+ */
+export function perlScan(lines) {
+  const codeOut = []
+  const maskedOut = []
+  let inPod = false
+  let quote = null
+  /** @type {string|null} heredoc 结束标识符。 */
+  let heredoc = null
+  for (const raw of lines) {
+    if (inPod) {
+      codeOut.push(' '.repeat(raw.length))
+      maskedOut.push(' '.repeat(raw.length))
+      if (/^=cut\b/.test(raw)) inPod = false
+      continue
+    }
+    if (heredoc) {
+      const done = raw.trim() === heredoc
+      codeOut.push(' '.repeat(raw.length))
+      maskedOut.push(' '.repeat(raw.length))
+      if (done) heredoc = null
+      continue
+    }
+    if (/^=[A-Za-z]/.test(raw)) {
+      inPod = true
+      codeOut.push(' '.repeat(raw.length))
+      maskedOut.push(' '.repeat(raw.length))
+      continue
+    }
+    let code = ''
+    let masked = ''
+    /** @type {string|null} */
+    let heredocTag = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (quote) {
+        if (ch === '\\') { i++; code += raw.slice(i - 1, i + 1); masked += '  ' }
+        else if (ch === quote) { quote = null; code += ch; masked += ch }
+        else { code += ch; masked += ' ' }
+        continue
+      }
+      if (ch === '#' && raw[i - 1] !== '$') break
+      if (ch === '<' && next === '<' && !heredocTag) {
+        const m = /^<<~?\s*(['"]?)([A-Za-z_]\w*)\1/.exec(raw.slice(i))
+        if (m) {
+          heredocTag = m[2]
+          code += raw.slice(i)
+          masked += raw.slice(i)
+          break
+        }
+      }
+      if (ch === "'" || ch === '"') { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    if (heredocTag) heredoc = heredocTag
+    codeOut.push(code)
+    maskedOut.push(masked)
+  }
+  return { code: codeOut, masked: maskedOut }
+}
+
+/**
+ * 提取 Perl 符号：`package Foo::Bar;`（无块，作用于后续声明直到下一个
+ * package）与 `package Foo { … }`（块作用域）登记为 class；`sub name`
+ * 登记为 function，包内 sub 为 method 并带 `parent`；`_` 前缀按惯例
+ * 标记非导出。注释、POD、heredoc 与引号内容不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractPerl(lines) {
+  const { masked } = perlScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const blocks = []
+  /** @type {object|null} 当前无块 package 的符号（endLine 后续回填）。 */
+  let currentPackage = null
+  for (let i = 0; i < masked.length; i++) {
+    while (blocks.length > 0 && blocks[blocks.length - 1].end <= i + 1) blocks.pop()
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    const packageMatch = /^package\s+([A-Za-z_]\w*(?:::\w+)*)\s*(\{)?/.exec(line)
+    if (packageMatch) {
+      const name = packageMatch[1]
+      if (packageMatch[2]) {
+        const end = findBlockEnd(masked, i)
+        symbols.push({ name, kind: 'class', line: i + 1, endLine: end, exported: true })
+        blocks.push({ name, end })
+        continue
+      }
+      if (currentPackage) currentPackage.endLine = i
+      const symbol = { name, kind: 'class', line: i + 1, endLine: masked.length, exported: true }
+      symbols.push(symbol)
+      currentPackage = symbol
+      continue
+    }
+
+    const subMatch = /^sub\s+([A-Za-z_]\w*)/.exec(line)
+    if (subMatch) {
+      const name = subMatch[1]
+      const parent = blocks.length > 0
+        ? blocks[blocks.length - 1].name
+        : currentPackage?.name
+      /** @type {object} */
+      const symbol = {
+        name,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: line.includes('{') ? findBlockEnd(masked, i) : i + 1,
+        exported: !name.startsWith('_'),
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4434,6 +4562,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'groovy') return extractGroovy(lines)
   if (lang === 'powershell') return extractPowershell(lines)
   if (lang === 'fortran') return extractFortran(lines)
+  if (lang === 'perl') return extractPerl(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }
