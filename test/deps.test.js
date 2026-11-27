@@ -352,6 +352,24 @@ test('Dart：import/export/part 提取相对语义与 show 符号', () => {
   assert.ok(!imports.some(i => i.specifier === 'commented.dart'), '注释不提取')
 })
 
+test('Lua：require 字符串与括号形式，注释不提取', () => {
+  const code = [
+    'local a = require("my.mod")',
+    "local b = require 'single'",
+    'local c = require("init")',
+    '-- require("commented")',
+    '--[[ require("block.commented") ]]',
+    'return { a, b, c }',
+  ].join('\n')
+  const imports = extractImports(code, 'lua')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['my.mod', 1],
+    ['single', 2],
+    ['init', 3],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

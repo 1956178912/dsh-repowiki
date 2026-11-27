@@ -645,6 +645,51 @@ function buildElixirModules(files) {
 }
 
 /**
+ * 建立 Lua `require` 的加载根：任意层级的 `lua/` 目录（Neovim 插件布局），
+ * 最后回退项目根；按深度、字典序排序保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 加载根（末项为项目根 ''）。
+ */
+function buildLuaRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!rel.endsWith('.lua')) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'lua') roots.add(segments.slice(0, i + 1).join('/'))
+    }
+  }
+  return [
+    ...[...roots].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Lua `require("mod")`：点分模块名按 Lua 语义换算为路径分隔，在
+ * `lua/` 根与项目根下尝试 `<mod>.lua` 与 `<mod>/init.lua`；外部模块返回 null。
+ * @param {string} specifier - require 的模块名（`my.mod` 或 `my/mod`）。
+ * @param {string[]} roots - 加载根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveLuaSpecifier(specifier, roots, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (raw === '' || raw.startsWith('/') || raw.split('/').includes('..')) return null
+  const cleaned = raw.replace(/\./g, '/')
+  if (!/^[\w\-/]+$/.test(cleaned)) return null
+  for (const root of roots) {
+    const base = root === '' ? cleaned : `${root}/${cleaned}`
+    for (const candidate of [`${base}.lua`, `${base}/init.lua`]) {
+      const normalized = path.posix.normalize(candidate)
+      if (indexed.has(normalized)) return normalized
+    }
+  }
+  return null
+}
+
+/**
  * 解析 Elixir 模块引用：alias/import/require/use 的点分模块名精确匹配
  * 仓库内 defmodule 或 `lib/` 布局文件；外部依赖返回 null。
  * @param {string} specifier - 点分模块名（如 MyApp.Repo）。
@@ -1508,6 +1553,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
+ *   luaRoots:string[],
  *   phpPsr4:Array<{prefix:string, dir:string}>, phpPaths:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1546,6 +1592,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
+  if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }
@@ -1769,6 +1816,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     workspacePackages: buildWorkspacePackages(manifestTexts),
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
+    luaRoots: buildLuaRoots(indexed),
     phpPsr4: buildPhpPsr4(manifestTexts),
     phpPaths: buildPhpPaths(indexed),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),

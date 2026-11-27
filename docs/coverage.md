@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.181.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.181.0）；测试 562/562（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.09%、分支 86.60%、函数 95.38%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.182.0）；测试 565/565（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.09%、分支 86.80%、函数 95.34%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（562/562，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取（含 Elixir）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（565/565，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、17 语言提取（含 Elixir/Lua）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -234,3 +234,4 @@
 | 快照完整性 | `repowiki-export` 每个文件写后回读校验，再写 `_snapshot.json`（路径 + sha256-16 + `partial`）；`repowiki-import` 复制前以 8 路有界并发逐文件校验（上限 2 万），指纹不符/缺失/不可读/路径非法/部分导出默认拒绝，`allowCorrupt=true` 强制；旧快照无清单仍可导入并提示未校验，清单文件不进入资产目录；导入只复制清单登记的相对路径，快照里多出的文本文件跳过并计数（`snapshotUnlisted`，前 5 条路径），清单路径先归一、绝对/越界条目丢弃；清单本身也校验 schemaVersion（非当前判无效）、显式 count 与 files 长度一致、JSON 必须是对象，并按 stat 大小拒绝超过 8 MiB 的清单 | v0.163.0 / v0.165.0 / v0.168.0 / v0.172.0 |
 | Dart 支持 | 15 语言：class/mixin/enum/extension/extension type/typedef、构造器/方法/getter、顶层函数与变量、`_` 私有；相对 `import`/`export`/`part` 边（含 `show` 符号）；`pubspec.yaml` → `pub` 项目名/依赖计数/技术映射；`package:<仓库内包名>/x.dart` 解析到 `<包根>/lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边 | v0.166.0 / v0.167.0 |
 | Elixir 支持 | 16 语言：`defmodule`（嵌套完整名）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`，do/end 配平、`do:` 单行、多行函数头与私有可见性；`alias`/`import`/`require`/`use` 经模块名映射到声明文件（含分组/重命名 alias），外部模块不建边；根与 `apps/*/mix.exs` → mix 项目名（根）/依赖计数/技术映射（嵌套合并，来源可追溯）；`.exs` 测试/脚本进入索引（`mix.exs` 仍为清单），测试文件的 alias 边可供影响面路由 | v0.177.0 / v0.178.0 / v0.179.0 |
+| Lua 支持 | 17 语言：模块表变量、`function`/`local function`、`M.foo`/`M:foo` 方法（parent 归属）与 `M.foo = function` 赋值；块范围按 function/if/for/while/do/repeat…end/until 配平并屏蔽注释/长字符串；`require` 经 `lua/` 根与项目根解析 `<mod>.lua`/`<mod>/init.lua`，外部模块不建边 | v0.182.0 |

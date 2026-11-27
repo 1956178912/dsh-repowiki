@@ -606,6 +606,62 @@ function extractCppImports(lines) {
 }
 
 /**
+ * 去除 Lua 注释（`--` 行注释与 `--[[ ... ]]` 块注释），保留行数。
+ * 只服务 import 提取：短字符串内的 `--` 可能被误截断，属已知轻量限制。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 去注释后的行。
+ */
+function stripLuaComments(lines) {
+  const out = []
+  let inBlock = false
+  for (const raw of lines) {
+    let line = ''
+    let index = 0
+    while (index < raw.length) {
+      if (inBlock) {
+        const close = raw.indexOf(']]', index)
+        if (close < 0) break
+        inBlock = false
+        index = close + 2
+        continue
+      }
+      if (raw.startsWith('--[[', index)) { inBlock = true; index += 4; continue }
+      if (raw.startsWith('--', index)) break
+      line += raw[index]
+      index++
+    }
+    out.push(line)
+  }
+  return out
+}
+
+/**
+ * 提取 Lua 的 `require("mod")` / `require 'mod'` 引用。
+ * specifier 保持原样（点分模块名由解析层换算为路径）；外部模块不建边
+ * 由解析层决定。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractLuaImports(lines) {
+  const result = []
+  const codeLines = stripLuaComments(lines)
+  for (let i = 0; i < codeLines.length; i++) {
+    const re = /require\s*\(?\s*(['"])([^'"]+)\1/g
+    let match
+    while ((match = re.exec(codeLines[i])) !== null) {
+      result.push({
+        specifier: match[2],
+        line: i + 1,
+        kind: 'import',
+        relative: false,
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -725,6 +781,7 @@ export function extractImports(code, lang) {
   if (lang === 'scala') return extractScalaImports(lines)
   if (lang === 'dart') return extractDartImports(lines)
   if (lang === 'elixir') return extractElixirImports(lines)
+  if (lang === 'lua') return extractLuaImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

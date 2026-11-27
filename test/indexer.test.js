@@ -1217,6 +1217,34 @@ test('Elixir：defmodule 模块索引解析 alias/import，mix.exs 技术栈', a
   assert.ok(doc.stack.technologies.some(t => t.name === 'Oban' && t.source === 'apps/api/mix.exs'))
 })
 
+test('Lua：require 解析 lua/ 根与 init.lua，符号进入索引', async () => {
+  const dir = makeProject({
+    'lua/myplugin/init.lua': [
+      'local M = {}',
+      'function M.setup()',
+      '  return require("myplugin.util")',
+      'end',
+      'return M',
+    ].join('\n'),
+    'lua/myplugin/util.lua': 'local U = {}\nfunction U.trim(s) return s end\nreturn U\n',
+    'src/tool.lua': 'local helper = require("myplugin.util")\nreturn helper\n',
+    'src/extra.lua': 'return require("myplugin")\n',
+    'src/external.lua': 'return require("socket")\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { lua: 5 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('lua/myplugin/init.lua', 'lua/myplugin/util.lua')?.line, 3, '点分模块名换算路径')
+  assert.equal(edge('src/tool.lua', 'lua/myplugin/util.lua')?.line, 1, 'lua/ 作为加载根')
+  assert.equal(edge('src/extra.lua', 'lua/myplugin/init.lua')?.line, 1, '包根解析为 init.lua')
+  assert.equal(doc.edges.filter(e => e.from === 'src/external.lua').length, 0, '外部模块不建边')
+  assert.equal(doc.edges.length, 3)
+
+  const util = doc.files.find(f => f.path === 'lua/myplugin/util.lua')
+  assert.ok(util.symbols.some(s => s.name === 'trim' && s.kind === 'method' && s.parent === 'U'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

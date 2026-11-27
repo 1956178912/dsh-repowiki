@@ -156,6 +156,7 @@ export const EXTENSION_LANGS = {
   dart: 'dart',
   ex: 'elixir',
   exs: 'elixir',
+  lua: 'lua',
   c: 'c',
   h: 'c',
   cc: 'cpp',

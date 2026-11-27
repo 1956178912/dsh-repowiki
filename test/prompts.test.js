@@ -38,8 +38,8 @@ test('extractPrompt：python 围栏、方法父级与未知语言空围栏', () 
     const fenced = extractPrompt({ path: `a.${lang}`, lang, source: 'x', symbols: [], truncated: false }, 'en')
     assert.match(fenced, new RegExp('````' + lang), `${lang} 围栏`)
   }
-  const other = extractPrompt({ path: 'a.lua', lang: 'lua', source: 'print(1)', symbols: [], truncated: false }, 'en')
-  assert.match(other, /````\nprint\(1\)/)
+  const other = extractPrompt({ path: 'a.f90', lang: 'fortran', source: 'print *, 1', symbols: [], truncated: false }, 'en')
+  assert.match(other, /````\nprint \*, 1/)
 })
 
 test('extractPrompt：项目技术栈与模块路径约束 relatedModules', () => {

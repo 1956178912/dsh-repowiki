@@ -1606,6 +1606,153 @@ function extractElixir(lines) {
 }
 
 /**
+ * 提取 Lua 的可解析代码行：去掉行注释 `--`，并把 `--[[ ... ]]` 块注释与
+ * `[[ ... ]]` 长字符串替换为空（保留行数），避免其中的 `function`/`end`
+ * 干扰块配平与符号识别。短字符串内的 `--` 不截断。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长的可解析代码行。
+ */
+function luaCodeLines(lines) {
+  const out = []
+  let longForm = 0 // 1 = 块注释，2 = 长字符串
+  for (const raw of lines) {
+    let code = ''
+    let index = 0
+    while (index < raw.length) {
+      if (longForm !== 0) {
+        const close = raw.indexOf(']]', index)
+        if (close < 0) break
+        longForm = 0
+        index = close + 2
+        continue
+      }
+      if (raw.startsWith('--[[', index)) { longForm = 1; index += 4; continue }
+      if (raw.startsWith('--', index)) break
+      if (raw.startsWith('[[', index)) { longForm = 2; index += 2; continue }
+      const ch = raw[index]
+      if (ch === '"' || ch === "'") {
+        code += ch
+        index++
+        while (index < raw.length) {
+          code += raw[index]
+          if (raw[index] === '\\' && index + 1 < raw.length) {
+            code += raw[index + 1]
+            index += 2
+            continue
+          }
+          if (raw[index] === ch) { index++; break }
+          index++
+        }
+        continue
+      }
+      code += ch
+      index++
+    }
+    out.push(code)
+  }
+  return out
+}
+
+/**
+ * 计算一行 Lua 的块深度增量（function/if/for/while/do/repeat … end/until）。
+ * `for`/`while` 自带的 `do` 不重复计数；`elseif` 不开启新块。
+ * @param {string} code - 已去注释的代码行。
+ * @returns {number} 深度增量。
+ */
+function luaBlockDelta(code) {
+  if (!code.trim()) return 0
+  const count = re => (code.match(re) ?? []).length
+  const loops = count(/\b(for|while)\b/g)
+  const dos = count(/\bdo\b/g)
+  return count(/\bfunction\b/g) + count(/\bif\b/g) + loops
+    + count(/\brepeat\b/g) + Math.max(0, dos - loops)
+    - count(/\buntil\b/g) - count(/\bend\b/g)
+}
+
+/**
+ * 计算 Lua 函数块的结束行（1-based，含 `end`）。
+ * @param {string[]} codeLines - 已去注释的代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行。
+ */
+function luaBlockEnd(codeLines, startIdx) {
+  let depth = luaBlockDelta(codeLines[startIdx])
+  if (depth <= 0) return startIdx + 1
+  for (let i = startIdx + 1; i < codeLines.length; i++) {
+    depth += luaBlockDelta(codeLines[i])
+    if (depth <= 0) return i + 1
+  }
+  return codeLines.length
+}
+
+/**
+ * 提取 Lua 符号：`function name` / `local function name`、`M.foo = function`
+ * 以及模块级变量（`local M = {}`）。`M.foo` / `M:foo` 记为 method 并带
+ * parent `M`；`local` 形式标记非导出；函数体内的局部变量不产出符号。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractLua(lines) {
+  const codeLines = luaCodeLines(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const functionRanges = []
+  for (let i = 0; i < codeLines.length; i++) {
+    while (functionRanges.length > 0 && functionRanges[functionRanges.length - 1].end <= i) {
+      functionRanges.pop()
+    }
+    const code = codeLines[i].trim()
+    if (code === '') continue
+
+    const fm = /^(local\s+)?function\s+([A-Za-z_]\w*(?:[.:][A-Za-z_]\w*)*)\s*\(/.exec(code)
+    if (fm) {
+      const raw = fm[2].replace(/:/g, '.')
+      const dot = raw.lastIndexOf('.')
+      const parent = dot > 0 ? raw.slice(0, dot) : undefined
+      const end = luaBlockEnd(codeLines, i)
+      symbols.push({
+        name: dot > 0 ? raw.slice(dot + 1) : raw,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: end,
+        exported: !fm[1],
+        ...(parent ? { parent } : {}),
+      })
+      if (end > i + 1) functionRanges.push({ name: raw, end })
+      continue
+    }
+
+    const am = /^(local\s+)?([A-Za-z_]\w*(?:[.:][A-Za-z_]\w*)*)\s*=\s*function\b/.exec(code)
+    if (am) {
+      const raw = am[2].replace(/:/g, '.')
+      const dot = raw.lastIndexOf('.')
+      const parent = dot > 0 ? raw.slice(0, dot) : undefined
+      const end = luaBlockEnd(codeLines, i)
+      symbols.push({
+        name: dot > 0 ? raw.slice(dot + 1) : raw,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: end,
+        exported: !am[1],
+        ...(parent ? { parent } : {}),
+      })
+      if (end > i + 1) functionRanges.push({ name: raw, end })
+      continue
+    }
+
+    // 函数体内的局部量不登记，避免每个临时变量都成为符号
+    if (functionRanges.length > 0) continue
+    const vm = /^(local\s+)?([A-Za-z_]\w*)\s*=(?!=)/.exec(code)
+    if (vm) {
+      symbols.push({
+        name: vm[2], kind: 'variable', line: i + 1, endLine: i + 1, exported: !vm[1],
+      })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -1733,6 +1880,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'scala') return extractScala(lines)
   if (lang === 'dart') return extractDart(lines)
   if (lang === 'elixir') return extractElixir(lines)
+  if (lang === 'lua') return extractLua(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

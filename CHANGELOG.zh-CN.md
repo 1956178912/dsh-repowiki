@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.182.0] - 2026-11-28
+
+- **Lua 支持（第 17 种语言）**：`.lua` 提取模块表变量（`local M = {}`）、
+  `function name` / `local function name`、`M.foo` / `M:foo` 方法（归一为
+  `foo` 方法 + parent `M`）与 `M.foo = function` 赋值；块范围按
+  `function/if/for/while/do/repeat … end/until` 配平，并屏蔽 `--` 行注释、
+  `--[[ ]]` 块注释与 `[[ ]]` 长字符串。`require("my.mod")` /
+  `require 'mod'` 经每个 `lua/` 目录（Neovim 插件布局）与项目根解析到
+  `<mod>.lua` 或 `<mod>/init.lua`，外部模块不建边。Prompt 围栏与面板语言
+  筛选识别 `lua`。
+- **测试**：565 例在 LANG=en 与 LANG=zh 下全通过；新增用例覆盖嵌套
+  `if`/`for` 与长字符串屏蔽下的块范围、`M:method` 归一、注释掉的
+  require，以及索引端到端夹具（`lua/` 根、点分模块名、`init.lua`，
+  外部 `require("socket")` 不建边）；“不支持语言”夹具改用 Fortran。
+
 ## [0.181.0] - 2026-11-28
 
 - **清单文件有界并发读取**：配置清单（`package.json`、`tsconfig*`、

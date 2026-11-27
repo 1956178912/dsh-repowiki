@@ -5,6 +5,28 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.182.0] - 2026-11-28
+
+### Added
+
+- **Lua indexing (17th language)**: `.lua` files produce module-table
+  variables (`local M = {}`), `function name` / `local function name`,
+  `M.foo` / `M:foo` methods (normalized to a `foo` method with parent `M`) and
+  `M.foo = function` assignments, with `function/if/for/while/do/repeat …
+  end/until` block ranges that ignore `--` line comments, `--[[ ]]` block
+  comments and `[[ ]]` long strings. `require("my.mod")` / `require 'mod'`
+  resolve through every `lua/` directory (Neovim plugin layout) and the
+  project root to `<mod>.lua` or `<mod>/init.lua`; external modules stay
+  edge-free. Prompt fences and the panel language filter know `lua`.
+
+### Tests
+
+- 565 cases pass (LANG=en and LANG=zh); new coverage pins block ranges with
+  nested `if`/`for` and long-string shielding, `M:method` normalization,
+  commented-out requires, and an indexer fixture proving `lua/`-root,
+  dotted-name and `init.lua` resolution with external `require("socket")`
+  staying edge-free. The "unsupported language" fixtures moved to Fortran.
+
 ## [0.181.0] - 2026-11-28
 
 ### Performance

@@ -42,6 +42,7 @@
 | Scala | class / case class / trait / object / enum / def / given / extension 成员归属 | `import`（分组、`=>` 重命名、`._`/`.*` 通配、`as` 别名）经点分路径后缀匹配；多行参数与跨行声明头（`{`/`=`/`:`）范围正确 |
 | Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`package:<本仓库 pubspec 名>/x.dart` 解析到对应包的 `lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
 | Elixir | `defmodule`（嵌套记录完整 `Outer.Inner`）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`；私有形式标记非导出 | `alias` / `import` / `require` / `use` 经 `defmodule` 模块名映射到声明文件（含 `alias A.{B, C}` 与 `as:`）；外部模块不建边；根与 `apps/*/mix.exs` 的 `app: :name` / 依赖元组计入 mix 项目名（根清单）、依赖计数与技术栈（嵌套清单合并，来源可追溯）；`.exs`（测试/脚本/config）作为源码索引，`mix.exs` 仅作清单 |
+| Lua | `local M = {}` 模块表、`function` / `local function`、`M.foo` / `M:foo`（归一为 method + parent）、`M.foo = function` 赋值；`local` 形式非导出，函数体内局部变量不登记 | `require "a.b"` / `require([[a.b]])` 不支持（仅引号形式）→ 点分名换算路径，经每个 `lua/` 根与项目根匹配 `a/b.lua` / `a/b/init.lua`；外部模块不建边 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -68,7 +69,7 @@ Hatch 的 `packages`（取其父目录）也会并入导入根；带点的模块
 `require_paths` 或运行时 `$LOAD_PATH` 修改。Dart 为轻量行级解析：不解析
 跨行声明头、泛型约束与条件导入；`part of` 不建边（`part` 指令已建），
 `package:` 只解析仓库内 pubspec 声明的包（不读 `.dart_tool/package_config.json`），`dart:` 与外部包不建边；getter/setter 归为方法，`_` 前缀按
-Dart 约定标记私有。Elixir 为轻量行级解析：块范围按 `do`/`fn`/`end`
+Dart 约定标记私有。Lua 为轻量行级解析：块范围按 `function/if/for/while/do/repeat … end/until` 配平，短字符串内的 `--` 与嵌套长括号 `--[==[` 不识别；`require` 只识别引号形式，`[[...]]` 长字符串、动态模块名与外部模块不建边。Elixir 为轻量行级解析：块范围按 `do`/`fn`/`end`
 配平，heredoc/字符串中的关键字可能影响 `endLine`（不影响符号名）；
 模块名以 `defmodule` 声明为准（嵌套记录完整名），`alias __MODULE__.X`、
 `unquote(...)` 等动态模块名不解析；`defimpl`/`defprotocol` 体不产出

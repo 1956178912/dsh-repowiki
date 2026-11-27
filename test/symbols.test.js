@@ -574,7 +574,7 @@ test('Scala 3：缩进语法（无花括号）的类型体与 def 归属', () =>
 
 test('边界：空字符串与不支持的语言返回空数组', () => {
   assert.deepEqual(extractSymbols('', 'typescript'), [])
-  assert.deepEqual(extractSymbols('x = 1', 'lua'), [])
+  assert.deepEqual(extractSymbols('x = 1', 'fortran'), [])
 })
 
 test('C/C++：类型、函数、方法、构造/析构、多行签名与 static 可见性', () => {
@@ -841,6 +841,55 @@ test('Elixir：模块/函数/宏/guard/delegate 与嵌套模块命名', () => {
 
   assert.equal(byName.get('run').parent, 'MyApp.Accounts.User.Inner')
   assert.ok(!byName.has('commented_out'), '注释行不产出符号')
+})
+
+test('Lua：函数/方法/局部函数/模块变量与注释/长字符串', () => {
+  const code = [
+    'local M = {}',
+    '',
+    '--[[ function commented() end ]]',
+    '-- function alsoCommented() end',
+    'local function helper(x)',
+    '  if x then',
+    '    return x',
+    '  end',
+    'end',
+    '',
+    'function M.setup(opts)',
+    '  for _, v in ipairs(opts) do',
+    '    helper(v)',
+    '  end',
+    'end',
+    '',
+    'function M:run()',
+    '  return M.util',
+    'end',
+    '',
+    'M.util = function()',
+    '  local sql = [[',
+    '  function fake() end',
+    '  ]]',
+    '  return sql',
+    'end',
+    '',
+    'return M',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'lua')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('M').kind, 'variable')
+  assert.equal(byName.get('M').exported, false, 'local 变量非导出')
+  assert.equal(byName.get('helper').endLine, 9)
+  assert.equal(byName.get('helper').exported, false, 'local function 非导出')
+  assert.equal(byName.get('setup').kind, 'method')
+  assert.equal(byName.get('setup').parent, 'M')
+  assert.equal(byName.get('setup').endLine, 15, 'for…do 不重复计块')
+  assert.equal(byName.get('run').kind, 'method')
+  assert.equal(byName.get('run').parent, 'M', 'M:run 归一为 M.run')
+  assert.equal(byName.get('util').parent, 'M')
+  assert.equal(byName.get('util').endLine, 26, '长字符串内的 end/function 被屏蔽')
+  assert.ok(!byName.has('commented') && !byName.has('alsoCommented'), '注释不产出符号')
+  assert.ok(!byName.has('fake'), '长字符串不产出符号')
 })
 
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
