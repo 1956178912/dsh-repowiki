@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.152.0] - 2026-11-27
+
+- **状态路径非法计数**：`repowiki-status` 新增 `wiki.invalid`/
+  `wiki.invalidPages`，报告路径越出 `wiki/<locale>/`、含 `..`/绝对路径、
+  非 `.md` 或与实际文件位置不符的清单页。与门禁的路径校验同口径，但不读
+  正文，保持诊断轻量。
+- **测试**：516 例在 LANG=en 与 LANG=zh 下全通过；新增把清单路径改为
+  `../secret.md` 后断言计数、slug 列表与文本的 status 用例。
+
 ## [0.151.0] - 2026-11-27
 
 - **门禁有界并发读取**：`verify:wiki` 通过 `mapLimit` 以 8 路并发读取

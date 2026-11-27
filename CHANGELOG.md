@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.152.0] - 2026-11-27
+
+### Added
+
+- **Status invalid-path count**: `repowiki-status` now reports
+  `wiki.invalid`/`wiki.invalidPages` for manifest pages whose path escapes
+  `wiki/<locale>/`, contains `..`/is absolute, is not `.md`, or does not
+  match the file on disk. This mirrors the gate's path checks without reading
+  page bodies, so the diagnostic stays cheap.
+
+### Tests
+
+- 516 cases pass (LANG=en and LANG=zh); a status case rewrites a manifest
+  path to `../secret.md` and asserts the count, slug list and text.
+
 ## [0.151.0] - 2026-11-27
 
 ### Changed

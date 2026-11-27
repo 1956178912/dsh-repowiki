@@ -250,11 +250,13 @@ export function repowikiStatusTool(ctx) {
               failedPages: { type: 'array', items: { type: 'string' } },
               missing: { type: 'integer', description: 'Manifest pages whose file is missing on disk.' },
               missingPages: { type: 'array', items: { type: 'string' } },
+              invalid: { type: 'integer', description: 'Manifest pages whose path is invalid or does not match the file location.' },
+              invalidPages: { type: 'array', items: { type: 'string' } },
               orphaned: { type: 'integer' },
             },
             required: [
               'count', 'manifest', 'stale', 'failed', 'failedPages',
-              'missing', 'missingPages', 'orphaned',
+              'missing', 'missingPages', 'invalid', 'invalidPages', 'orphaned',
             ],
           },
           brokenCitations: {
@@ -630,7 +632,7 @@ export function repowikiStatusTool(ctx) {
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
           `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
-          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, orphaned ${value.wiki.orphaned}`,
+          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
             ? [`Broken citations: ${value.brokenCitations.total === 0
               ? '(none)'
@@ -761,6 +763,21 @@ export function repowikiStatusTool(ctx) {
       const missingWikiPages = manifest
         ? [...manifestSlugs].filter(slug => !diskSlugs.has(slug))
         : []
+      // 清单路径非法或与实际文件位置不符：与 verify:wiki 的结构校验同口径，
+      // 但 status 不探测正文链接，保持只读诊断的轻量。
+      const diskPathBySlug = new Map(wikiPages.map(page => [page.slug, page.path]))
+      const invalidWikiPages = []
+      for (const page of manifest?.pages ?? []) {
+        const slug = typeof page?.slug === 'string' ? page.slug : ''
+        const rel = typeof page?.path === 'string' ? page.path.replace(/\\/g, '/') : ''
+        if (!slug || !rel) continue
+        if (rel.startsWith('/') || rel.split('/').includes('..')
+          || !rel.startsWith(`wiki/${locale}/`) || !rel.endsWith('.md')) {
+          invalidWikiPages.push(slug)
+          continue
+        }
+        if (diskPathBySlug.has(slug) && diskPathBySlug.get(slug) !== rel) invalidWikiPages.push(slug)
+      }
       // 上次生成失败页：清单已更新输入指纹，但部分页面没写成功；
       // 只在清单里持久化，不在本次 status 里重新推断。
       const wikiFailed = manifest && Number.isInteger(manifest.failedTotal)
@@ -965,6 +982,8 @@ export function repowikiStatusTool(ctx) {
           failedPages: wikiFailedPages,
           missing: missingWikiPages.length,
           missingPages: missingWikiPages.slice(0, 10),
+          invalid: invalidWikiPages.length,
+          invalidPages: invalidWikiPages.slice(0, 10),
           orphaned: wikiOrphaned,
         },
         ...(brokenCitations ? { brokenCitations } : {}),
