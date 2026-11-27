@@ -341,6 +341,7 @@ const LANGUAGE_LABELS = {
   typescript: 'TypeScript',
   vue: 'Vue',
   svelte: 'Svelte',
+  astro: 'Astro',
   python: 'Python',
   go: 'Go',
   rust: 'Rust',

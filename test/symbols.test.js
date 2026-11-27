@@ -718,6 +718,41 @@ test('Scala：多行参数子句/继承/表达式体获得正确范围与归属'
   assert.equal(top?.endLine, 17, '顶层多行参数的单行表达式体')
 })
 
+test('Astro：frontmatter 与 script 块符号、行号对齐', () => {
+  const code = [
+    '---',
+    "import Layout from '../layouts/Base.astro'",
+    'export interface Props { title: string }',
+    'export const prerender = true',
+    'const greeting = "hi"',
+    'function formatName(name: string) { return name }',
+    '---',
+    '<Layout title={greeting}>',
+    '  <div>{formatName("x")}</div>',
+    '</Layout>',
+    '',
+    '<script>',
+    'function clientOnly() { return 1 }',
+    '</script>',
+    '',
+    '<style>',
+    '.a { color: red }',
+    '</style>',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'astro')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Props')?.line, 3, 'frontmatter interface 计入')
+  assert.equal(byName.get('prerender')?.line, 4, '导出常量计入')
+  assert.equal(byName.get('formatName')?.line, 6)
+  assert.ok(!byName.has('greeting'), '未导出常量不登记（与 JS/TS 约定一致）')
+  assert.equal(byName.get('clientOnly')?.line, 13, 'script 块保留原始行号')
+  assert.ok(!byName.has('div'), '模板内容不产生符号')
+  // frontmatter 未闭合时保守延伸到文件尾，不把模板当脚本
+  const unclosed = extractSymbols('---\nexport const a = 1\n<div />\n', 'astro')
+  assert.deepEqual(unclosed.map(s => [s.name, s.line]), [['a', 2]])
+})
+
 test('Vue SFC：只提取 script 块内符号，行号保持源文件位置', () => {
   const code = [
     '<template>',

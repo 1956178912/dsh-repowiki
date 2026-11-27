@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.276.0] - 2026-11-28
+
+### Added
+
+- **Astro support** (44th symbol language): `.astro` components are indexed
+  through their script regions — the leading `--- … ---` frontmatter plus
+  `<script>` blocks — with source-aligned line numbers. Frontmatter
+  `interface`/`type`/`class`/`function`/exported-`const` declarations become
+  symbols, and relative imports resolve to local files/`.astro` components;
+  template markup, comments and styles produce neither symbols nor edges
+  (unclosed frontmatter is treated as extending to end of file, conservatively).
+- `package.json` `astro` dependencies map to the Astro technology, and the
+  panel shows an `Astro` language label.
+
+### Tests
+
+- 838 cases pass (LANG=en); new symbol/import/index assertions for Astro
+  frontmatter and script blocks.
+
 ## [0.275.0] - 2026-11-28
 
 ### Added

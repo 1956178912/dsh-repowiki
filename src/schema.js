@@ -185,6 +185,7 @@ export const EXTENSION_LANGS = {
   cts: 'typescript',
   vue: 'vue',
   svelte: 'svelte',
+  astro: 'astro',
   py: 'python',
   pyi: 'python',
   go: 'go',

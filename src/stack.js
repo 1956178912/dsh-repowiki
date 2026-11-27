@@ -19,6 +19,7 @@
 const NPM_TECH = {
   react: 'React', 'react-dom': 'React', vue: 'Vue', 'nuxt': 'Nuxt', next: 'Next.js',
   'next.js': 'Next.js', '@angular/core': 'Angular', svelte: 'Svelte', '@sveltejs/kit': 'SvelteKit',
+  astro: 'Astro',
   'solid-js': 'Solid', preact: 'Preact', '@vue/server-renderer': 'Vue',
   express: 'Express', fastify: 'Fastify', koa: 'Koa', '@nestjs/core': 'NestJS', 'hapi': 'hapi',
   '@hapi/hapi': 'hapi', polka: 'Polka',

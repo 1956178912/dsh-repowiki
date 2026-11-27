@@ -11,7 +11,7 @@
  * 直接做单元测试。
  */
 
-import { scriptBlockText } from './sfc.js'
+import { astroBlockText, scriptBlockText } from './sfc.js'
 
 /**
  * 单个提取出的符号。
@@ -6423,6 +6423,7 @@ function extractMatlab(lines) {
 export function extractSymbols(code, lang) {
   if (typeof code !== 'string' || code.length === 0) return []
   if (lang === 'vue' || lang === 'svelte') return extractJsLike(toLines(scriptBlockText(code)))
+  if (lang === 'astro') return extractJsLike(toLines(astroBlockText(code)))
   const lines = toLines(code)
   if (lang === 'python') return extractPython(lines)
   if (lang === 'javascript' || lang === 'typescript') return extractJsLike(lines)

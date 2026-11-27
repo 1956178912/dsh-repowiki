@@ -1101,6 +1101,35 @@ test('Vue SFC：脚本块符号与相对导入进入索引，行号对齐', asyn
   assert.deepEqual(doc.stats.languages, { typescript: 1, vue: 1 })
 })
 
+test('Astro：frontmatter 符号与相对导入进入索引，行号对齐', async () => {
+  const dir = makeProject({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { astro: '^4' } }),
+    'src/layouts/Base.astro': '---\nconst title = "demo"\n---\n<slot />\n',
+    'src/lib/format.ts': 'export function format() { return 1 }\n',
+    'src/pages/index.astro': [
+      '---',
+      "import Layout from '../layouts/Base.astro'",
+      "import { format } from '../lib/format'",
+      'export const prerender = true',
+      '---',
+      '<Layout>',
+      '  <p>{format()}</p>',
+      '</Layout>',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const page = doc.files.find(f => f.path === 'src/pages/index.astro')
+
+  assert.equal(page?.lang, 'astro')
+  assert.deepEqual(page?.symbols.map(s => [s.name, s.line]), [['prerender', 4]])
+  const layoutEdge = doc.edges.find(e => e.from === 'src/pages/index.astro' && e.to === 'src/layouts/Base.astro')
+  assert.equal(layoutEdge?.line, 2, 'frontmatter 导入行号对齐源文件')
+  assert.ok(doc.edges.some(e => e.from === 'src/pages/index.astro' && e.to === 'src/lib/format.ts'),
+    '具名导入解析为本地边')
+  assert.equal(doc.stats.languages.astro, 2)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Astro' && t.ecosystem === 'npm'))
+})
+
 test('Svelte：脚本块符号与相对导入进入索引', async () => {
   const dir = makeProject({
     'Counter.svelte': [

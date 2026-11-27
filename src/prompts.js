@@ -151,6 +151,7 @@ export function fenceLang(lang) {
     case 'typescript': return 'typescript'
     case 'vue': return 'vue'
     case 'svelte': return 'svelte'
+    case 'astro': return 'astro'
     case 'python': return 'python'
     case 'go': return 'go'
     case 'rust': return 'rust'

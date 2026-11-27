@@ -473,6 +473,31 @@ test('边界：空字符串与不支持语言', () => {
   assert.deepEqual(extractImports('puts 1', 'lua'), [])
 })
 
+test('Astro：frontmatter/script 内的 import 提取，模板伪引用忽略', () => {
+  const code = [
+    '---',
+    "import Layout from '../layouts/Base.astro'",
+    "import { format } from '../lib/format'",
+    'const title = format("x")',
+    '---',
+    '<Layout>',
+    "  <!-- import ghost from './ghost' -->",
+    "  <p>{title}</p>",
+    '</Layout>',
+    '',
+    '<script>',
+    "import { client } from '../lib/client'",
+    '</script>',
+  ].join('\n')
+  const imports = extractImports(code, 'astro')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['../layouts/Base.astro', 2, true],
+    ['../lib/format', 3, true],
+    ['../lib/client', 12, true],
+  ])
+  assert.ok(!imports.some(i => i.specifier === './ghost'), '模板/注释不提取')
+})
+
 test('Vue SFC：只提取 script 块内的 import，行号与源文件一致', () => {
   const code = [
     '<template>',

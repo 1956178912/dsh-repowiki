@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.276.0] - 2026-11-28
+
+- **Astro 支持**（第 44 种符号语言）：`.astro` 组件按脚本区索引——顶部
+  `--- … ---` frontmatter 与 `<script>` 块，行号与源文件对齐；frontmatter
+  中的 `interface`/`type`/`class`/`function`/导出 `const` 登记为符号，
+  相对导入解析到本地文件/`.astro` 组件；模板、注释与样式不产生符号或
+  依赖边（未闭合 frontmatter 保守延伸到文件尾）。
+- `package.json` 的 `astro` 依赖映射为 Astro 技术，面板显示 `Astro`
+  语言标签。
+- **测试**：838 例通过（LANG=en）；新增 Astro frontmatter/script 的符号、
+  导入与索引断言。
+
 ## [0.275.0] - 2026-11-28
 
 - **Swift `@_exported import`**：聚合模块转发另一模块 API 时记为 `reexport`

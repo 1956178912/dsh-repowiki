@@ -7,7 +7,7 @@
  * 索引期用 AST/导入表生成）。
  */
 
-import { scriptBlockText } from './sfc.js'
+import { astroBlockText, scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
@@ -1919,6 +1919,9 @@ export function extractImports(code, lang) {
   if (typeof code !== 'string' || code.length === 0) return []
   if (lang === 'vue' || lang === 'svelte') {
     return extractJsImports(scriptBlockText(code).replace(/\r\n?/g, '\n').split('\n'))
+  }
+  if (lang === 'astro') {
+    return extractJsImports(astroBlockText(code).replace(/\r\n?/g, '\n').split('\n'))
   }
   const lines = code.replace(/\r\n?/g, '\n').split('\n')
   if (lang === 'python') return extractPythonImports(lines)
