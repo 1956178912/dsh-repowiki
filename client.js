@@ -154,6 +154,10 @@ const DICTS = {
     wikiCoverageHint: '{n} 处引用没有内容指纹（{reasons}），无法做漂移检查',
     wikiCoverageSummary: '引用指纹：{tracked}/{total} 已记录 · {untracked} 未覆盖（{reasons}）',
     wikiCoverageLegacy: '引用指纹：清单无指纹记录（{total} 处引用）',
+    wikiFailedSummary: '上次生成失败 {n} 页',
+    wikiFailedHint: '失败页：{pages}',
+    wikiMissingSummary: '清单中 {n} 页在磁盘缺失',
+    wikiMissingHint: '缺失页：{pages}',
     wikiOnlyUntracked: '仅看未覆盖（{n}）',
     wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
@@ -268,6 +272,10 @@ const DICTS = {
     wikiCoverageHint: '{n} citation(s) have no content digest ({reasons}); drift checks cannot cover them',
     wikiCoverageSummary: 'Citation digests: {tracked}/{total} tracked · {untracked} untracked ({reasons})',
     wikiCoverageLegacy: 'Citation digests: manifest has no digests ({total} citations)',
+    wikiFailedSummary: '{n} page(s) failed in the last generation',
+    wikiFailedHint: 'Failed pages: {pages}',
+    wikiMissingSummary: '{n} manifest page(s) missing from disk',
+    wikiMissingHint: 'Missing pages: {pages}',
     wikiOnlyUntracked: 'Only untracked ({n})',
     wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
@@ -1385,6 +1393,32 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 汇总清单级诊断：上次生成失败页与磁盘缺失页（面板不读源码）。
+     * @param {object[]} entries - 已加载的页面（file 为相对资产根路径）。
+     * @param {object|null} manifest - wiki/<locale>/_index.json。
+     * @returns {{failedTotal:number, failedPages:string[], missingTotal:number,
+     *   missingPages:string[]}} 失败页总数/示例（≤5）与缺失页总数/示例（≤5）。
+     */
+    function wikiDiagnostics(entries, manifest) {
+      const failedPages = (Array.isArray(manifest?.failed) ? manifest.failed : [])
+        .map(item => (typeof item?.slug === 'string' ? item.slug : ''))
+        .filter(Boolean)
+      const failedTotal = Number.isInteger(manifest?.failedTotal)
+        ? manifest.failedTotal
+        : failedPages.length
+      const present = new Set(entries.map(entry => entry.file))
+      const missingPages = (Array.isArray(manifest?.pages) ? manifest.pages : [])
+        .map(page => (typeof page?.path === 'string' ? page.path : ''))
+        .filter(path => path && !present.has(path))
+      return {
+        failedTotal,
+        failedPages: failedPages.slice(0, 5),
+        missingTotal: missingPages.length,
+        missingPages: missingPages.slice(0, 5),
+      }
+    }
+
+    /**
      * 装载某 locale 的会话记忆条目（Phase 4 面板视图：第三页签）。
      * @param {object} wf - remote.workspaceFiles 命名空间。
      * @param {string} sessionId - 授权会话 id。
@@ -1450,6 +1484,7 @@ window.__ModuleLoader__.load({
       const [cards, setCards] = useState([])
       const [docs, setDocs] = useState(0)
       const [wikis, setWikis] = useState([])
+      const [wikiMeta, setWikiMeta] = useState(null)
       const [memories, setMemories] = useState([])
       const [lastExtract, setLastExtract] = useState(null)
       const [tab, setTab] = useState('cards')
@@ -1549,6 +1584,7 @@ window.__ModuleLoader__.load({
           setCards([])
           setDocs(0)
           setWikis([])
+          setWikiMeta(null)
           setMemories([])
           setLastExtract(null)
           return
@@ -1576,6 +1612,7 @@ window.__ModuleLoader__.load({
             setCards([])
             setDocs(0)
             setWikis([])
+            setWikiMeta(null)
             setMemories([])
             setLastExtract(null)
             return
@@ -1592,6 +1629,7 @@ window.__ModuleLoader__.load({
           setCards(loaded)
           setDocs(wikiPages.length)
           setWikis(wikiPages)
+          setWikiMeta(wikiDiagnostics(wikiResult.entries, manifest))
           setLastExtract(knowledgeManifest?.lastRun && typeof knowledgeManifest.lastRun === 'object'
             ? knowledgeManifest.lastRun
             : null)
@@ -1612,6 +1650,7 @@ window.__ModuleLoader__.load({
           setCards([])
           setDocs(0)
           setWikis([])
+          setWikiMeta(null)
           setMemories([])
           setLastExtract(null)
           return
@@ -2337,6 +2376,7 @@ window.__ModuleLoader__.load({
           // Wiki 页签：页面列表与单页原文浏览（切片 3）
           tab === 'wiki' && h(WikiPanel, {
             entries: wikis,
+            meta: wikiMeta,
             selected: wikiSelected,
             query: wikiQuery,
             targetSection: wikiTargetSection,
@@ -2857,7 +2897,7 @@ window.__ModuleLoader__.load({
     }
 
     /** Wiki 面板：页面列表与单页原文浏览；打开页面时聚焦返回按钮。 */
-    function WikiPanel({ entries, selected, query, targetSection = '', onQuery, onSelect, onClose, t, tt }) {
+    function WikiPanel({ entries, meta, selected, query, targetSection = '', onQuery, onSelect, onClose, t, tt }) {
       const [onlyUntracked, setOnlyUntracked] = useState(false)
       const backRef = useRef(null)
       useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
@@ -2888,8 +2928,28 @@ window.__ModuleLoader__.load({
           h('div', { style: { maxHeight: 560, overflow: 'auto' } }, ...renderMarkdown(selected.text)),
         )
       }
+      // 清单级诊断：上次生成失败页与磁盘缺失页（数据只来自清单与目录列表）
+      const diagnostics = h('div', null,
+        meta && meta.failedTotal > 0 && h('p', {
+          role: 'status',
+          title: meta.failedPages.length > 0
+            ? tt('wikiFailedHint', { pages: meta.failedPages.join(', ') })
+            : undefined,
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, tt('wikiFailedSummary', { n: meta.failedTotal })),
+        meta && meta.missingTotal > 0 && h('p', {
+          role: 'status',
+          title: meta.missingPages.length > 0
+            ? tt('wikiMissingHint', { pages: meta.missingPages.join(', ') })
+            : undefined,
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+        }, tt('wikiMissingSummary', { n: meta.missingTotal })),
+      )
       if (entries.length === 0) {
-        return h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('wikiEmpty'))
+        return h('div', null,
+          diagnostics,
+          h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('wikiEmpty')),
+        )
       }
       const q = query.trim().toLowerCase()
       const untrackedPages = entries.filter(entry => (entry.citationCoverage?.untracked ?? 0) > 0)
@@ -2962,6 +3022,7 @@ window.__ModuleLoader__.load({
             },
           }, tt('wikiOnlyUntracked', { n: untrackedPages.length })),
         ),
+        diagnostics,
         // 引用完整性摘要：行号越界（索引有行数时可判）与未检查计数
         (outOfRange > 0 || unchecked > 0) && h('p', {
           role: 'status',

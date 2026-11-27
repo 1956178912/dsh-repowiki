@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.144.0] - 2026-11-27
+
+### Added
+
+- **Panel wiki diagnostics**: the Wiki tab now surfaces manifest-level
+  problems without leaving the GUI: pages recorded as failed by the last
+  generation (`failedTotal`, with up to five slugs in the tooltip) and
+  manifest pages missing from disk. Both notices use `role=status`, appear
+  above the citation summaries, and are also shown when the page list is
+  empty (the state where they matter most). Data comes only from the manifest
+  and the already-loaded directory listing — no source reads.
+
+### Tests
+
+- 507 cases pass (LANG=en and LANG=zh); a new panel case mounts a manifest
+  with a failed page and a missing page and asserts both notices and their
+  accessible titles.
+
 ## [0.143.0] - 2026-11-27
 
 ### Added

@@ -1048,6 +1048,40 @@ test('Wiki 页签：仅看未覆盖筛选', async () => {
   assert.ok(texts.some(text => text.includes('核心模块')), '取消筛选后恢复全部页面')
 })
 
+test('Wiki 页签：生成失败页与缺失页提示', async () => {
+  const manifest = JSON.stringify({
+    schemaVersion: 3,
+    failed: [{ slug: 'broken', reason: 'write failed' }],
+    failedTotal: 2,
+    pages: [
+      {
+        slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
+        sources: [], sections: [],
+      },
+      {
+        slug: 'missing', path: 'wiki/zh/missing.md', title: '缺失页', order: 1,
+        sources: [], sections: [],
+      },
+    ],
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/_index.json': manifest })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('wikiFailedSummary'), '展示上次生成失败页提示')
+  assert.ok(texts.includes('wikiMissingSummary'), '展示清单缺页提示')
+  const failed = findNode(hooks.root, n => n.type === 'p'
+    && n.props.role === 'status' && n.props.title === 'wikiFailedHint')
+  assert.ok(failed, '失败页提示带可访问的明细 title')
+  const missing = findNode(hooks.root, n => n.type === 'p'
+    && n.props.role === 'status' && n.props.title === 'wikiMissingHint')
+  assert.ok(missing, '缺页提示带可访问的明细 title')
+})
+
 test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
   const legacy = JSON.stringify({
     schemaVersion: 2,
