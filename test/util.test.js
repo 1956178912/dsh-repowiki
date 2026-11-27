@@ -6,7 +6,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cwdOf, toAbsPath, encodeFrontmatter, parseFrontmatter } from '../src/util.js'
+import { cwdOf, toAbsPath, encodeFrontmatter, parseFrontmatter, countSourceLines } from '../src/util.js'
 
 test('cwdOf：ctx.workingDirectory.get() 可用时返回其值', () => {
   const ctx = { workingDirectory: { get: () => '/some/session/cwd' } }
@@ -59,4 +59,14 @@ test('parseFrontmatter：无 frontmatter / 非 JSON / 标量 meta 返回 null', 
   assert.equal(parseFrontmatter('---\nnot json\n---\nbody'), null)
   assert.equal(parseFrontmatter('---\n"scalar"\n---\nbody'), null)
   assert.equal(parseFrontmatter('---\nnull\n---\nbody'), null)
+})
+
+test('countSourceLines：空文本/换行结尾/无结尾换行', () => {
+  assert.equal(countSourceLines(''), 0)
+  assert.equal(countSourceLines('a'), 1)
+  assert.equal(countSourceLines('a\n'), 1)
+  assert.equal(countSourceLines('a\nb'), 2)
+  assert.equal(countSourceLines('a\nb\n'), 2)
+  assert.equal(countSourceLines('\n'), 1)
+  assert.equal(countSourceLines(null), 0)
 })

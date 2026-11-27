@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.126.0] - 2026-11-27
+
+### Added
+
+- **Citation line-range validation**: index schema v6 records `files[].lines`
+  (source line count, computed from the text already read during indexing)
+  and the reader stays compatible with v2–v5. `repowiki-status` now parses
+  `#Lx-Ly` / `#Lx` / `#Lx-y` citations and checks them against the indexed
+  line count: zero/negative starts, reversed ranges and ranges past EOF are
+  reported in `citationRangeIssues` with bounded page details, while ranged
+  citations to existing files without a known line count (non-indexed files
+  or an older index) are counted as `unchecked` instead of guessed. The text
+  report adds a `Citation ranges` line and a warning; no manifest means no
+  range claim.
+- **Shared line counter**: `countSourceLines` in `src/util.js` defines the
+  line semantics used by the index (empty file = 0, trailing newline does not
+  add a line).
+
+### Tests
+
+- 471 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.125.0] - 2026-11-27
 
 ### Added

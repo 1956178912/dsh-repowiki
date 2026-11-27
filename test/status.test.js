@@ -67,7 +67,7 @@ test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Gi
   const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.equal(out.index.exists, true)
   assert.equal(out.index.compatible, true)
-  assert.equal(out.index.schemaVersion, 5)
+  assert.equal(out.index.schemaVersion, 6)
   assert.equal(out.index.files, 1)
   assert.equal(out.index.modules, 1)
   assert.deepEqual(out.index.languages, { typescript: 1 })
@@ -89,7 +89,7 @@ test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Gi
   assert.match(out.warnings[0], /do not exist/)
 
   const rendered = repowikiStatusTool(ctx).output.render({}, out)
-  assert.match(rendered[0].text, /Index: v5 compatible/)
+  assert.match(rendered[0].text, /Index: v6 compatible/)
   assert.match(rendered[0].text, /Wiki: 1 page\(s\), manifest present/)
   assert.match(rendered[0].text, /Broken citations: 1 path\(s\) in 1 page\(s\)/)
   assert.match(rendered[0].text, /Git: main@ccccccc/)
@@ -384,4 +384,35 @@ test('repowiki-status：模块耦合与不稳定性（跨模块 import）', asyn
   assert.equal(out.moduleCoupling.truncated, false)
   const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
   assert.match(rendered, /Module instability: app \(1\.00, Ca 0\/Ce 1\); pkg \(0\.00, Ca 1\/Ce 0\)/)
+})
+
+test('repowiki-status：Wiki 引用行号越界与未检查计数', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-range-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki/wiki/zh'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/a.ts'), 'export const a = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'README.md'), '# readme\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'), JSON.stringify({
+    schemaVersion: 2,
+    pages: [{
+      slug: 'overview',
+      title: '总览',
+      sources: ['src/a.ts#L1-L1', 'src/a.ts#L1-L99', 'README.md#L1-L5'],
+    }],
+  }))
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.citationRangeIssues.total, 1)
+  assert.equal(out.citationRangeIssues.unchecked, 1, 'README 存在但未索引，行数未知')
+  assert.deepEqual(out.citationRangeIssues.pages, [{
+    slug: 'overview',
+    title: '总览',
+    issues: [{ path: 'src/a.ts', start: 1, end: 99, lines: 1 }],
+  }])
+  assert.equal(out.citationRangeIssues.truncated, false)
+  assert.ok(out.warnings.some(warning => warning.includes('line range')))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Citation ranges: 1 out-of-range — e\.g\. 总览: src\/a\.ts#L1-L99 \(file has 1 lines\); 1 unchecked/)
 })

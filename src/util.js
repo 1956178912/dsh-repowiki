@@ -23,6 +23,22 @@ export function digestText(text, chars = DIGEST_CHARS) {
 }
 
 /**
+ * 计算源码行数（用于引用行号越界校验）。
+ * 空文本为 0 行；以换行结尾的文件不额外计入末尾空行。
+ * @param {string} text - 文件文本。
+ * @returns {number} 行数。
+ */
+export function countSourceLines(text) {
+  const value = String(text ?? '')
+  if (value === '') return 0
+  let breaks = 0
+  for (const char of value) {
+    if (char === '\n') breaks++
+  }
+  return breaks + (value.endsWith('\n') ? 0 : 1)
+}
+
+/**
  * 取当前工作目录（ctx.workingDirectory 为可选服务，缺失时退回 process.cwd）。
  * @param {PluginContext} ctx - 插件上下文。
  * @returns {string} 当前目录绝对路径。

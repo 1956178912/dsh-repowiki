@@ -33,11 +33,13 @@ export const INDEX_REL_PATH = `${ASSET_DIR}/index.json`
  *  v3：正式纳入 files[].module 与 modules[]（模块树），读取侧兼容 v2。
  *  v4：新增 git 元数据与 stats.languages（语言分布），读取侧兼容 v2/v3。
  *  v5：依赖边新增 line（import/use/require 所在行），支撑行号级反向引用；
- *      读取侧兼容 v2–v4（旧边无 line，按文件级引用降级）。 */
-export const INDEX_SCHEMA_VERSION = 5
+ *      读取侧兼容 v2–v4（旧边无 line，按文件级引用降级）。
+ *  v6：文件条目新增 lines（源码行数），用于 Wiki 引用行号越界校验；
+ *      读取侧兼容 v2–v5（旧条目无 lines，行号校验降级为未检查）。 */
+export const INDEX_SCHEMA_VERSION = 6
 
-/** 读取侧仍可兼容的旧索引版本（v2–v4 → 内存补齐派生字段，下次索引写 v5）。 */
-export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5])
+/** 读取侧仍可兼容的旧索引版本（v2–v5 → 内存补齐派生字段，下次索引写 v6）。 */
+export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
 
 /** 符号/依赖提取规则版本。解析器修复或语义变化时 +1；与 schemaVersion
  *  独立，用于在源码 digest 未变时也使旧的 files[].symbols/imports 缓存失效。

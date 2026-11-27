@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.125.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.126.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.125.0）；测试 466/466（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.15%、分支 86.43%、函数 95.22%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.126.0）；测试 471/471（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.16%、分支 86.39%、函数 95.27%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -13,7 +13,7 @@
 | 资产目录 `<cwd>/.dsh-repowiki/` | ✅ | `src/schema.js` `ASSET_DIR`；全部读写经 `ctx.fs` |
 | `knowledge/{locale}/` 只生成当前 locale | ✅ | `getLocale(ctx)`（`src/spawn.js`）；工具 `locale` 参数可显式覆盖 |
 | `wiki/{locale}/` | ✅ | `WIKI_DIR`；`wikiPath` + `writeWiki`；模块页写入 `wiki/{locale}/modules/` |
-| `index.json` 符号表 + 依赖边 + 技术栈 | ✅ | `src/indexer.js`（`INDEX_SCHEMA_VERSION=5`、sha256-12 digest、增量复用 `stats.reused`、`.gitignore` 子集）、`src/stack.js`（技术栈扫描）、`src/symbols.js`（依赖边）、`src/modules.js`（模块树） |
+| `index.json` 符号表 + 依赖边 + 技术栈 | ✅ | `src/indexer.js`（`INDEX_SCHEMA_VERSION=6`、sha256-12 digest、增量复用 `stats.reused`、`.gitignore` 子集）、`src/stack.js`（技术栈扫描）、`src/symbols.js`（依赖边）、`src/modules.js`（模块树） |
 | `state.json`（待审/孤儿/manuallyEdited 标记） | ⚠️ | **未设 state.json**：`manuallyEdited` 直接写卡片 frontmatter（随 Git 共享、无需维护额外状态文件）；孤儿卡由 extract 的 `orphaned` 计数报告（不删除）。决策见 `docs/checkpoints/phase-3b.md` |
 | `wiki-plan.yaml` 项目级规划 | ✅ | `src/config.js` `readPlan`：`exclude`/`maxCardsPerRun`/复杂度阈值，缺文件降级默认值（§11.4 成本字段，YAML 解析为自写极简读取器，零依赖） |
 
@@ -65,11 +65,11 @@
 | 1 | 不声明官方包依赖；升级回归约定写进 README | ✅ | `package.json` dependencies 为空（零 npm 运行时依赖）；README"升级注意事项"小节 |
 | 2 | `engines.dsh` 仅作下界 | ✅ | `>=0.2.2-rc.5` |
 | 3 | seam 经 `inject` 声明、可选服务 soft-fail | ✅ | `inject:['fs','tools','subagents']`；`ctx.workingDirectory` 等可选服务用 `cwdOf` 降级（缺失/抛错→process.cwd） |
-| 4 | 资产数据版本化 + 读取校验降级 | ✅ | `INDEX_SCHEMA_VERSION=5`（兼容读取 v2–v4 并在内存补齐模块树/语言分布，ADR-0007）、`CARD_SCHEMA_VERSION`、`MEMORY_SCHEMA_VERSION`；`parseCard`/`parseMemoryText` 版本不符返回 null（v0.15.0 起统一为 `parseFrontmatter(text, version)`）；所有资产写入经 `writeTextVerified` 回读校验 |
+| 4 | 资产数据版本化 + 读取校验降级 | ✅ | `INDEX_SCHEMA_VERSION=6`（兼容读取 v2–v5 并在内存补齐模块树/语言分布，ADR-0007）、`CARD_SCHEMA_VERSION`、`MEMORY_SCHEMA_VERSION`；`parseCard`/`parseMemoryText` 版本不符返回 null（v0.15.0 起统一为 `parseFrontmatter(text, version)`）；所有资产写入经 `writeTextVerified` 回读校验 |
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（466/466，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（471/471，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性及行号越界、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -197,6 +197,7 @@
 | Wiki 引用完整性 | `findBrokenWikiCitations` 校验页面级/章节级 `sources`：先查索引，非索引用 fs 探测；绝对/上跳路径直接判缺失；探测超 200 时未验证引用按存在处理并告警；status 输出有界明细并渲染 | v0.123.0 |
 | 保守导出审计 | `src/unused-exports.js` 仅审计"有入边且全部入边具名"的文件；无入边/含无名导入的文件计入 skippedFiles；忽略 default；明细 10×10 有界、总数精确；status 输出并渲染，措辞为"无 import 证据" | v0.124.0 |
 | 模块耦合指标 | `src/coupling.js` 在跨模块 import 图上计算 Ca/Ce 与不稳定性 Ce/(Ca+Ce)，同模块/自引用/未知模块忽略，模块对去重；status 输出前 10 并渲染 `Module instability` 行 | v0.125.0 |
+| 引用行号越界 | 索引 schema v6 记录 `files[].lines`（空文件 0 行、结尾换行不加行）；`parseWikiSource` 解析 `#Lx-Ly`/`#Lx`/`#Lx-y`；`findCitationRangeIssues` 标记零起始/倒置/超出 EOF，行数未知计入 unchecked，status 有界输出并渲染 | v0.126.0 |
 | 多行 JS/TS 导入与解析缓存版本 | 跨行 import/export-from 保留起始行与完整具名符号；`parserVersion` 在解析规则升级时使旧 symbols/imports 缓存失效，保留正确增量统计，同版本后续恢复复用 | v0.117.0 |
 
 **剩余未覆盖项全部集中在浏览器侧**（无浏览器控制，见 `docs/checkpoints/phase-15-convergence.md`）。

@@ -46,6 +46,8 @@ test('端到端：JS/TS 项目产出符号、依赖边与技术栈', async () =>
 
   const app = doc.files.find(f => f.path === 'src/app.ts')
   assert.ok(app.symbols.some(s => s.name === 'start' && s.kind === 'function' && s.exported))
+  assert.equal(app.lines, 1, 'v6 记录源码行数')
+  assert.equal(doc.files.find(f => f.path === 'src/util.js').lines, 2)
 
   // 依赖边：src/index.ts → src/app.ts（.ts 后缀解析）
   const edge = doc.edges.find(e => e.from === 'src/index.ts')

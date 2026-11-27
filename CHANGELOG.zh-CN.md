@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.126.0] - 2026-11-27
+
+- **引用行号越界校验**：索引 schema v6 记录 `files[].lines`（源码行数，
+  由索引时已读取的文本直接计算），读取侧兼容 v2–v5。`repowiki-status`
+  解析 `#Lx-Ly` / `#Lx` / `#Lx-y` 引用并按索引行数校验：起始为 0/负数、
+  起止倒置、超出文件末尾都进入 `citationRangeIssues`（页面明细有界）；
+  对存在但行数未知的文件（未索引或旧索引）计入 `unchecked` 而不是猜测。
+  文本新增 `Citation ranges` 行与告警；无清单时不做行号断言。
+- **公共行数助手**：`src/util.js` 的 `countSourceLines` 统一行数语义
+  （空文件 0 行，结尾换行不额外加行）。
+- **测试**：471 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
 ## [0.125.0] - 2026-11-27
 
 - **模块耦合与不稳定性**：新增纯函数 `src/coupling.js`，按跨模块静态 import

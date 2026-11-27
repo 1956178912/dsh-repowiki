@@ -16,7 +16,7 @@ import { detectStack } from './stack.js'
 import { moduleOf, buildModules } from './modules.js'
 import { loadIgnoreRules, isIgnored } from './ignore.js'
 import { readGitInfo } from './git.js'
-import { digestText } from './util.js'
+import { digestText, countSourceLines } from './util.js'
 
 export { digestText }
 
@@ -1281,6 +1281,7 @@ async function indexOneFile(fs, entry, previousFiles, allowReuse) {
       // 字段名为历史约定：值是 readText 解码后的字符数（UTF-8 字节数约为
       // 其 1–3 倍），见 schema.js MAX_FILE_BYTES 注释
       sizeBytes: text.length,
+      lines: countSourceLines(text),
       digest,
       symbols,
       imports,

@@ -6,7 +6,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   normalizeWikiSource, buildWikiReferenceIndex, wikiReferencesFor,
-  findBrokenWikiCitations, MAX_WIKI_REFERENCE_ENTRIES,
+  findBrokenWikiCitations, findCitationRangeIssues, parseWikiSource,
+  MAX_WIKI_REFERENCE_ENTRIES,
 } from '../src/wiki-references.js'
 
 test('normalizeWikiSource：去空白并剥离行号片段', () => {
@@ -126,4 +127,59 @@ test('findBrokenWikiCitations：页面明细有界但总数不受展示截断影
   assert.equal(broken.references, 12)
   assert.equal(broken.pages.length, 10)
   assert.equal(broken.truncated, true)
+})
+
+test('parseWikiSource：路径与行号范围（L10/L10-L20/L10-20/非法片段）', () => {
+  assert.deepEqual(parseWikiSource('src/a.ts'), { path: 'src/a.ts' })
+  assert.deepEqual(parseWikiSource(' src/a.ts#L1-L10 '), { path: 'src/a.ts', start: 1, end: 10 })
+  assert.deepEqual(parseWikiSource('src/a.ts#L5'), { path: 'src/a.ts', start: 5, end: 5 })
+  assert.deepEqual(parseWikiSource('src/a.ts#L5-9'), { path: 'src/a.ts', start: 5, end: 9 })
+  assert.deepEqual(parseWikiSource('src/a.ts#L5-l9'), { path: 'src/a.ts', start: 5, end: 9 })
+  assert.deepEqual(parseWikiSource('src/a.ts#note'), { path: 'src/a.ts' })
+  assert.deepEqual(parseWikiSource('#L1-L2'), { path: '' })
+  assert.deepEqual(parseWikiSource(null), { path: '' })
+})
+
+test('findCitationRangeIssues：越界/反向/零起始与未检查计数', () => {
+  const manifest = {
+    pages: [{
+      slug: 'overview',
+      title: 'Overview',
+      sources: ['a.ts#L1-L5', 'a.ts#L8-L12', 'a.ts#L5-L3', 'a.ts#L0-L2', 'b.ts#L1-L2', 'missing.ts#L1'],
+      sections: [{ heading: 'Core', sources: ['a.ts#L10-L10'] }],
+    }],
+  }
+  const out = findCitationRangeIssues(
+    manifest,
+    new Map([['a.ts', 10]]),
+    new Set(['a.ts', 'b.ts']),
+  )
+  assert.equal(out.total, 3)
+  assert.equal(out.unchecked, 1)
+  assert.deepEqual(out.pages, [{
+    slug: 'overview',
+    title: 'Overview',
+    issues: [
+      { path: 'a.ts', start: 0, end: 2, lines: 10 },
+      { path: 'a.ts', start: 5, end: 3, lines: 10 },
+      { path: 'a.ts', start: 8, end: 12, lines: 10 },
+    ],
+  }])
+  assert.equal(out.truncated, false)
+  const plain = findCitationRangeIssues({ pages: [{ slug: 'p', title: 'P', sources: ['a.ts#L9-L9'] }] }, { 'a.ts': 5 })
+  assert.equal(plain.total, 1)
+  assert.equal(plain.unchecked, 0)
+})
+
+test('findCitationRangeIssues：页面明细有界但总数不受展示截断影响', () => {
+  const pages = Array.from({ length: 12 }, (_, index) => ({
+    slug: `p${index}`,
+    title: `P${index}`,
+    sources: ['a.ts#L9-L9'],
+  }))
+  const out = findCitationRangeIssues({ pages }, new Map([['a.ts', 5]]))
+  assert.equal(out.total, 12)
+  assert.equal(out.pages.length, 10)
+  assert.equal(out.truncated, true)
+  assert.deepEqual(findCitationRangeIssues(null), { total: 0, unchecked: 0, pages: [], truncated: false })
 })

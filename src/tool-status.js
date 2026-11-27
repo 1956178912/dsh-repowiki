@@ -20,7 +20,7 @@ import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
-import { findBrokenWikiCitations, normalizeWikiSource } from './wiki-references.js'
+import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource } from './wiki-references.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
@@ -60,6 +60,23 @@ function formatCycles(cycles) {
   }).join('; ')
 }
 
+/**
+ * 渲染行号越界摘要：示例页面 + 首个越界引用 + 未检查数量。
+ * @param {{total:number, unchecked:number, truncated:boolean,
+ *   pages:Array<{title:string, issues:Array<{path:string,start:number,end:number,lines:number}>}>}} info
+ *   越界统计。
+ * @returns {string} 单行文本。
+ */
+function formatCitationRanges(info) {
+  const example = info.pages[0]?.issues[0]
+  const body = info.total === 0
+    ? '(none)'
+    : `${info.total} out-of-range${example
+      ? ` — e.g. ${info.pages[0].title}: ${example.path}#L${example.start}-L${example.end} (file has ${example.lines} lines)`
+      : ''}${info.truncated ? ' (bounded)' : ''}`
+  return `${body}${info.unchecked > 0 ? `; ${info.unchecked} unchecked` : ''}`
+}
+
 /** 工具描述。 */
 const DESCRIPTION = [
   'Read-only health report for the .dsh-repowiki knowledge base: index presence and schema',
@@ -67,10 +84,10 @@ const DESCRIPTION = [
   'plan source, the current in-process write-lock queue, and architecture signals (top cross-module',
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
-  'against the index and the filesystem; export candidates without named-import evidence are',
-  'reported conservatively (files with any unnamed inbound edge are skipped); module Ca/Ce',
-  'coupling and instability are reported for cross-module imports. Use it to diagnose',
-  'why a panel or tool looks out of',
+  'against the index and the filesystem, including #Lx-Ly bounds when the index records line counts;',
+  'export candidates without named-import evidence are reported conservatively (files with any',
+  'unnamed inbound edge are skipped); module Ca/Ce coupling and instability are reported for',
+  'cross-module imports. Use it to diagnose why a panel or tool looks out of',
   'date before re-running index/extract/generate. No model calls, no writes.',
 ].join(' ')
 
@@ -200,6 +217,44 @@ export function repowikiStatusTool(ctx) {
               truncated: { type: 'boolean' },
             },
             required: ['total', 'references', 'pages', 'truncated'],
+          },
+          citationRangeIssues: {
+            type: 'object',
+            description: 'Wiki #Lx-Ly citations whose range is invalid or exceeds the indexed file line count. Present only when a manifest exists.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Out-of-range citation occurrences.' },
+              unchecked: { type: 'integer', description: 'Ranged citations whose file line count is unknown (non-indexed file or an older index).' },
+              pages: {
+                type: 'array',
+                description: 'Affected pages (up to 10) with up to 10 issues each.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    slug: { type: 'string' },
+                    title: { type: 'string' },
+                    issues: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          path: { type: 'string' },
+                          start: { type: 'integer' },
+                          end: { type: 'integer' },
+                          lines: { type: 'integer' },
+                        },
+                        required: ['path', 'start', 'end', 'lines'],
+                      },
+                    },
+                  },
+                  required: ['slug', 'title', 'issues'],
+                },
+              },
+              truncated: { type: 'boolean' },
+            },
+            required: ['total', 'unchecked', 'pages', 'truncated'],
           },
           coverage: {
             type: 'object',
@@ -419,6 +474,9 @@ export function repowikiStatusTool(ctx) {
               ? '(none)'
               : `${value.brokenCitations.total} path(s) in ${value.brokenCitations.pages.length} page(s)${value.brokenCitations.truncated ? ' (bounded)' : ''}${value.brokenCitations.pages.length > 0 ? ` — e.g. ${value.brokenCitations.pages[0].title}: ${value.brokenCitations.pages[0].sources.join(', ')}` : ''}`}`]
             : []),
+          ...(value.citationRangeIssues
+            ? [`Citation ranges: ${formatCitationRanges(value.citationRangeIssues)}`]
+            : []),
           ...(value.index.exists
             ? [`Docs coverage: ${value.coverage.documented}/${value.coverage.eligible} eligible file(s) (${value.coverage.percent}%)${value.coverage.stale ? `, ${value.coverage.stale} stale` : ''}${value.coverage.gaps.length > 0 ? `; largest gap: ${value.coverage.gaps[0].module} (${value.coverage.gaps[0].eligible - value.coverage.gaps[0].documented})` : ''}`]
             : []),
@@ -549,6 +607,7 @@ export function repowikiStatusTool(ctx) {
       // 非索引引用（README 等）用 fs 探测确认；超过探测上限时视为"未验证"，
       // 不冒充缺失。
       let brokenCitations = null
+      let citationRanges = null
       if (manifest) {
         const known = new Set((index?.files ?? []).map(file => file.path))
         const cited = new Set()
@@ -589,6 +648,19 @@ export function repowikiStatusTool(ctx) {
         brokenCitations = findBrokenWikiCitations(manifest, known)
         if (brokenCitations.total > 0) {
           warnings.push(`${brokenCitations.total} wiki citation path(s) do not exist; regenerate the wiki or fix the cited paths.`)
+        }
+        // 行号越界：只对已有行数的索引文件判定；非索引/旧索引计入 unchecked。
+        /** @type {Map<string, number>} */
+        const lineCounts = new Map()
+        for (const file of index?.files ?? []) {
+          if (file && typeof file.path === 'string'
+            && Number.isInteger(file.lines) && file.lines >= 0) {
+            lineCounts.set(file.path, file.lines)
+          }
+        }
+        citationRanges = findCitationRangeIssues(manifest, lineCounts, known)
+        if (citationRanges.total > 0) {
+          warnings.push(`${citationRanges.total} wiki citation line range(s) exceed the cited file length.`)
         }
       }
 
@@ -668,6 +740,7 @@ export function repowikiStatusTool(ctx) {
           orphaned: wikiOrphaned,
         },
         ...(brokenCitations ? { brokenCitations } : {}),
+        ...(citationRanges ? { citationRangeIssues: citationRanges } : {}),
         memory: memoryCounts,
         plan: { source: planSource, ...(planError ? { error: planError } : {}) },
         lock: { pending: pendingLocks() },
