@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.207.0] - 2026-11-28
+
+### Added
+
+- **Bounded nested manifests**: nested `pubspec.yaml` reads are capped at
+  30 (Dart/Flutter monorepos) and nested `dune-project` reads at 20
+  (OCaml monorepos), matching the existing caps for mix/gleam/zig/
+  composer/opam/cabal/cargo manifests. Selections stay deterministic
+  (traversal order) and root manifests are never affected, so abnormal
+  directory trees cannot force unbounded manifest reads.
+
+### Tests
+
+- 612 cases pass (LANG=en and LANG=zh); a fixture builds 35 Dart packages
+  and 25 OCaml projects, counting manifest reads through an instrumented
+  fs to prove both caps hold.
+
 ## [0.206.0] - 2026-11-28
 
 ### Added

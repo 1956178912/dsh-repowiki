@@ -40,7 +40,7 @@
 | Ruby | class / module / def（含 `self.` 与 `?!=` 后缀/表达式体）/ attr_* / 常量 | `require_relative` 与显式 `./` require 相对文件；裸 `require` 按任意层级 `lib/` 加载路径及项目根解析；gem require 不建边 |
 | Swift | class / struct / actor / enum / protocol / extension / func / init / typealias | `import` 按 `Package.swift` 的 target `path:`（支持多行声明与注释）解析到目标目录代表文件；未声明 path 时回退 `Sources/<Target>`（兼容旧版 `Source/<Target>`）；外部模块不建边 |
 | Scala | class / case class / trait / object / enum / def / given / extension 成员归属 | `import`（分组、`=>` 重命名、`._`/`.*` 通配、`as` 别名）经点分路径后缀匹配；多行参数与跨行声明头（`{`/`=`/`:`）范围正确 |
-| Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`package:<本仓库 pubspec 名>/x.dart` 解析到对应包的 `lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
+| Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`package:<本仓库 pubspec 名>/x.dart` 解析到对应包的 `lib/x.dart`（含嵌套包，读取上限 30），外部 `package:`/`dart:` 不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
 | Elixir | `defmodule`（嵌套记录完整 `Outer.Inner`）/ `def` / `defp` / `defmacro(p)` / `defguard(p)` / `defdelegate`；私有形式标记非导出 | `alias` / `import` / `require` / `use` 经 `defmodule` 模块名映射到声明文件（含 `alias A.{B, C}` 与 `as:`）；外部模块不建边；根与 `apps/*/mix.exs` 的 `app: :name` / 依赖元组计入 mix 项目名（根清单）、依赖计数与技术栈（嵌套清单合并，来源可追溯）；`.exs`（测试/脚本/config）作为源码索引，`mix.exs` 仅作清单 |
 | Lua | `local M = {}` 模块表、`function` / `local function`、`M.foo` / `M:foo`（归一为 method + parent）、`M.foo = function` 赋值；`local` 形式非导出，函数体内局部变量不登记 | `require "a.b"` / `require([[a.b]])` 不支持（仅引号形式）→ 点分名换算路径，经每个 `lua/` 根与项目根匹配 `a/b.lua` / `a/b/init.lua`；外部模块不建边 |
 | Zig | `const Foo = struct/enum/union/opaque`（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn` / `extern fn` / `export fn`、具名 `test "…"` 块、顶层常量与变量、`pub const x = @import("x.zig")` 再导出；容器成员带 `parent`，`pub` 决定导出；私有 `@import`/`@cImport`/`@This` 别名不登记 | `@import("x.zig")` 相对引用文件所在目录归一解析并限制在项目内；`std`/`builtin`/`root` 与构建注入的模块名不建边；`@cImport`/`@cInclude` 不提取；`build.zig.zon` 提供项目名/版本/依赖计数，嵌套 monorepo 清单（上限 20）只累加依赖计数、项目名只取根 |
@@ -121,7 +121,8 @@ OCaml 为轻量行级解析：只识别缩进 0 的声明；`module`/`class` 的
 按 `struct`/`sig`/`object`/`begin` 与 `end` 单词配平（字段名恰为 `struct`
 等极端情况可能提前结束）；`.mli` 的精确可见性不跨文件合并，`_` 前缀视为
 私有；`open`/`module` 别名之外的模块调用（`Foo.bar`）不建边；`dune`
-构建描述文件不读取（仅 `dune-project` 与 `*.opam`）。Haskell 为轻量
+构建描述文件不读取（仅 `dune-project` 与 `*.opam`，嵌套 `dune-project`
+上限 20）。Haskell 为轻量
 行级解析：只识别缩进 0 的声明，`where` 绑定与 `instance` 方法不登记；
 类方法只登记签名（默认方法体不单独登记）；中缀操作符定义只识别简单
 形态；模块导出列表不参与可见性（统一视为可访问）；源根为

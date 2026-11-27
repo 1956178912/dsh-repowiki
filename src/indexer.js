@@ -128,6 +128,18 @@ const MAX_CABAL_MANIFESTS = 20
 const MAX_CARGO_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的嵌套 `pubspec.yaml` 数（Dart/Flutter 多包仓库）。
+ * 根清单不受此上限影响；嵌套清单用于 `package:` 名称 → 包根映射。
+ */
+const MAX_PUBSPEC_MANIFESTS = 30
+
+/**
+ * 单次索引最多读取的嵌套 `dune-project` 数（OCaml monorepo 子包）。
+ * 根清单不受此上限影响；嵌套清单只用于项目元数据聚合。
+ */
+const MAX_DUNE_PROJECTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -2231,6 +2243,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let opamManifestsRead = 0
   let cabalManifestsRead = 0
   let cargoManifestsRead = 0
+  let pubspecManifestsRead = 0
+  let duneProjectsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -2289,6 +2303,16 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (cargo) {
       if (cargoManifestsRead >= MAX_CARGO_MANIFESTS) continue
       cargoManifestsRead++
+    }
+    const nestedPubspec = !MANIFEST_FILES[rel] && baseName === 'pubspec.yaml'
+    if (nestedPubspec) {
+      if (pubspecManifestsRead >= MAX_PUBSPEC_MANIFESTS) continue
+      pubspecManifestsRead++
+    }
+    const nestedDune = !MANIFEST_FILES[rel] && baseName === 'dune-project'
+    if (nestedDune) {
+      if (duneProjectsRead >= MAX_DUNE_PROJECTS) continue
+      duneProjectsRead++
     }
     selectedManifests.push({ abs, rel })
   }

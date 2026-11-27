@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.207.0] - 2026-11-28
+
+- **嵌套清单读取上限**：嵌套 `pubspec.yaml` 最多读取 30 个
+  （Dart/Flutter monorepo），嵌套 `dune-project` 最多 20 个
+  （OCaml monorepo），与 mix/gleam/zig/composer/opam/cabal/cargo 清单的
+  既有上限一致。选择按遍历顺序保持确定性，根清单不受影响，异常目录树
+  不会触发无界清单读取。
+- **测试**：612 例在 LANG=en 与 LANG=zh 下全通过；夹具构造 35 个 Dart
+  包与 25 个 OCaml 项目，通过计数 fs 验证两个上限。
+
 ## [0.206.0] - 2026-11-28
 
 - **Haskell `hs-source-dirs`**：解析 cabal 的 `hs-source-dirs:` 声明

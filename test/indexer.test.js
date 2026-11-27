@@ -1588,6 +1588,36 @@ test('Haskell：cabal hs-source-dirs 自定义源根', async () => {
   assert.equal(edge?.line, 3, '自定义 source 根解析')
 })
 
+test('嵌套清单读取上限：pubspec 与 dune-project', async () => {
+  const files = {}
+  for (let i = 0; i < 35; i++) {
+    const dir = `pkgs/p${String(i).padStart(2, '0')}`
+    files[`${dir}/pubspec.yaml`] = `name: p${i}\n`
+    files[`${dir}/lib/x.dart`] = 'class X {}\n'
+  }
+  for (let i = 0; i < 25; i++) {
+    const dir = `ocaml/b${String(i).padStart(2, '0')}`
+    files[`${dir}/dune-project`] = `(name b${i})\n`
+    files[`${dir}/lib.ml`] = 'let x = 1\n'
+  }
+  const dir = makeProject(files)
+  const base = makeFakeFs(dir)
+  let pubspecReads = 0
+  let duneReads = 0
+  const counting = {
+    ...base,
+    async readText(target) {
+      if (target.displayPath.endsWith('pubspec.yaml')) pubspecReads++
+      if (target.displayPath.endsWith('dune-project')) duneReads++
+      return base.readText(target)
+    },
+  }
+  const doc = await buildIndex(counting, dir)
+  assert.equal(doc.stats.languages.dart, 35)
+  assert.ok(pubspecReads <= 30, `pubspec 读取应有上限（实际 ${pubspecReads}）`)
+  assert.ok(duneReads <= 20, `dune-project 读取应有上限（实际 ${duneReads}）`)
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',
