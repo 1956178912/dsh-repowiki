@@ -506,6 +506,11 @@ async function verifyLocale(root, locale, index, strict, requireAssets) {
   const coveragePages = citationCoveragePages(manifest)
   if (broken.total > 0) addIssue('citation/missing', `${broken.total} missing citation path(s)`)
   if (ranges.total > 0) addIssue('citation/range', `${ranges.total} citation line range(s) out of bounds`)
+  if (ranges.unchecked > 0) {
+    const message = `${ranges.unchecked} citation line range(s) could not be verified`
+    if (strict) addIssue('citation/range-unchecked', message)
+    else addWarning('citation/range-unchecked', message)
+  }
   if (drift && drift.total > 0) addIssue('citation/drift', `${drift.total} citation(s) changed since generation`)
   if (capped) {
     const message = `citation existence check stopped after ${MAX_FS_PROBES} probes; unverified paths are not reported as broken`
@@ -588,10 +593,26 @@ export async function verifyWiki(options = {}) {
   const requireAssets = options.requireAssets === true
   const requested = Array.isArray(options.locales) ? [...new Set(options.locales)] : []
   const index = await loadIndex(root)
-  const globalProblems = index.error
-    ? [{ code: 'index/read-error', severity: 'error', message: `index.json: ${index.error}` }]
-    : []
-  const globalIssues = globalProblems.map(problem => problem.message)
+  const globalProblems = []
+  if (index.error) {
+    globalProblems.push({ code: 'index/read-error', severity: 'error', message: `index.json: ${index.error}` })
+  }
+  // 索引 v6 才记录行数；旧索引下越界检查只能部分覆盖，严格模式应视为
+  // 不可验证而失败，而不是静默放过。
+  if (index.exists && index.compatible
+    && typeof index.schemaVersion === 'number' && index.schemaVersion < 6) {
+    globalProblems.push({
+      code: 'index/outdated',
+      severity: strict ? 'error' : 'warning',
+      message: `index schema v${index.schemaVersion} has no line counts; range checks are limited (run repowiki-index)`,
+    })
+  }
+  const globalIssues = globalProblems
+    .filter(problem => problem.severity === 'error')
+    .map(problem => problem.message)
+  const globalWarnings = globalProblems
+    .filter(problem => problem.severity === 'warning')
+    .map(problem => problem.message)
   const targetLocales = requested.length > 0 ? requested : await discoverLocales(root)
   if (targetLocales.length === 0) {
     const missing = 'no wiki manifests found'
@@ -616,7 +637,7 @@ export async function verifyWiki(options = {}) {
     locales.push(await verifyLocale(root, locale, index, strict, requireAssets))
   }
   const issues = [...globalIssues]
-  const warnings = []
+  const warnings = [...globalWarnings]
   const problems = [...globalProblems]
   for (const result of locales) {
     for (const issue of result.issues) issues.push(`${result.locale}: ${issue}`)

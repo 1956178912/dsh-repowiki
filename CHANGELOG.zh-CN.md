@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.145.0] - 2026-11-27
+
+- **索引版本门禁**：`index.json` 早于 schema v6（无行数）时默认告警，
+  `--strict` 下失败，避免行号校验静默只覆盖一部分。无法验证的
+  `#Lx-Ly` 范围（`ranges.unchecked`）同样默认告警、`--strict` 失败
+  （`citation/range-unchecked`）。
+- **CI fixture job**：`.github/workflows/tests.yml` 新增 `verify-wiki` job：
+  构造干净 fixture 断言严格门禁通过，再修改卡片指纹断言门禁退出码为 1，
+  每次推送都实际执行文档中的 `--strict --require` 配方。
+- **测试**：508 例在 LANG=en 与 LANG=zh 下全通过；新增 v5 索引告警与
+  严格模式下旧索引/未验证范围失败的用例。
+
 ## [0.144.0] - 2026-11-27
 
 - **面板 Wiki 诊断**：Wiki 页签直接显示清单级问题——上次生成失败页

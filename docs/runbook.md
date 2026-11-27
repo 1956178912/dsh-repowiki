@@ -28,13 +28,14 @@ repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
 | CI 提示清单页缺失 | `verify:wiki` 的 `missingPages` | 页面文件被删除或写入失败；重新 `repowiki-generate`。未入清单的孤儿页只告警，可保留手工页或清理 |
 | CI 提示清单为空 | `verify:wiki` 的 `manifest/empty` | 生成没有产出页面（模型失败或卡片为空）；修复后重新 `repowiki-generate`。默认仅告警，`--strict`/`--require` 下失败 |
 | CI 提示上次生成失败页 | `verify:wiki` 的 `wiki/generation-failed` 或 `status.wiki.failed` | 上次生成有页面写失败（清单 `failed`，最多 10 条明细）；检查磁盘权限/空间后重新 `repowiki-generate`。默认仅告警，`--strict` 下失败 |
+| CI 提示索引过旧 | `verify:wiki` 的 `index/outdated` | `index.json` 早于 schema v6（没有行数），行号越界检查不完整；重新 `repowiki-index`。默认仅告警，`--strict` 下失败 |
 | CI 漏跑生成却通过 | — | 在门禁命令加 `--require`：没有 Wiki 清单或清单为空直接失败，而不是带警告通过 |
 
 ## 常用命令
 
 ```sh
 npm run verify:host      # 主题令牌漂移
-npm run verify:wiki      # Wiki 断链/越界/漂移/陈旧/页面完整性/生成失败/空清单/覆盖率门禁（CI 加 --require）
+npm run verify:wiki      # Wiki 断链/越界/漂移/陈旧/页面完整性/生成失败/空清单/旧索引/覆盖率门禁（CI 加 --require）
 npm test                 # 全量回归
 npm run coverage:check   # 覆盖率门禁
 npm run scan:secrets     # 密钥扫描

@@ -31,9 +31,9 @@ function writeText(file, value) {
   fs.writeFileSync(file, value)
 }
 
-/** 写索引。 */
-function writeIndex(root, files) {
-  writeJson(path.join(root, '.dsh-repowiki/index.json'), { schemaVersion: 6, files })
+/** 写索引（默认 v6；可指定旧版本以测试行号校验降级）。 */
+function writeIndex(root, files, schemaVersion = 6) {
+  writeJson(path.join(root, '.dsh-repowiki/index.json'), { schemaVersion, files })
 }
 
 /** 写 Wiki 清单，并为清单页落盘占位 Markdown（与 generate 产物一致）。 */
@@ -328,6 +328,31 @@ test('verify-wiki：上次生成失败页默认告警，严格模式失败', asy
   assert.equal(strict.ok, false)
   assert.match(strict.issues.join(' '), /1 failed page/)
   assert.ok(strict.problems.some(problem => problem.code === 'wiki/generation-failed'
+    && problem.severity === 'error'))
+})
+
+test('verify-wiki：旧索引缺少行数时默认告警，严格模式失败', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts' }], 5)
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+
+  const lenient = await verifyWiki({ root })
+  assert.equal(lenient.ok, true)
+  assert.match(lenient.warnings.join(' '), /index schema v5 has no line counts/)
+  assert.ok(lenient.problems.some(problem => problem.code === 'index/outdated'
+    && problem.severity === 'warning'))
+
+  const strict = await verifyWiki({ root, strict: true })
+  assert.equal(strict.ok, false)
+  assert.ok(strict.problems.some(problem => problem.code === 'index/outdated'
+    && problem.severity === 'error'))
+  assert.ok(strict.problems.some(problem => problem.code === 'citation/range-unchecked'
     && problem.severity === 'error'))
 })
 

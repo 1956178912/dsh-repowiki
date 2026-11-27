@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.145.0] - 2026-11-27
+
+### Added
+
+- **Index-version gate**: `verify:wiki` warns when `index.json` predates
+  schema v6 (no line counts) and fails under `--strict`, because range checks
+  would otherwise be silently partial. Unverifiable `#Lx-Ly` ranges
+  (`ranges.unchecked`) now also warn by default and fail under `--strict`
+  (`citation/range-unchecked`).
+- **CI fixture job**: `.github/workflows/tests.yml` gains a `verify-wiki` job
+  that builds a fresh fixture, asserts the strict gate passes, then changes a
+  card digest and asserts the gate exits 1. This exercises the documented
+  `--strict --require` recipe on every push.
+
+### Tests
+
+- 508 cases pass (LANG=en and LANG=zh); a new case covers the v5 index warning
+  plus the strict failures for the outdated index and unverified ranges.
+
 ## [0.144.0] - 2026-11-27
 
 ### Added

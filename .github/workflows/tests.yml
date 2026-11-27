@@ -65,6 +65,85 @@ jobs:
       - run: npm ci
       - run: npm run coverage:check
 
+  verify-wiki:
+    name: wiki freshness gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build fixture wiki
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdir, writeFile } from 'node:fs/promises'
+          import { digestText } from './src/util.js'
+
+          const root = '.ci-fixture'
+          const asset = `${root}/.dsh-repowiki`
+          const cardDigest = 'card-digest-1'
+          await mkdir(`${asset}/knowledge/zh`, { recursive: true })
+          await mkdir(`${asset}/wiki/zh`, { recursive: true })
+          await writeFile(`${root}/a.ts`, 'one\ntwo\n')
+          await writeFile(`${asset}/index.json`, JSON.stringify({
+            schemaVersion: 6,
+            files: [{ path: 'a.ts', lines: 2 }],
+          }, null, 2))
+          await writeFile(`${asset}/knowledge/zh/a.md`, [
+            '---',
+            JSON.stringify({
+              schemaVersion: 1,
+              path: 'a.ts',
+              lang: 'typescript',
+              locale: 'zh',
+              sourceDigest: cardDigest,
+              title: 'A',
+              tags: [],
+              manuallyEdited: false,
+              generatedAt: '2026-01-01T00:00:00.000Z',
+            }),
+            '---',
+            '# A',
+            '',
+          ].join('\n'))
+          await writeFile(`${asset}/wiki/zh/overview.md`, [
+            '---',
+            JSON.stringify({ slug: 'overview', title: 'Overview' }),
+            '---',
+            '# Overview',
+            '',
+          ].join('\n'))
+          await writeFile(`${asset}/wiki/zh/_index.json`, JSON.stringify({
+            schemaVersion: 3,
+            inputDigest: digestText(`a.ts:${cardDigest}`, 16),
+            memoryDigest: digestText('', 16),
+            pages: [{
+              slug: 'overview',
+              path: 'wiki/zh/overview.md',
+              title: 'Overview',
+              sources: [],
+              sections: [],
+            }],
+          }, null, 2))
+          NODE
+      - name: Gate passes on a fresh wiki
+        run: node scripts/verify-wiki.mjs --root .ci-fixture --strict --require
+      - name: Gate fails after a card changes
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises'
+
+          const file = '.ci-fixture/.dsh-repowiki/knowledge/zh/a.md'
+          const text = await readFile(file, 'utf8')
+          await writeFile(file, text.replace('card-digest-1', 'card-digest-2'))
+          NODE
+          set +e
+          node scripts/verify-wiki.mjs --root .ci-fixture --strict --require
+          code=$?
+          set -e
+          test "$code" -eq 1
+
   audit:
     name: dependency audit + SBOM
     runs-on: ubuntu-latest
