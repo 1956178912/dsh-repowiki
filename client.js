@@ -154,6 +154,8 @@ const DICTS = {
     wikiCoverageHint: '{n} 处引用没有内容指纹（{reasons}），无法做漂移检查',
     wikiCoverageSummary: '引用指纹：{tracked}/{total} 已记录 · {untracked} 未覆盖（{reasons}）',
     wikiCoverageLegacy: '引用指纹：清单无指纹记录（{total} 处引用）',
+    wikiOnlyUntracked: '仅看未覆盖（{n}）',
+    wikiNoMatches: '没有符合条件的页面。',
     wikiReasonUnreadable: '不可读 {n}',
     wikiReasonRange: '行号非法 {n}',
     wikiReasonCap: '读取上限 {n}',
@@ -266,6 +268,8 @@ const DICTS = {
     wikiCoverageHint: '{n} citation(s) have no content digest ({reasons}); drift checks cannot cover them',
     wikiCoverageSummary: 'Citation digests: {tracked}/{total} tracked · {untracked} untracked ({reasons})',
     wikiCoverageLegacy: 'Citation digests: manifest has no digests ({total} citations)',
+    wikiOnlyUntracked: 'Only untracked ({n})',
+    wikiNoMatches: 'No matching pages.',
     wikiReasonUnreadable: 'unreadable {n}',
     wikiReasonRange: 'invalid range {n}',
     wikiReasonCap: 'read cap {n}',
@@ -2854,6 +2858,7 @@ window.__ModuleLoader__.load({
 
     /** Wiki 面板：页面列表与单页原文浏览；打开页面时聚焦返回按钮。 */
     function WikiPanel({ entries, selected, query, targetSection = '', onQuery, onSelect, onClose, t, tt }) {
+      const [onlyUntracked, setOnlyUntracked] = useState(false)
       const backRef = useRef(null)
       useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
       // 深链：页面渲染后滚动到目标章节（锚点 id 与 renderMarkdown 的标题锚一致）
@@ -2887,9 +2892,12 @@ window.__ModuleLoader__.load({
         return h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('wikiEmpty'))
       }
       const q = query.trim().toLowerCase()
-      const filtered = q
-        ? entries.filter(entry => `${entry.title}\n${entry.file}`.toLowerCase().includes(q))
-        : entries
+      const untrackedPages = entries.filter(entry => (entry.citationCoverage?.untracked ?? 0) > 0)
+      const filtered = entries.filter(entry => {
+        if (onlyUntracked && (entry.citationCoverage?.untracked ?? 0) <= 0) return false
+        if (!q) return true
+        return `${entry.title}\n${entry.file}`.toLowerCase().includes(q)
+      })
       const groups = new Map()
       for (const entry of filtered) {
         const key = entry.module || t('wikiGeneral')
@@ -2920,20 +2928,40 @@ window.__ModuleLoader__.load({
       })
       const coverageReasons = formatCoverageReasons(coverage.reasons, tt)
       return h('div', null,
-        h('input', {
-          type: 'search',
-          value: query,
-          onChange: (e) => onQuery(e.target.value),
-          placeholder: t('wikiSearch'),
-          'aria-label': t('wikiSearch'),
-          style: {
-            width: '100%', boxSizing: 'border-box', marginBottom: 12, padding: '8px 10px',
-            borderRadius: 'var(--dsw-radius-sm, 8px)', fontSize: 13,
-            border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
-            background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
-            color: 'var(--dsw-alias-label-primary, #111827)',
-          },
-        }),
+        h('div', {
+          style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
+        },
+          h('input', {
+            type: 'search',
+            value: query,
+            onChange: (e) => onQuery(e.target.value),
+            placeholder: t('wikiSearch'),
+            'aria-label': t('wikiSearch'),
+            style: {
+              flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 10px',
+              borderRadius: 'var(--dsw-radius-sm, 8px)', fontSize: 13,
+              border: '1px solid var(--dsw-alias-border-l2, #d1d5db)',
+              background: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+              color: 'var(--dsw-alias-label-primary, #111827)',
+            },
+          }),
+          untrackedPages.length > 0 && h('button', {
+            type: 'button',
+            'aria-pressed': onlyUntracked,
+            'aria-label': tt('wikiOnlyUntracked', { n: untrackedPages.length }),
+            onClick: () => setOnlyUntracked(value => !value),
+            style: {
+              ...chipButtonStyle(), width: 'auto', padding: '0 10px', fontSize: 12,
+              whiteSpace: 'nowrap',
+              ...(onlyUntracked
+                ? {
+                  borderColor: 'var(--dsw-alias-state-business-primary, #2563eb)',
+                  color: 'var(--dsw-alias-state-business-primary, #2563eb)',
+                }
+                : {}),
+            },
+          }, tt('wikiOnlyUntracked', { n: untrackedPages.length })),
+        ),
         // 引用完整性摘要：行号越界（索引有行数时可判）与未检查计数
         (outOfRange > 0 || unchecked > 0) && h('p', {
           role: 'status',
@@ -2946,7 +2974,7 @@ window.__ModuleLoader__.load({
           ? tt('wikiCoverageSummary', { ...coverage, reasons: coverageReasons })
           : tt('wikiCoverageLegacy', { total: coverage.total })),
         filtered.length === 0
-          ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiEmpty'))
+          ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiNoMatches'))
           : [...groups.entries()].map(([module, list]) => h('div', { key: module, style: { marginBottom: 12 } },
             showModule && h('h3', {
               style: {

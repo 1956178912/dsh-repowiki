@@ -1020,6 +1020,34 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(backBtn, '应渲染返回列表控件（aria-label）')
 })
 
+test('Wiki 页签：仅看未覆盖筛选', async () => {
+  const hooks = await mountReadyPage()
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const toggle = findNode(hooks.root, n => n.type === 'button'
+    && n.props['aria-label'] === 'wikiOnlyUntracked')
+  assert.ok(toggle, '存在未覆盖页面时显示筛选项')
+  assert.equal(toggle.props['aria-pressed'], false)
+
+  toggle.props.onClick()
+  await flush()
+  let texts = collectTexts(hooks.root)
+  assert.ok(texts.some(text => text.includes('概览')), '保留有未覆盖引用的页面')
+  assert.ok(!texts.some(text => text.includes('核心模块')), '隐藏完整覆盖的页面')
+  const active = findNode(hooks.root, n => n.type === 'button'
+    && n.props['aria-label'] === 'wikiOnlyUntracked')
+  assert.equal(active.props['aria-pressed'], true)
+
+  active.props.onClick()
+  await flush()
+  texts = collectTexts(hooks.root)
+  assert.ok(texts.some(text => text.includes('核心模块')), '取消筛选后恢复全部页面')
+})
+
 test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
   const legacy = JSON.stringify({
     schemaVersion: 2,

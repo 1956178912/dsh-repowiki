@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.138.0] - 2026-11-27
+
+### Added
+
+- **"Only untracked" wiki filter**: when any page has citations without a
+  content digest, the Wiki tab shows a toggle with the affected page count.
+  It composes with search, marks itself with `aria-pressed`, and hides pages
+  whose citations are fully tracked.
+
+### Fixed
+
+- **Search/filter empty state**: when entries exist but the current query or
+  filter matches none, the Wiki tab now says "no matching pages" instead of
+  the "no wiki pages generated yet" message.
+
+### Tests
+
+- 499 cases pass (LANG=en and LANG=zh); the panel suite drives the toggle,
+  asserts filtered/unfiltered titles and `aria-pressed`, and keeps the legacy
+  no-digest case green.
+
 ## [0.137.0] - 2026-11-27
 
 ### Added
