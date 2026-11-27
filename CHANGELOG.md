@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.129.0] - 2026-11-27
+
+### Added
+
+- **Drift-aware incremental generation**: `repowiki-generate` now re-checks
+  the citation digests recorded in the wiki manifest before honouring the
+  fresh skip. Cards and accepted memory can stay unchanged while cited code
+  moves; any changed citation (`citationDrift > 0`) or any citation that
+  cannot be verified (unreadable file, invalid range, over the 500-entry
+  comparison cap or the 200-file read cap) disables the skip and triggers
+  re-synthesis with a hint stating why. A clean check returns
+  `citationDrift: 0` next to `skippedFresh`; legacy manifests without digests
+  keep the previous behaviour.
+- **Shared drift checker**: status and generate now share
+  `src/citation-drift.js` (same caps, path rejection and per-file read
+  cache). Entries beyond the comparison cap are counted as `unchecked`
+  instead of being ignored, so a truncated check can never pass as fresh.
+
+### Tests
+
+- 481 cases pass (LANG=en and LANG=zh); new coverage for the shared checker
+  (match, mismatch, unreadable file, unsafe paths, read cap, entry cap) and
+  for generate (unchanged citations keep the skip, changed citations
+  re-synthesize, unverifiable citations re-synthesize conservatively).
+
 ## [0.128.0] - 2026-11-27
 
 ### Added

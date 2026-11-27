@@ -30,6 +30,7 @@ import { cwdOf, digestText, resolveLocales, delayWithSignal } from './util.js'
 import { normalizeAttempts } from './config.js'
 import { parseWikiSource } from './wiki-references.js'
 import { citationDigest } from './citation-digest.js'
+import { checkCitationDrift } from './citation-drift.js'
 
 /** 主题合成失败重试的指数退避基数与上限（毫秒）。 */
 const RETRY_BASE_MS = 200
@@ -160,8 +161,9 @@ export function repowikiGenerateTool(ctx) {
                 aborted: { type: 'boolean' },
                 attempts: { type: 'integer', description: 'Theme-synthesis attempts made (0 when skipped or module-only).' },
                 retried: { type: 'integer', description: 'Retries performed after a thrown error or empty page list.' },
-                skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest and no model call was made.' },
+                skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, cited sources are unchanged, and no model call was made.' },
                 hint: { type: 'string' },
+                citationDrift: { type: 'integer', description: 'Number of cited sources whose content changed since the last wiki; non-zero disables the fresh skip and triggers re-synthesis.' },
               },
               required: ['locale', 'pages', 'cardsRead', 'memoriesRead', 'failed', 'orphaned', 'renamed'],
             },
@@ -179,7 +181,8 @@ export function repowikiGenerateTool(ctx) {
           aborted: { type: 'boolean' },
           attempts: { type: 'integer', description: 'Theme-synthesis attempts made (0 when skipped or module-only).' },
           retried: { type: 'integer', description: 'Retries performed after a thrown error or empty page list.' },
-          skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest and no model call was made.' },
+          skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, cited sources are unchanged, and no model call was made.' },
+          citationDrift: { type: 'integer', description: 'Cited sources whose content changed since the last wiki; non-zero disables the fresh skip.' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
@@ -188,7 +191,7 @@ export function repowikiGenerateTool(ctx) {
       render: (_args, value) => [{
         type: 'text',
         text: value.skippedFresh
-          ? `Wiki is up to date: ${value.pages.length} page(s) in ${value.wikiDir}; no model call was made (cards and accepted memory unchanged). Pass force=true to re-synthesize.`
+          ? `Wiki is up to date: ${value.pages.length} page(s) in ${value.wikiDir}; no model call was made (cards and accepted memory unchanged${typeof value.citationDrift === 'number' ? ', cited sources verified' : '; manifest has no citation digests'}). Pass force=true to re-synthesize.`
           : value.pages.length > 0 || value.failed?.length > 0
           ? [
             `Generated ${value.pages.length} wiki page(s) from ${value.cardsRead} card(s) and ${value.memoriesRead} accepted memory entrie(s) in ${value.durationMs}ms → ${value.wikiDir}: ${value.pages.join(', ') || '(none)'}${value.retried > 0 ? ` (${value.retried} retry(ies))` : ''}`,
@@ -196,6 +199,7 @@ export function repowikiGenerateTool(ctx) {
             value.renamed?.length > 0 ? `Renamed duplicate slugs: ${value.renamed.map(r => `${r.from}→${r.to}`).join(', ')}` : '',
             value.orphaned?.length > 0 ? `Orphaned pages (not in this run): ${value.orphaned.join(', ')}` : '',
             value.cardsTruncated > 0 ? `${value.cardsTruncated} card(s) were omitted from the prompt (cap reached).` : '',
+            value.citationDrift > 0 ? `${value.citationDrift} cited source(s) changed since the last wiki; re-synthesized.` : '',
             value.aborted ? 'Cancelled: remaining pages were not written.' : '',
             Array.isArray(value.byLocale) && value.byLocale.length > 1
               ? `Per locale: ${value.byLocale.map(r => `${r.locale} ${r.pages.length} page(s)${r.failed.length ? `, ${r.failed.length} failed` : ''}${r.hint ? ` (${r.hint})` : ''}`).join('; ')}`
@@ -286,6 +290,9 @@ export function repowikiGenerateTool(ctx) {
 
       // 增量短路：卡片与记忆指纹都与清单一致、且清单页面仍在磁盘上时，
       // 主题合成没有新输入，跳过模型调用（模块页是确定性聚合，不在短路范围）
+      let citationDriftCount = 0
+      let citationDriftUnchecked = 0
+      let freshnessHint = ''
       if (!force && granularity === 'theme') {
         const [manifest, existingPages] = await Promise.all([
           readWikiManifest(fs, root, locale),
@@ -300,23 +307,44 @@ export function repowikiGenerateTool(ctx) {
           && manifest.memoryDigest === memoryDigest
           && manifestSlugs.length > 0
           && manifestSlugs.every(slug => existingSlugs.has(slug))) {
-          return {
-            locale,
-            wikiDir: `${root}/.dsh-repowiki/wiki/${locale}`,
-            pages: manifestSlugs,
-            cardsRead: cards.length,
-            memoriesRead: memorySummaries.length,
-            cardsTruncated,
-            memoriesTruncated,
-            failed: [],
-            // 与正常生成一致：磁盘上不在清单里的页面只报告不删除
-            orphaned: existingPages.filter(page => !manifestSlugSet.has(page.slug)).map(page => page.slug),
-            renamed: [],
-            attempts: 0,
-            retried: 0,
-            skippedFresh: true,
-            hint: 'Wiki is up to date (cards and accepted memory unchanged); pass force=true to re-synthesize.',
+          // 卡片/记忆未变时再核对引用内容指纹：被引用代码已变或无法验证时
+          // 不短路，避免 Wiki 在代码漂移后继续显示为最新。
+          const drift = await checkCitationDrift(manifest, async (rel) => {
+            try {
+              return await fs.readText(await fs.resolve(rel, { cwd: root }))
+            } catch {
+              return null
+            }
+          }, { maxReads: MAX_CITATION_SOURCE_READS })
+          citationDriftCount = drift?.total ?? 0
+          citationDriftUnchecked = drift?.unchecked ?? 0
+          if (citationDriftCount === 0 && citationDriftUnchecked === 0) {
+            return {
+              locale,
+              wikiDir: `${root}/.dsh-repowiki/wiki/${locale}`,
+              pages: manifestSlugs,
+              cardsRead: cards.length,
+              memoriesRead: memorySummaries.length,
+              cardsTruncated,
+              memoriesTruncated,
+              failed: [],
+              // 与正常生成一致：磁盘上不在清单里的页面只报告不删除
+              orphaned: existingPages.filter(page => !manifestSlugSet.has(page.slug)).map(page => page.slug),
+              renamed: [],
+              attempts: 0,
+              retried: 0,
+              skippedFresh: true,
+              ...(drift ? { citationDrift: 0 } : {}),
+              hint: drift
+                ? 'Wiki is up to date (cards, accepted memory and cited sources unchanged); pass force=true to re-synthesize.'
+                : 'Wiki is up to date (cards and accepted memory unchanged; manifest has no citation digests); pass force=true to re-synthesize.',
+            }
           }
+        }
+        if (citationDriftCount > 0) {
+          freshnessHint = `Re-synthesized because ${citationDriftCount} cited source(s) changed since the last wiki.`
+        } else if (citationDriftUnchecked > 0) {
+          freshnessHint = `Re-synthesized because citation freshness could not be verified (${citationDriftUnchecked} citation(s)).`
         }
       }
 
@@ -382,7 +410,8 @@ export function repowikiGenerateTool(ctx) {
           memoriesRead: memorySummaries.length,
           cardsTruncated, memoriesTruncated, failed: [], orphaned: [], renamed: [],
           attempts: attemptsUsed, retried,
-          hint: themeHint || 'No pages generated.',
+          ...(citationDriftCount > 0 ? { citationDrift: citationDriftCount } : {}),
+          hint: themeHint || freshnessHint || 'No pages generated.',
         }
       }
 
@@ -529,7 +558,8 @@ export function repowikiGenerateTool(ctx) {
         renamed,
         attempts: attemptsUsed,
         retried,
-        ...(themeHint ? { hint: themeHint } : {}),
+        ...(citationDriftCount > 0 ? { citationDrift: citationDriftCount } : {}),
+        ...(themeHint || freshnessHint ? { hint: themeHint || freshnessHint } : {}),
         ...(aborted ? { aborted: true } : {}),
       }
       }
@@ -565,6 +595,7 @@ export function repowikiGenerateTool(ctx) {
         attempts: primary.attempts ?? 0,
         retried: primary.retried ?? 0,
         ...(primary.skippedFresh ? { skippedFresh: true } : {}),
+        ...(typeof primary.citationDrift === 'number' ? { citationDrift: primary.citationDrift } : {}),
         ...(primary.aborted ? { aborted: true } : {}),
         ...(abortMessage ? { hint: abortMessage } : (primary.hint ? { hint: primary.hint } : {})),
         durationMs: Date.now() - startedAt,

@@ -237,6 +237,91 @@ test('repowiki-generate execute：输入未变时跳过合成，force 强制重�
   assert.strictEqual(activationSpecs.length, dispatched + 2)
 })
 
+test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', async () => {
+  const { ctx, dir, activationSpecs } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+    'repowiki-generate': generateResult([{
+      title: '项目概览', slug: 'overview',
+      overview: '这是概览正文。',
+      sections: [{ heading: '核心模块', body: '核心模块正文。', sources: ['a.ts#L1-L1'] }],
+      mermaid: '',
+    }]),
+  })
+  await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  const generate = repowikiGenerateTool(ctx)
+  const first = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.deepEqual(first.pages, ['overview'])
+  const dispatched = activationSpecs.length
+
+  // 卡片、记忆与引用源码均未变：短路且指纹可验证
+  const second = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.equal(second.skippedFresh, true)
+  assert.equal(second.citationDrift, 0)
+  assert.strictEqual(activationSpecs.length, dispatched, '跳过时不派发模型')
+
+  // 只改被引用源码，不动卡片：内容指纹变化 → 不再短路
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')
+  const third = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.equal(third.skippedFresh, undefined)
+  assert.equal(third.citationDrift, 1)
+  assert.strictEqual(activationSpecs.length, dispatched + 1, '引用漂移时重新派发模型')
+  assert.match(third.hint ?? '', /cited source\(s\) changed/)
+  assert.match(generate.output.render({}, third)[0].text, /cited source\(s\) changed/)
+})
+
+test('repowiki-generate execute：引用无法验证时保守重合成', async () => {
+  const { ctx, dir, activationSpecs } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+    'repowiki-generate': generateResult([{
+      title: '项目概览', slug: 'overview',
+      overview: '这是概览正文。',
+      sections: [{ heading: '核心模块', body: '核心模块正文。', sources: ['a.ts#L1-L1'] }],
+      mermaid: '',
+    }]),
+  })
+  await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  const generate = repowikiGenerateTool(ctx)
+  await generate.execute({ locale: 'zh' }, fakeExec)
+  const dispatched = activationSpecs.length
+
+  // 删除被引用源码：指纹无法重算 → 不把清单冒充为最新
+  nodefs.unlinkSync(path.join(dir, 'a.ts'))
+  const second = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.equal(second.skippedFresh, undefined)
+  assert.strictEqual(activationSpecs.length, dispatched + 1, '未验证引用不得短路')
+  assert.match(second.hint ?? '', /could not be verified/)
+})
+
+test('repowiki-generate execute：旧清单无指纹时保持原短路行为', async () => {
+  const { ctx, dir, activationSpecs } = await makeIndexedCtx({
+    'repowiki-extract': extractResult(),
+    'repowiki-generate': generateResult([{
+      title: '项目概览', slug: 'overview',
+      overview: '这是概览正文。',
+      sections: [{ heading: '核心模块', body: '核心模块正文。', sources: ['a.ts#L1-L1'] }],
+      mermaid: '',
+    }]),
+  })
+  await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  const generate = repowikiGenerateTool(ctx)
+  await generate.execute({ locale: 'zh' }, fakeExec)
+  const dispatched = activationSpecs.length
+
+  // 模拟 v2 清单：移除引用指纹，短路口径回到"只验证卡片/记忆"
+  const manifestPath = path.join(dir, '.dsh-repowiki/wiki/zh/_index.json')
+  const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
+  manifest.schemaVersion = 2
+  for (const page of manifest.pages) delete page.citationDigests
+  nodefs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n')
+
+  const second = await generate.execute({ locale: 'zh' }, fakeExec)
+  assert.equal(second.skippedFresh, true)
+  assert.equal(second.citationDrift, undefined, '无指纹不得声称已验证')
+  assert.match(second.hint ?? '', /no citation digests/)
+  assert.match(generate.output.render({}, second)[0].text, /no citation digests/)
+  assert.strictEqual(activationSpecs.length, dispatched, '旧清单仍可短路')
+})
+
 test('repowiki-extract execute：子代理返回不可用卡片时记 failed（诊断可读）', async () => {
   const { ctx } = await makeIndexedCtx({
     'repowiki-extract': { structured: { title: '半成品' }, stopReason: 'complete' },

@@ -20,8 +20,8 @@ import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
-import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource, parseWikiSource } from './wiki-references.js'
-import { citationDigest } from './citation-digest.js'
+import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource } from './wiki-references.js'
+import { checkCitationDrift } from './citation-drift.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
@@ -42,14 +42,6 @@ const RENDERED_WARNINGS = 3
 
 /** Wiki 引用存在性检查的文件系统探测上限。 */
 const WIKI_CITATION_CHECK_LIMIT = 200
-
-/** 引用漂移检查：最多比较的指纹条目与读取的文件数。 */
-const MAX_CITATION_DRIFT_ENTRIES = 500
-const MAX_CITATION_DRIFT_READS = 100
-
-/** 引用漂移报告里返回的页面/每页条目上限。 */
-const MAX_CITATION_DRIFT_PAGES = 10
-const MAX_CITATION_DRIFT_ISSUES = 10
 
 /**
  * 渲染循环依赖组：`a.ts ↔ b.ts (+2)`，组间以分号分隔；短环附加具体
@@ -730,96 +722,16 @@ export function repowikiStatusTool(ctx) {
           warnings.push(`${citationRanges.total} wiki citation line range(s) exceed the cited file length.`)
         }
 
-        // 引用内容漂移：仅清单 v3 起有 citationDigests；旧清单不判定。
-        /** @type {Array<{slug:string, title:string, source:string, expected:string}>} */
-        const driftEntries = []
-        for (const page of Array.isArray(manifest.pages) ? manifest.pages : []) {
-          const digests = page?.citationDigests
-          if (!digests || typeof digests !== 'object') continue
-          const slug = typeof page.slug === 'string' ? page.slug : ''
-          const title = typeof page.title === 'string' && page.title ? page.title : slug
-          for (const [source, expected] of Object.entries(digests)) {
-            if (typeof expected === 'string' && expected) {
-              driftEntries.push({ slug, title, source, expected })
-            }
+        // 引用内容漂移：仅清单 v3 起有 citationDigests；旧清单返回 null。
+        citationDrift = await checkCitationDrift(manifest, async (rel) => {
+          try {
+            return await fs.readText(await fs.resolve(rel, { cwd: root }))
+          } catch {
+            return null
           }
-        }
-        if (driftEntries.length > 0) {
-          const entriesTruncated = driftEntries.length > MAX_CITATION_DRIFT_ENTRIES
-          /** @type {Map<string, string|null>} */
-          const textCache = new Map()
-          let reads = 0
-          let checked = 0
-          let unchecked = 0
-          let total = 0
-          /** @type {Map<string, {slug:string, title:string, issues:Map<string, {source:string, path:string, start:number, end:number}>}>} */
-          const byPage = new Map()
-          for (const entry of driftEntries.slice(0, MAX_CITATION_DRIFT_ENTRIES)) {
-            const parsed = parseWikiSource(entry.source)
-            if (!parsed.path
-              || parsed.path.startsWith('/')
-              || /^[A-Za-z]:\//.test(parsed.path)
-              || parsed.path.split('/').includes('..')) {
-              unchecked++
-              continue
-            }
-            let text = textCache.get(parsed.path)
-            if (text === undefined) {
-              if (reads >= MAX_CITATION_DRIFT_READS) {
-                text = null
-              } else {
-                reads++
-                try {
-                  text = await fs.readText(await fs.resolve(parsed.path, { cwd: root }))
-                } catch {
-                  text = null
-                }
-              }
-              textCache.set(parsed.path, text)
-            }
-            const actual = text === null ? null : citationDigest(text, parsed.start, parsed.end)
-            if (actual === null) {
-              unchecked++
-              continue
-            }
-            checked++
-            if (actual === entry.expected) continue
-            total++
-            const pageKey = `${entry.slug}\u0000${entry.title}`
-            let pageEntry = byPage.get(pageKey)
-            if (!pageEntry) {
-              pageEntry = { slug: entry.slug, title: entry.title, issues: new Map() }
-              byPage.set(pageKey, pageEntry)
-            }
-            pageEntry.issues.set(entry.source, {
-              source: entry.source,
-              path: parsed.path,
-              start: Number.isInteger(parsed.start) ? parsed.start : 0,
-              end: Number.isInteger(parsed.end) ? parsed.end : 0,
-            })
-          }
-          const pages = [...byPage.values()]
-            .map(page => ({
-              slug: page.slug,
-              title: page.title,
-              issues: [...page.issues.values()].sort((a, b) => a.source.localeCompare(b.source)),
-            }))
-            .sort((a, b) => a.title.localeCompare(b.title) || a.slug.localeCompare(b.slug))
-          citationDrift = {
-            total,
-            checked,
-            unchecked,
-            pages: pages.slice(0, MAX_CITATION_DRIFT_PAGES).map(page => ({
-              ...page,
-              issues: page.issues.slice(0, MAX_CITATION_DRIFT_ISSUES),
-            })),
-            truncated: entriesTruncated
-              || pages.length > MAX_CITATION_DRIFT_PAGES
-              || pages.some(page => page.issues.length > MAX_CITATION_DRIFT_ISSUES),
-          }
-          if (total > 0) {
-            warnings.push(`${total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
-          }
+        })
+        if (citationDrift && citationDrift.total > 0) {
+          warnings.push(`${citationDrift.total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
         }
       }
 
