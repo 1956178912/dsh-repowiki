@@ -5,6 +5,35 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.203.0] - 2026-11-28
+
+### Added
+
+- **Haskell indexing (25th language)**: `.hs`/`.lhs` files produce
+  `module` declarations (ranging to the file end), `data`/`newtype`
+  (including `data family`), `type`/`type family`, `class`, `pattern`
+  synonyms, top-level value signatures (`name ::`) and definitions —
+  including infix operator definitions, which register the operator rather
+  than the leading operand. Signatures and their bodies merge into one
+  symbol spanning both. `--` comments, nested `{- … -}` blocks (pragmas
+  included), strings and character literals are masked; indented
+  `where`/`let` bodies stay unindexed. `import [qualified] [safe]
+  ["pkg"] Module` resolves through GHC module paths under every
+  `src/`/`app/`/`lib/`/`test/` root (`.hs` then `.lhs`); external packages
+  stay edge-free. `*.cabal` manifests supply the package name, version and
+  multi-line `build-depends` with Haskell technology mappings (nested
+  manifests capped at 20). Prompt fences and the panel language filter
+  know `haskell`.
+
+### Tests
+
+- 608 cases pass (LANG=en and LANG=zh); new coverage pins symbol kinds and
+  ranges (module/file-end, data/newtype/type/class, signature+definition
+  merge, infix operators, comment/string shielding), import variants
+  (qualified, package, hiding), cabal metadata with multi-line
+  `build-depends`, and an indexer fixture proving `src`/`app` root
+  resolution and external-package exclusion.
+
 ## [0.202.0] - 2026-11-28
 
 ### Added

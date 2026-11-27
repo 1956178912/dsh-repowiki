@@ -185,6 +185,8 @@ export const EXTENSION_LANGS = {
   nims: 'nim',
   ml: 'ocaml',
   mli: 'ocaml',
+  hs: 'haskell',
+  lhs: 'haskell',
   c: 'c',
   h: 'c',
   cc: 'cpp',

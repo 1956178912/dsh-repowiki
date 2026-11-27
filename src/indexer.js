@@ -116,6 +116,12 @@ const MAX_NIMBLE_MANIFESTS = 10
 const MAX_OPAM_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的 `*.cabal` 清单数（Haskell 多包仓库）。
+ * 根包清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_CABAL_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -136,7 +142,7 @@ function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
     || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
-    || name.endsWith('.nimble') || name.endsWith('.opam')
+    || name.endsWith('.nimble') || name.endsWith('.opam') || name.endsWith('.cabal')
 }
 
 /**
@@ -993,6 +999,51 @@ function resolveOcamlSpecifier(specifier, modules) {
 }
 
 /**
+ * 建立 Haskell 模块搜索根：任意层级的 `src/`/`app/`/`lib/`/`test/` 目录
+ * （GHC/cabal 常见的 source-dirs），最后回退项目根；按深度、字典序排序
+ * 保证确定性。
+ * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @returns {string[]} 搜索根（末项为项目根 ''）。
+ */
+function buildHaskellRoots(paths) {
+  const roots = new Set()
+  for (const rel of paths) {
+    if (!rel.endsWith('.hs') && !rel.endsWith('.lhs')) continue
+    const segments = rel.split('/').slice(0, -1)
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i] === 'src' || segments[i] === 'app'
+        || segments[i] === 'lib' || segments[i] === 'test') {
+        roots.add(segments.slice(0, i + 1).join('/'))
+      }
+    }
+  }
+  return [
+    ...[...roots].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    '',
+  ]
+}
+
+/**
+ * 解析 Haskell `import`：模块点分名按 GHC 约定换算为目录路径，在每个
+ * source-dir 与项目根下尝试 `<Mod>/<Ule>.hs`/`.lhs`；外部包返回 null。
+ * @param {string} specifier - 模块名（如 Data.Text 或 Foo.Bar）。
+ * @param {string[]} roots - 搜索根（含 ''）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveHaskellSpecifier(specifier, roots, indexed) {
+  if (typeof specifier !== 'string' || !/^[A-Z][\w.']*$/.test(specifier)) return null
+  const rel = specifier.replace(/\./g, '/')
+  for (const base of roots) {
+    for (const ext of ['.hs', '.lhs']) {
+      const candidate = base === '' ? `${rel}${ext}` : `${base}/${rel}${ext}`
+      if (indexed.has(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+/**
  * 解析工作区包 import：按最长包名前缀匹配，子路径优先走 package.json 的
  * exports（含通配），其次按包内相对路径落地；包根按 exports → main 等
  * 入口 → src/index → index 依次尝试。
@@ -1845,6 +1896,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
  *   ocamlModules:Map<string,string>,
+ *   haskellRoots:string[],
  *   luaRoots:string[],
  *   gleamRoots:string[],
  *   nimRoots:string[],
@@ -1887,6 +1939,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, ctx.ocamlModules)
+  if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
@@ -2043,6 +2096,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let zigManifestsRead = 0
   let nimbleManifestsRead = 0
   let opamManifestsRead = 0
+  let cabalManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -2091,6 +2145,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (opam) {
       if (opamManifestsRead >= MAX_OPAM_MANIFESTS) continue
       opamManifestsRead++
+    }
+    const cabal = !MANIFEST_FILES[rel] && baseName.endsWith('.cabal')
+    if (cabal) {
+      if (cabalManifestsRead >= MAX_CABAL_MANIFESTS) continue
+      cabalManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }
@@ -2144,6 +2203,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
     ocamlModules: buildOcamlModules(files),
+    haskellRoots: buildHaskellRoots(indexed),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
     nimRoots: buildNimRoots(indexed),

@@ -531,6 +531,26 @@ test('OCaml：open/include/模块别名与注释字符串屏蔽', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
 })
 
+test('Haskell：import qualified/package import/hiding 与注释屏蔽', () => {
+  const code = [
+    'import qualified Data.Map as M',
+    'import Foo.Bar hiding (baz)',
+    'import "text" Data.Text (Text)',
+    'import safe Control.Exception',
+    '-- import Hidden',
+    '{- import Blocked -}',
+    'let s = "import Nope"',
+  ].join('\n')
+  const imports = extractImports(code, 'haskell')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['Data.Map', 1],
+    ['Foo.Bar', 2],
+    ['Data.Text', 3],
+    ['Control.Exception', 4],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

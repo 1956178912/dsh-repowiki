@@ -3,6 +3,25 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.203.0] - 2026-11-28
+
+- **Haskell 支持（第 25 种语言）**：`.hs`/`.lhs` 提取 `module` 声明
+  （范围至文件尾）、`data`/`newtype`（含 `data family`）、`type`/
+  `type family`、`class`、`pattern` 同义词、顶层值签名（`name ::`）与
+  定义（含中缀操作符定义——登记操作符本身而非首个操作数），签名与实现
+  合并为一个跨两者的符号。`--` 注释、可嵌套 `{- … -}` 块注释（含
+  pragma）、字符串与字符字面量屏蔽；缩进 `where`/`let` 体不登记。
+  `import [qualified] [safe] ["pkg"] Module` 按 GHC 模块路径在每个
+  `src/`/`app/`/`lib/`/`test/` 源根下解析（`.hs` 后 `.lhs`），外部包
+  不建边。`*.cabal` 清单提供包名、版本与跨行 `build-depends` 依赖及
+  Haskell 技术映射（嵌套清单上限 20）。Prompt 围栏与面板语言筛选识别
+  `haskell`。
+- **测试**：608 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖符号种类与
+  范围（module/文件尾、data/newtype/type/class、签名+定义合并、中缀
+  操作符、注释/字符串屏蔽）、import 变体（qualified/package/hiding）、
+  cabal 元数据与跨行 `build-depends`，以及 `src`/`app` 源根解析与外部包
+  排除的索引端到端夹具。
+
 ## [0.202.0] - 2026-11-28
 
 - **OCaml `and` 续接与原始字符串**：`let rec f … and g …` 现在逐个登记

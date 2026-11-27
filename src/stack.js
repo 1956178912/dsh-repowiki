@@ -805,6 +805,90 @@ function opamInfo(path, text) {
   return { name, version, dependencies }
 }
 
+/** Haskell / cabal 包名 → 技术展示名的映射（主流框架、库与工具链）。 */
+const HASKELL_TECH = {
+  base: 'base',
+  text: 'text',
+  bytestring: 'bytestring',
+  containers: 'containers',
+  'unordered-containers': 'unordered-containers',
+  vector: 'vector',
+  aeson: 'Aeson',
+  'http-client': 'http-client',
+  'http-conduit': 'http-conduit',
+  wai: 'WAI',
+  warp: 'Warp',
+  yesod: 'Yesod',
+  servant: 'Servant',
+  'servant-server': 'Servant',
+  persistent: 'Persistent',
+  'sqlite-simple': 'sqlite-simple',
+  'postgresql-simple': 'postgresql-simple',
+  hspec: 'Hspec',
+  tasty: 'Tasty',
+  QuickCheck: 'QuickCheck',
+  criterion: 'Criterion',
+  'optparse-applicative': 'optparse-applicative',
+  lens: 'Lens',
+  mtl: 'mtl',
+  transformers: 'transformers',
+  conduit: 'Conduit',
+  pipes: 'Pipes',
+  streaming: 'streaming',
+  async: 'async',
+  stm: 'stm',
+  network: 'network',
+  websockets: 'WebSockets',
+  megaparsec: 'Megaparsec',
+  attoparsec: 'attoparsec',
+  polysemy: 'Polysemy',
+  effectful: 'effectful',
+}
+
+/**
+ * 从 `*.cabal` 提取包名/版本与所有 `build-depends` 依赖。
+ * 依赖段可跨行（缩进续行），按逗号切分后取首个 token（剔除版本约束）；
+ * 顶层 `name:`/`version:` 字段优先。
+ * @param {string} text - cabal 文件内容。
+ * @returns {{name?:string, version?:string, dependencies:string[]}} 元数据。
+ */
+function cabalInfo(text) {
+  const name = /^name\s*:\s*([A-Za-z0-9_.-]+)/m.exec(text)?.[1]
+  const version = /^version\s*:\s*([A-Za-z0-9_.+-]+)/m.exec(text)?.[1]
+  const dependencies = []
+  let buffer = null
+  /**
+   * 结算当前 build-depends 片段。
+   * @returns {void}
+   */
+  const flush = () => {
+    if (buffer === null) return
+    for (const part of buffer.split(',')) {
+      const dep = part.trim().split(/\s+/)[0]
+      if (dep && /^[A-Za-z0-9-]+$/.test(dep) && !dependencies.includes(dep)) {
+        dependencies.push(dep)
+      }
+    }
+    buffer = null
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const start = /^\s*build-depends\s*:\s*(.*)$/.exec(line)
+    if (start) {
+      flush()
+      buffer = start[1]
+      continue
+    }
+    if (buffer === null) continue
+    if (/^\s+\S/.test(line) && !/^\s*[a-z][\w-]*\s*:/.test(line)) {
+      buffer += ` ${line.trim()}`
+    } else {
+      flush()
+    }
+  }
+  flush()
+  return { ...(name ? { name } : {}), ...(version ? { version } : {}), dependencies }
+}
+
 /**
  * 从 `.nimble` 清单读取项目名（文件名）、版本与 `requires` 依赖。
  * `requires` 行的引号字符串取首个 token 作为包名，剔除 `nim` 自身；
@@ -1047,6 +1131,18 @@ export function detectStack(manifests) {
       for (const dep of opam.dependencies) {
         const name = OCAML_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'opam', source: path })
+      }
+    } else if (path.endsWith('.cabal')) {
+      const cabal = cabalInfo(text)
+      // monorepo：根清单（顶层 *.cabal）管元数据，子包清单只累加依赖/技术
+      info.dependencyCounts.haskell = (info.dependencyCounts.haskell ?? 0) + cabal.dependencies.length
+      if (!path.includes('/')) {
+        if (!info.projectName && cabal.name) info.projectName = cabal.name
+        if (!info.projectVersion && cabal.version) info.projectVersion = cabal.version
+      }
+      for (const dep of cabal.dependencies) {
+        const name = HASKELL_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'cabal', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

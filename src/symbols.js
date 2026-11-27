@@ -3130,6 +3130,155 @@ function extractOcaml(lines) {
 }
 
 /**
+ * 扫描 Haskell 源码行：`--` 行注释、可嵌套 `{- … -}` 块注释（含
+ * `{-# … #-}` pragma）与字符串/字符字面量替换为空格，保留行数与列位。
+ * 类型变量（`'a`）与 Template Haskell 引号不进入字符状态。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行。
+ */
+export function haskellScan(lines) {
+  const out = []
+  let blockDepth = 0
+  let inString = false
+  let inChar = false
+  for (const raw of lines) {
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (blockDepth > 0) {
+        if (ch === '{' && next === '-') { blockDepth++; i++; masked += '  ' }
+        else if (ch === '-' && next === '}') { blockDepth--; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (inString) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { inString = false; masked += '"' }
+        else masked += ' '
+        continue
+      }
+      if (inChar) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === "'") { inChar = false; masked += "'" }
+        else masked += ' '
+        continue
+      }
+      if (ch === '{' && next === '-') { blockDepth = 1; i++; masked += '  '; continue }
+      if (ch === '-' && next === '-') { masked += ' '.repeat(raw.length - i); break }
+      if (ch === '"') { inString = true; masked += '"'; continue }
+      if (ch === "'" && (raw[i + 1] === '\\' || raw[i + 2] === "'")) {
+        inChar = true
+        masked += "'"
+        continue
+      }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 提取 Haskell 符号：`module`、`data`/`newtype`、`type`（含 `family`）、
+ * `class`、顶层值签名（`name ::`）与定义（`name … =`）、操作符定义。
+ * 只识别缩进 0 的声明；`where`/`let` 缩进体与实例方法不登记；
+ * `data instance`/`type instance`/`type role`/`deriving`/`infix` 跳过。
+ * 同一名称的签名与定义合并为一个符号（行号取签名，范围覆盖定义）。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractHaskell(lines) {
+  const masked = haskellScan(lines)
+  /** @type {Array<{name:string, kind:string, index:number, moduleDecl?:boolean}>} */
+  const decls = []
+  for (let i = 0; i < masked.length; i++) {
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    if (rawLine !== rawLine.trimStart()) continue
+
+    const moduleMatch = /^module\s+([A-Z][\w.']*)/.exec(line)
+    if (moduleMatch) {
+      decls.push({ name: moduleMatch[1], kind: 'class', index: i, moduleDecl: true })
+      continue
+    }
+    // data/newtype（含 GADT 与 data family；instance 是具体实例，跳过）
+    const dataMatch = /^(?:data|newtype)\s+(?:\([^)]*\)\s*=>\s*)?(?:(family)\s+)?(?:(instance)\s+)?([A-Z][\w']*)/.exec(line)
+    if (dataMatch && !dataMatch[2]) {
+      decls.push({ name: dataMatch[3], kind: 'class', index: i })
+      continue
+    }
+    // type family / type role / type instance
+    const typeMatch = /^type\s+(?:(family|role|instance)\s+)?([A-Z][\w']*)/.exec(line)
+    if (typeMatch && typeMatch[1] !== 'role' && typeMatch[1] !== 'instance') {
+      decls.push({ name: typeMatch[2], kind: 'class', index: i })
+      continue
+    }
+    const classMatch = /^class\s+(?:\([^)]*\)\s*=>\s*)?([A-Z][\w']*)/.exec(line)
+    if (classMatch) {
+      decls.push({ name: classMatch[1], kind: 'class', index: i })
+      continue
+    }
+    const patternMatch = /^pattern\s+([A-Z][\w']*)\s*(?:::|[^=]*=)/.exec(line)
+    if (patternMatch) {
+      decls.push({ name: patternMatch[1], kind: 'type', index: i })
+      continue
+    }
+    // 操作符签名/定义：(<+>) :: … 或 (<+>) a b = …
+    const opMatch = /^\(([!#$%&*+./<=>?@\\^|~:-]+)\)\s*(?:::|[^=]*=(?!=))/.exec(line)
+    if (opMatch) {
+      decls.push({ name: opMatch[1], kind: 'function', index: i })
+      continue
+    }
+    // 值签名优先于定义（类型里的 `=>` 不能被误判为定义）
+    const sigMatch = /^([a-z_][\w']*)\s*::/.exec(line)
+    if (sigMatch) {
+      decls.push({ name: sigMatch[1], kind: 'function', index: i })
+      continue
+    }
+    const defMatch = /^([a-z_][\w']*)\s*([^=]*)=(?!=)/.exec(line)
+    if (defMatch) {
+      const name = defMatch[1]
+      // `a <+> b = …` 是中缀操作符定义：登记操作符名，而不是首操作数
+      const op = /^\(?([!#$%&*+./<=>?@\\^|~:-]+)\)?\s/.exec(defMatch[2].trim())
+      if (op) {
+        decls.push({ name: op[1], kind: 'function', index: i })
+        continue
+      }
+      if (name !== 'type' && name !== 'data' && name !== 'newtype' && name !== 'class'
+        && name !== 'module' && name !== 'import' && name !== 'instance' && name !== 'deriving') {
+        decls.push({ name, kind: 'function', index: i })
+      }
+    }
+  }
+  // 先按声明计算范围，再按名称合并（签名 + 定义，范围取并集）
+  const lastNonEmpty = masked.length === 0 ? 0 : masked.reduce((last, row, index) => (
+    row.trim() === '' ? last : index), 0)
+  const byName = new Map()
+  for (let k = 0; k < decls.length; k++) {
+    const decl = decls[k]
+    const nextIndex = decls[k + 1]?.index ?? masked.length
+    let last = nextIndex - 1
+    while (last > decl.index && masked[last].trim() === '') last--
+    const endLine = decl.moduleDecl ? lastNonEmpty + 1 : last + 1
+    const existing = byName.get(decl.name)
+    if (existing) {
+      existing.endLine = Math.max(existing.endLine, endLine)
+    } else {
+      byName.set(decl.name, {
+        name: decl.name,
+        kind: decl.kind,
+        line: decl.index + 1,
+        endLine,
+        exported: !decl.name.startsWith('_'),
+      })
+    }
+  }
+  return [...byName.values()]
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3265,6 +3414,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'julia') return extractJulia(lines)
   if (lang === 'nim') return extractNim(lines)
   if (lang === 'ocaml') return extractOcaml(lines)
+  if (lang === 'haskell') return extractHaskell(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

@@ -1440,6 +1440,43 @@ test('OCaml：and 续接与原始字符串屏蔽（含跨行）', () => {
   assert.equal(byName.get('after').line, 9)
 })
 
+test('Haskell：module/data/newtype/type/class 与签名定义合并', () => {
+  const code = [
+    '-- data Hidden = Hidden',
+    '{- newtype Blocked = Blocked -}',
+    'module Demo.Core (foo, Bar) where',
+    'import Data.Text (Text)',
+    'data Bar = Bar { value :: Int }',
+    'newtype Wrap a = Wrap a',
+    'type Alias = Int',
+    'class Describe a where',
+    '  describe :: a -> String',
+    'foo :: Int -> Int',
+    'foo x = x + 1',
+    'helper y = y',
+    '(<+>) :: Int -> Int -> Int',
+    'a <+> b = a + b',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'haskell')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Demo.Core').kind, 'class')
+  assert.equal(byName.get('Demo.Core').endLine, 14, '模块覆盖整个文件')
+  assert.equal(byName.get('Bar').kind, 'class')
+  assert.equal(byName.get('Wrap').kind, 'class')
+  assert.equal(byName.get('Alias').kind, 'class')
+  assert.equal(byName.get('Describe').kind, 'class')
+  assert.ok(!byName.has('describe'), '类方法不登记')
+  assert.ok(!byName.has('Hidden') && !byName.has('Blocked'), '注释内声明不登记')
+  assert.equal(byName.get('foo').kind, 'function')
+  assert.equal(byName.get('foo').line, 10)
+  assert.equal(byName.get('foo').endLine, 11, '签名与定义合并范围')
+  assert.equal(byName.get('helper').line, 12)
+  assert.equal(byName.get('<+>').line, 13)
+  assert.equal(byName.get('<+>').endLine, 14)
+  assert.ok(!byName.has('a'), '中缀操作符定义不登记首操作数')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

@@ -8,7 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan, juliaScan, nimScan, ocamlScan } from './symbols.js'
+import { shellScan, juliaScan, nimScan, ocamlScan, haskellScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -1005,6 +1005,32 @@ function extractOcamlImports(lines) {
 }
 
 /**
+ * 提取 Haskell 的 `import` 引用：`import [qualified] [safe] Module`
+ * （含 package import `import "pkg" Module`、`as` 别名与 `hiding` 子句）；
+ * 注释/pragma 与字符串内的伪 import 由 `haskellScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractHaskellImports(lines) {
+  const result = []
+  const masked = haskellScan(lines)
+  const re = /^import\s+(?:qualified\s+)?(?:safe\s+)?(?:"[^"]+"\s+)?([A-Z][\w.']*)/
+  for (let i = 0; i < masked.length; i++) {
+    const code = masked[i].trim()
+    const m = re.exec(code)
+    if (!m) continue
+    result.push({
+      specifier: m[1],
+      line: i + 1,
+      kind: 'import',
+      relative: false,
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1112,6 +1138,7 @@ export function extractImports(code, lang) {
   if (lang === 'julia') return extractJuliaImports(lines)
   if (lang === 'nim') return extractNimImports(lines)
   if (lang === 'ocaml') return extractOcamlImports(lines)
+  if (lang === 'haskell') return extractHaskellImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -389,6 +389,29 @@ test('dune-project 与 .opam：项目名/版本与 depends 依赖', () => {
   assert.ok(info.technologies.every(t => t.ecosystem === 'opam'))
 })
 
+test('.cabal：项目名/版本与跨行 build-depends 依赖', () => {
+  const info = detectStack({
+    'demo.cabal': [
+      'name: demo',
+      'version: 0.3.0.0',
+      'library',
+      '  build-depends:',
+      '      base >=4.14 && <5',
+      '    , text',
+      '    , aeson ^>=2.1',
+      '  other-modules: Demo.Internal',
+      'executable demo-exe',
+      '  build-depends: base, optparse-applicative',
+    ].join('\n'),
+  })
+  assert.equal(info.projectName, 'demo')
+  assert.equal(info.projectVersion, '0.3.0.0')
+  assert.equal(info.dependencyCounts.haskell, 4)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Aeson') && names.includes('optparse-applicative'))
+  assert.ok(info.technologies.every(t => t.ecosystem === 'cabal'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

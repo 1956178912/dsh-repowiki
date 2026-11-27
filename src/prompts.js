@@ -171,6 +171,7 @@ function fenceLang(lang) {
     case 'julia': return 'julia'
     case 'nim': return 'nim'
     case 'ocaml': return 'ocaml'
+    case 'haskell': return 'haskell'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

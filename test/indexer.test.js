@@ -1524,6 +1524,31 @@ test('OCaml：模块名解析、.mli 优先 .ml 与 dune/opam 技术栈', async 
   assert.ok(!main.symbols.some(s => s.name === 'print_int'))
 })
 
+test('Haskell：模块路径解析、src/app 源根与 cabal 技术栈', async () => {
+  const dir = makeProject({
+    'demo.cabal': 'name: demo\nversion: 0.3.0.0\nlibrary\n  build-depends: base, aeson\n',
+    'src/Demo/Core.hs': 'module Demo.Core (run) where\n\nrun :: Int -> Int\nrun x = x + 1\n',
+    'src/Demo/Util.hs': 'module Demo.Util where\n\nimport Demo.Core\n\nutil = run 1\n',
+    'app/Main.hs': 'module Main where\n\nimport qualified Demo.Util as U\nimport Data.Text\n\nmain = print U.util\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { haskell: 3 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/Demo/Util.hs', 'src/Demo/Core.hs')?.line, 3)
+  assert.equal(edge('app/Main.hs', 'src/Demo/Util.hs')?.line, 3, 'app 入口经 src 源根解析')
+  assert.equal(doc.edges.filter(e => e.from === 'app/Main.hs').length, 1, 'Data.Text 不建边')
+
+  assert.equal(doc.stack.projectName, 'demo')
+  assert.equal(doc.stack.projectVersion, '0.3.0.0')
+  assert.equal(doc.stack.dependencyCounts.haskell, 2)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Aeson' && t.source === 'demo.cabal'))
+
+  const core = doc.files.find(f => f.path === 'src/Demo/Core.hs')
+  assert.ok(core.symbols.some(s => s.name === 'Demo.Core' && s.kind === 'class'))
+  assert.ok(core.symbols.some(s => s.name === 'run' && s.kind === 'function'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',
