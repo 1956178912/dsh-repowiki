@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.147.0] - 2026-11-27
+
+- **状态缺页计数**：`repowiki-status` 新增 `wiki.missing` 与
+  `wiki.missingPages`（最多 10 个 slug），与 `verify:wiki` 使用相同的
+  slug 比较；文本 `Wiki:` 行显示 `missing N`。至此门禁、面板与诊断工具
+  对“清单缺页”的口径一致。
+- **测试**：511 例在 LANG=en 与 LANG=zh 下全通过；新增删除已生成模块页后
+  断言缺页计数、slug 列表与文本的 status 用例。
+
 ## [0.146.0] - 2026-11-27
 
 - **页面结构与链接完整性**：`verify:wiki` 校验清单页面路径（必须在

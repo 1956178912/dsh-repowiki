@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.147.0] - 2026-11-27
+
+### Added
+
+- **Status missing-page count**: `repowiki-status` now reports `wiki.missing`
+  and `wiki.missingPages` (up to 10 slugs) for manifest pages whose file is
+  gone, using the same slug comparison as `verify:wiki`, and prints
+  `missing N` in its `Wiki:` line. This closes the last gap between the gate,
+  the panel and the diagnostic tool.
+
+### Tests
+
+- 511 cases pass (LANG=en and LANG=zh); a new status case deletes a generated
+  module page and asserts the missing count, slug list and text.
+
 ## [0.146.0] - 2026-11-27
 
 ### Added
