@@ -182,6 +182,23 @@ test('buildReferenceIndex：Python `from x import *` 作为星号再导出', () 
   ], '__init__ 自身的星号导入仍是潜在引用')
 })
 
+test('buildReferenceIndex：Rust `pub use` 再导出链', () => {
+  const edges = [
+    { from: 'src/lib.rs', to: 'src/core.rs', kind: 'reexport', line: 2, symbols: ['Foo'] },
+    { from: 'src/app.rs', to: 'src/lib.rs', kind: 'import', line: 1, symbols: ['Foo'] },
+  ]
+  const files = [
+    { path: 'src/lib.rs', lang: 'rust', symbols: [] },
+    { path: 'src/core.rs', lang: 'rust', symbols: [{ name: 'Foo', kind: 'class', exported: true }] },
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/core.rs').get('Foo'), [
+    { path: 'src/app.rs', line: 1 },
+    { path: 'src/lib.rs', line: 2 },
+  ], 'use crate::Foo 沿 lib.rs 的 pub use 归到 core.rs')
+})
+
 test('buildReferenceIndex：通配导入沿 barrel 链记为下游潜在引用', () => {
   const edges = [
     { from: 'src/barrel.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },

@@ -72,9 +72,10 @@ export function buildReexportMaps(edges = [], files = []) {
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.from === edge.to) continue
-    const esReexport = edge.kind === 'export-from'
-    const pythonBarrel = !esReexport && pythonFiles.has(edge.from)
-    if (!esReexport && !pythonBarrel) continue
+    // 显式再导出：JS `export-from` 与 Rust `pub use`（kind reexport）
+    const explicitReexport = edge.kind === 'export-from' || edge.kind === 'reexport'
+    const pythonBarrel = !explicitReexport && pythonFiles.has(edge.from)
+    if (!explicitReexport && !pythonBarrel) continue
     const names = (Array.isArray(edge.symbols) ? edge.symbols : [])
       .filter(name => typeof name === 'string' && name.length > 0)
     if (names.length === 0) continue

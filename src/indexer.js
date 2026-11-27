@@ -2667,6 +2667,53 @@ function rustCrateEntry(dir, indexed) {
 }
 
 /**
+ * 在给定源码根目录下找 crate 入口 `lib.rs`/`main.rs`。
+ * @param {string} root - crate 源码根目录（如 `src` 或 `.`）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 入口文件。
+ */
+function rustRootEntry(root, indexed) {
+  const prefix = root === '.' ? '' : `${root}/`
+  for (const candidate of [`${prefix}lib.rs`, `${prefix}main.rs`]) {
+    const normalized = path.posix.normalize(candidate)
+    if (indexed.has(normalized)) return normalized
+  }
+  return null
+}
+
+/**
+ * 建立 crate 入口文件的导出名字集合：入口自身公开符号 + `pub use`
+ * 再导出名。用于 `use crate::Foo` 在模块路径解析失败时精确回退到入口
+ * （不把笔误/外部路径误连到入口）。
+ * @param {Array<{path:string, symbols?:Array<{name?:string, exported?:boolean}>, imports?:Array<{kind?:string, imported?:string[]}>}>} files
+ *   已解析文件条目。
+ * @returns {Map<string, {names:Set<string>, star:boolean}>} 入口 → 导出名/星号。
+ */
+function buildRustRootExports(files) {
+  const out = new Map()
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string') continue
+    if (!/(?:^|\/)(?:lib|main)\.rs$/.test(file.path)) continue
+    const names = new Set()
+    let star = false
+    for (const symbol of file.symbols ?? []) {
+      if (!symbol || typeof symbol.name !== 'string' || symbol.name === '') continue
+      if (symbol.exported === false) continue
+      names.add(symbol.name)
+    }
+    for (const imp of file.imports ?? []) {
+      if (imp?.kind !== 'reexport') continue
+      for (const name of imp.imported ?? []) {
+        if (name === '*') star = true
+        else if (typeof name === 'string' && name) names.add(name)
+      }
+    }
+    out.set(file.path, { names, star })
+  }
+  return out
+}
+
+/**
  * 解析 Rust use：crate 从源码根目录、self/super 从当前模块目录；
  * 其它前缀若命中 workspace crate 名，从该 crate 的 `src/` 解析子模块并
  * 回退到 crate 入口；否则按 2015 风格从 crate 根尝试（失败即忽略，
@@ -2676,15 +2723,24 @@ function rustCrateEntry(dir, indexed) {
  * @param {Set<string>} indexed - 已索引文件集合。
  * @param {string[]} crateRoots - crate 源码根目录（长优先）。
  * @param {Map<string,string>} crates - crate 名 → crate 根目录。
+ * @param {Map<string, {names:Set<string>, star:boolean}>} [rootExports] - crate
+ *   入口导出名，用于 `use crate::Foo` 的精确入口回退。
  * @returns {string|null} 命中文件。
  */
-function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
+function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates, rootExports = new Map()) {
   let segments = specifier.split('::').filter(Boolean)
   if (segments.length === 0) return null
   if (segments[0] === 'crate') {
     const root = crateRoots.find(r => r === '.' || fromRel.startsWith(r + '/'))
     if (!root) return null
-    return tryRustPath(root, segments.slice(1), indexed)
+    const found = tryRustPath(root, segments.slice(1), indexed)
+    if (found) return found
+    // 路径未落到文件：可能是入口再导出（use crate::Foo / crate::prelude::Foo）
+    const entry = rustRootEntry(root, indexed)
+    if (!entry) return null
+    const exported = rootExports.get(entry)
+    const leaf = segments[segments.length - 1]
+    return exported && (exported.star || exported.names.has(leaf)) ? entry : null
   }
   if (segments[0] === 'self' || segments[0] === 'super') {
     let dir = rustModuleDir(fromRel)
@@ -2748,7 +2804,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'go') return resolveGoSpecifier(imp.specifier, ctx.goModules, ctx.goDirs)
   if (lang === 'rust') {
     if (imp.kind === 'mod') return resolveRustMod(rustModuleDir(fromRel), imp.specifier, ctx.indexed)
-    return imp.relative ? resolveRustUse(fromRel, imp.specifier, ctx.indexed, ctx.rustRoots, ctx.rustCrates) : null
+    return imp.relative ? resolveRustUse(fromRel, imp.specifier, ctx.indexed, ctx.rustRoots, ctx.rustCrates, ctx.rustRootExports) : null
   }
   if (lang === 'csharp') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.csharp)
   if (lang === 'kotlin') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.kotlin)
@@ -3131,6 +3187,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     goModules: goModules(manifestTexts),
     rustRoots: buildRustCrateRoots(indexed),
     rustCrates: buildRustCrates(manifestTexts),
+    rustRootExports: buildRustRootExports(files),
     swiftTargets: buildSwiftTargets(indexed, parseSwiftTargetPaths(manifestTexts['Package.swift'])),
     jsAliases,
     workspacePackages: buildWorkspacePackages(manifestTexts),

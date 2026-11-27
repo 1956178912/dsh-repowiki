@@ -209,6 +209,22 @@ test('Rust：self/super 相对模块、无 crate 根降级', async () => {
   assert.equal(doc.edges.filter(e => e.from === 'standalone.rs').length, 0, 'crate 根之外与未知本地路径不建边')
 })
 
+test('Rust：crate 入口再导出回退只对已导出名生效', async () => {
+  const dir = makeProject({
+    'Cargo.toml': '[package]\nname = "demo"\nversion = "0.1.0"\n',
+    'src/lib.rs': 'pub mod core;\npub use crate::core::Foo;\n',
+    'src/core.rs': 'pub struct Foo;\n',
+    'src/app.rs': 'use crate::Foo;\nuse crate::Missing;\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const appEdges = doc.edges.filter(edge => edge.from === 'src/app.rs')
+  assert.deepEqual(appEdges.map(edge => [edge.line, edge.to, edge.symbols]), [
+    [1, 'src/lib.rs', ['Foo']],
+  ], '入口导出 Foo → 回退 lib.rs；Missing 不产生猜测边')
+  const reexport = doc.edges.find(edge => edge.from === 'src/lib.rs' && edge.kind === 'reexport')
+  assert.deepEqual([reexport.to, reexport.symbols], ['src/core.rs', ['Foo']], 'pub use 保留再导出形态')
+})
+
 test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () => {
   const dir = makeProject({
     'composer.json': JSON.stringify({

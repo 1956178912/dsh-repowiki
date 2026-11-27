@@ -324,33 +324,36 @@ function extractRustImports(lines) {
       continue
     }
     // use path::to::Item; / pub use path::{A, B};
-    const um = /^(?:pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(trimmed)
+    const um = /^(?<pub>pub(?:\([^)]*\))?\s+)?use\s+(?<path>[^;]+);/.exec(trimmed)
     if (!um) continue
+    // `pub use` 是显式再导出（引用/使用点/影响面可沿链归到定义文件）
+    const kind = um.groups.pub ? 'reexport' : 'import'
     const raw = um.groups.path.trim()
     const braceAt = raw.indexOf('{')
     if (braceAt === -1) {
       const [rawPath, alias] = raw.split(/\s+as\s+/)
-      const specifier = rawPath.trim()
+      let specifier = rawPath.trim()
       if (!specifier) continue
+      // `pub use crate::core::*;`：通配符不进入路径，符号记为 `*`
+      const star = specifier.endsWith('::*')
+      if (star) specifier = specifier.slice(0, -3)
       const leaf = (alias ?? specifier.split('::').pop() ?? '').trim()
-      result.push({
-        specifier,
-        line: i + 1,
-        kind: 'import',
-        relative: true,
-        imported: /^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super' ? [leaf] : [],
-      })
+      const imported = star
+        ? ['*']
+        : (/^[A-Za-z_]\w*$/.test(leaf) && leaf !== 'self' && leaf !== 'super' ? [leaf] : [])
+      result.push({ specifier, line: i + 1, kind, relative: true, imported })
       continue
     }
     const prefix = raw.slice(0, braceAt).replace(/::$/, '').trim()
     const body = raw.slice(braceAt + 1, raw.lastIndexOf('}'))
     for (const leaf of expandRustUse(prefix, body)) {
+      const star = leaf.name === '*'
       result.push({
-        specifier: leaf.path,
+        specifier: star ? leaf.path.replace(/::\*$/, '') : leaf.path,
         line: i + 1,
-        kind: 'import',
+        kind,
         relative: true,
-        imported: /^[A-Za-z_]\w*$/.test(leaf.name) ? [leaf.name] : [],
+        imported: star ? ['*'] : (/^[A-Za-z_]\w*$/.test(leaf.name) ? [leaf.name] : []),
       })
     }
   }

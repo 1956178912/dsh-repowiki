@@ -862,6 +862,29 @@ test('repowiki-cards execute：Python 包 __init__ barrel 的引用与使用点'
   assert.equal(out.symbolUsages[0].filesScanned, 3)
 })
 
+test('repowiki-cards execute：Rust pub use 再导出链的引用与使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-rs-barrel-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "demo"\nversion = "0.1.0"\n')
+  nodefs.writeFileSync(path.join(dir, 'src/lib.rs'), 'pub mod core;\npub use crate::core::Foo;\n')
+  nodefs.writeFileSync(path.join(dir, 'src/core.rs'), 'pub struct Foo;\n')
+  nodefs.writeFileSync(path.join(dir, 'src/app.rs'), 'use crate::Foo;\nfn make() -> Foo { Foo }\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'Foo', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'src/core.rs',
+    symbol: 'Foo',
+    referencedBy: [{ path: 'src/app.rs', line: 1 }, { path: 'src/lib.rs', line: 2 }],
+  }], 'use crate::Foo 沿 lib.rs 的 pub use 归到 core.rs')
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'src/app.rs', line: 2, text: 'fn make() -> Foo { Foo }' },
+  ])
+  assert.equal(out.symbolUsages[0].filesScanned, 3)
+})
+
 test('repowiki-cards execute：命名空间导入作为潜在引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ns-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')

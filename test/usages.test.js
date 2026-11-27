@@ -205,6 +205,22 @@ test('usages：usageImporters 识别 Python 包 __init__ barrel', () => {
   ])
 })
 
+test('usages：usageImporters 识别 Rust pub use 再导出', () => {
+  const edges = [
+    { from: 'src/lib.rs', to: 'src/core.rs', kind: 'reexport', line: 2, symbols: ['Foo'] },
+    { from: 'src/app.rs', to: 'src/lib.rs', kind: 'import', line: 1, symbols: ['Foo'] },
+  ]
+  const files = [
+    { path: 'src/lib.rs', lang: 'rust', symbols: [] },
+    { path: 'src/core.rs', lang: 'rust', symbols: [{ name: 'Foo', kind: 'class', exported: true }] },
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'src/core.rs', name: 'Foo' }, files), [
+    { path: 'src/app.rs', importLines: [1] },
+    { path: 'src/lib.rs', importLines: [2] },
+  ])
+})
+
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {
   const selected = selectUsageFiles([{ path: 'b.ts' }, { path: 'a.ts' }, { path: 'b.ts' }], 1)
   assert.deepEqual(selected, { scanned: ['a.ts'], skipped: 1 })

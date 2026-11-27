@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.253.0] - 2026-11-28
+
+- **Rust `pub use` 再导出**：`pub use`（含 `pub use …::*`）记为
+  `reexport` 边，引用、词法使用点与符号影响面可沿 `use crate::Foo` 经
+  crate 入口归到真实定义模块。
+- **精确入口回退**：`crate::` 模块路径未落到文件时，仅当入口
+  `lib.rs`/`main.rs` 公开定义或再导出该名才回退入口；笔误与外部路径
+  不建边。解析器 v11 重新解析缓存导入。
+- **测试**：794 例通过（LANG=en）；新增 Rust `pub use` 提取、星号再
+  导出、入口回退、引用/使用点与真实索引 cards 集成覆盖。
+
 ## [0.252.0] - 2026-11-28
 
 - **Python 包 barrel**：`pkg/__init__.py` 的具名 `from .core import parse`

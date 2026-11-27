@@ -149,6 +149,23 @@ test('Rust：mod 声明、crate/self/super use 与分组 use', () => {
   assert.ok(!bySpec.has('not::real'), '注释不提取')
 })
 
+test('Rust：pub use 标记为再导出，星号与分组星号保留', () => {
+  const code = [
+    'pub use crate::core::Foo;',
+    'use crate::core::Bar;',
+    'pub use crate::core::*;',
+    'pub use crate::core::{Baz, *};',
+  ].join('\n')
+  const refs = extractImports(code, 'rust')
+  assert.equal(refs.find(ref => ref.specifier === 'crate::core::Foo').kind, 'reexport')
+  assert.equal(refs.find(ref => ref.specifier === 'crate::core::Bar').kind, 'import')
+  const stars = refs.filter(ref => ref.imported.includes('*'))
+  assert.deepEqual(stars.map(ref => [ref.specifier, ref.kind]), [
+    ['crate::core', 'reexport'],
+    ['crate::core', 'reexport'],
+  ], '单条与分组星号都去掉 * 后按目标模块解析')
+})
+
 test('Java：普通/静态/通配符 import', () => {
   const code = [
     'package com.acme;',

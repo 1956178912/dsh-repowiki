@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.253.0] - 2026-11-28
+
+### Added
+
+- **Rust `pub use` re-exports**: `pub use` (including `pub use …::*`) is now
+  recorded as a `reexport` edge, so references, lexical usages and symbol
+  impact follow `use crate::Foo` through the crate entry to the defining
+  module.
+- **Precise crate-entry fallback**: when a `crate::` module path does not
+  resolve to a file, the resolver falls back to `lib.rs`/`main.rs` only when
+  that entry publicly defines or re-exports the requested name; typos and
+  external paths stay edge-free. Parser v11 re-parses cached imports.
+
+### Tests
+
+- 794 cases pass (LANG=en); new coverage for Rust `pub use` extraction,
+  star re-exports, entry fallback, references/usages and a real-index cards
+  integration.
+
 ## [0.252.0] - 2026-11-28
 
 ### Added
