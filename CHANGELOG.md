@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.240.0] - 2026-11-28
+
+### Added
+
+- **CocoaPods/Carthage metadata**: root and nested `Podfile` (`pod 'Name',
+  '~> 1.0'`, comments, local `:path` pods, sub-specs like `Firebase/Core`) and
+  `Cartfile`/`Cartfile.private` (`github`/`git`/`binary` lines) now feed
+  `dependencyCounts.cocoapods` and `dependencyCounts.carthage` plus a small
+  verified technology map (AFNetworking, Alamofire, Firebase, SnapKit,
+  ReactiveCocoa, Quick, …). Nested manifests are bounded (20 each) and read
+  alongside the root ones.
+- **XCTest-aware affected tests**: `*Tests.m`/`*Tests.mm`/`*Spec.m` are now
+  recognized as test files, so `repowiki-impact` routes Objective-C test
+  targets into `affectedTests` and the verification recommendations instead of
+  listing them as ordinary source.
+
+### Tests
+
+- 763 cases pass (LANG=en and LANG=zh); new coverage for Podfile parsing
+  (versions, sub-specs, local paths, comments), Cartfile parsing
+  (github/git/binary), nested manifest aggregation and Objective-C test-path
+  recognition.
+
 ## [0.239.0] - 2026-11-28
 
 ### Added

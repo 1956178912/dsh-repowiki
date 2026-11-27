@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.240.0] - 2026-11-28
+
+- **CocoaPods/Carthage 元数据**：根与嵌套 `Podfile`（`pod 'Name', '~> 1.0'`、
+  注释、本地 `:path` pod、`Firebase/Core` 子规格）与 `Cartfile`/
+  `Cartfile.private`（`github`/`git`/`binary`）计入
+  `dependencyCounts.cocoapods` / `dependencyCounts.carthage`，并按经过核对
+  的小型映射识别技术（AFNetworking、Alamofire、Firebase、SnapKit、
+  ReactiveCocoa、Quick 等）。嵌套清单各自有 20 个上限，与根清单一起读取。
+- **XCTest 受影响测试**：`*Tests.m`/`*Tests.mm`/`*Spec.m` 纳入测试路径，
+  `repowiki-impact` 会把 Objective-C 测试目标列入 `affectedTests` 与验证
+  建议，而不是当成普通源码。
+- **测试**：763 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 Podfile 解析
+  （版本、子规格、本地路径、注释）、Cartfile 解析（github/git/binary）、
+  嵌套清单聚合与 Objective-C 测试路径识别。
+
 ## [0.239.0] - 2026-11-28
 
 - **Objective-C 支持（第 42 种语言）**：`.m`/`.mm` 进入索引。

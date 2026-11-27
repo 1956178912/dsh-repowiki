@@ -2068,3 +2068,21 @@ test('Objective-C：.h 按内容改判、.m 的 MATLAB 识别与 #import 边', a
     ['App/Widget.m', 1],
   ], 'Objective-C 与 Objective-C++ 的 #import 都建边，框架头不建')
 })
+
+test('Podfile/Cartfile：根与嵌套清单计入 cocoapods/carthage 技术栈', async () => {
+  const dir = makeProject({
+    'Podfile': "target 'App' do\n  pod 'AFNetworking'\nend\n",
+    'ios/Podfile': "target 'Lib' do\n  pod 'SnapKit'\n  pod 'Firebase/Core'\nend\n",
+    'Cartfile': 'github "Alamofire/Alamofire" ~> 5.8\n',
+    'ios/Cartfile.private': 'github "Quick/Quick" ~> 6.0\n',
+    'App/Widget.m': '@implementation Widget\n@end\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.equal(doc.stack.dependencyCounts.cocoapods, 3, '根 1 + 嵌套 2')
+  assert.equal(doc.stack.dependencyCounts.carthage, 2, '根 1 + 嵌套私有清单 1')
+  const techs = doc.stack.technologies.map(t => `${t.ecosystem}:${t.name}`)
+  assert.ok(techs.includes('cocoapods:AFNetworking'))
+  assert.ok(techs.includes('cocoapods:Firebase'))
+  assert.ok(techs.includes('cocoapods:SnapKit'))
+  assert.ok(techs.includes('carthage:Alamofire'))
+})

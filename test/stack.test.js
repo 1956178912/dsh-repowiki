@@ -504,3 +504,46 @@ test('CMake 嵌套子项目：根项目名优先、依赖计数累加、技术�
   assert.equal(info.technologies.filter(t => t.name === 'fmt').length, 1, '同名技术跨清单去重')
   assert.equal(info.technologies.find(t => t.name === 'Qt')?.source, 'plugins/plugin/CMakeLists.txt')
 })
+
+test('Podfile：pod 声明计数、版本与常见库识别（含子规格/本地路径/注释）', () => {
+  const podfile = [
+    '# 注释行不计数',
+    "platform :ios, '13.0'",
+    'use_frameworks!',
+    '',
+    "target 'App' do",
+    "  pod 'AFNetworking', '~> 4.0'",
+    '  pod "Firebase/Core", "~> 10.0"',
+    "  pod 'SnapKit'",
+    "  pod 'LocalPod', :path => '../LocalPod'",
+    "  # pod 'NotCounted'",
+    'end',
+  ].join('\n')
+  const info = detectStack({ Podfile: podfile })
+  assert.equal(info.dependencyCounts.cocoapods, 4)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('AFNetworking'))
+  assert.ok(names.includes('Firebase'), '子规格按首段归一')
+  assert.ok(names.includes('SnapKit'))
+  assert.equal(names.includes('NotCounted'), false)
+  assert.equal(info.technologies.find(t => t.name === 'AFNetworking').version, '~> 4.0')
+})
+
+test('Cartfile：github/git/binary 依赖计数与仓库名识别', () => {
+  const cartfile = [
+    '# 注释行不计数',
+    'github "Alamofire/Alamofire" ~> 5.8',
+    'github "reactivecocoa/ReactiveCocoa" "branch"',
+    'git "https://example.com/team/PrivateKit.git" == 1.2.3',
+    'binary "https://example.com/Binary.json"',
+    '',
+    'github "SnapKit/SnapKit" ~> 5.0',
+  ].join('\n')
+  const info = detectStack({ Cartfile: cartfile })
+  assert.equal(info.dependencyCounts.carthage, 5)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Alamofire'))
+  assert.ok(names.includes('ReactiveCocoa'))
+  assert.ok(names.includes('SnapKit'))
+  assert.equal(info.technologies.find(t => t.name === 'Alamofire').version, '5.8')
+})

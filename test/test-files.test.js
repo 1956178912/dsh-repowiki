@@ -19,6 +19,7 @@ test('test-files：常见测试路径命中', () => {
     'test/my_app/accounts_test.exs', 'apps/web/test/web/router_test.exs',
     'src/demo_SUITE.erl', 'src/demo_tests.erl', 'R/test-api.R', 'runtests.jl',
     't/basic.t', 't/lib/Helper.pm', 'src/FooTest.pas', 'src/Foo.Tests.pas',
+    'AppTests/LoginTests.m', 'src/FooTests.mm', 'src/FooSpec.m',
   ]
   for (const path of hits) assert.equal(isTestPath(path), true, path)
 })
@@ -28,6 +29,7 @@ test('test-files：非测试路径不误判', () => {
     'src/latest.ts', 'src/contest.js', 'src/testing.ts', 'src/attestation.go',
     'src/testdata/a.go', 'src/tests-utils/a.ts', 'src/Testament.java',
     'src/suite.erl', 'R/api.R', 'src/core.jl', 'lib/My/App.pm',
+    'src/Contest.m', 'src/Manifest.mm',
     'README.md', '', null, undefined,
   ]
   for (const path of misses) assert.equal(isTestPath(path), false, String(path))

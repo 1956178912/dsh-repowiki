@@ -143,6 +143,23 @@ const SWIFT_TECH = {
   'firebase-ios-sdk': 'Firebase', kingfisher: 'Kingfisher', 'lottie-ios': 'Lottie',
 }
 
+/**
+ * CocoaPods pod 名 / Carthage 仓库名（小写）→ 技术展示名。
+ * 子规格（`Firebase/Core`）按首段归一；未命中映射只计入依赖计数。
+ */
+const IOS_TECH = {
+  afnetworking: 'AFNetworking', alamofire: 'Alamofire', sdwebimage: 'SDWebImage',
+  firebase: 'Firebase', firebasecore: 'Firebase', firebaseauth: 'Firebase',
+  reactivecocoa: 'ReactiveCocoa', reactiveswift: 'ReactiveSwift', rxswift: 'RxSwift',
+  masonry: 'Masonry', snapkit: 'SnapKit', kingfisher: 'Kingfisher',
+  mbprogresshud: 'MBProgressHUD', svprogresshud: 'SVProgressHUD',
+  iqkeyboardmanager: 'IQKeyboardManager', swiftyjson: 'SwiftyJSON',
+  objectmapper: 'ObjectMapper', realm: 'Realm', realmswift: 'Realm',
+  fmdb: 'FMDB', iglistkit: 'IGListKit', lottie: 'Lottie', 'lottie-ios': 'Lottie',
+  texture: 'Texture', moya: 'Moya', quick: 'Quick', nimble: 'Nimble',
+  starscream: 'Starscream', svgkit: 'SVGKit', result: 'Result', promisekit: 'PromiseKit',
+}
+
 /** pubspec.yaml 的包名 → 技术展示名。 */
 const PUB_TECH = {
   flutter: 'Flutter', flutter_test: 'Flutter Test', cupertino_icons: 'Cupertino Icons',
@@ -467,6 +484,57 @@ function swiftPackageDeps(text) {
     if (repo) deps.push({ name: repo.toLowerCase() })
   }
   return deps
+}
+
+/**
+ * 从 Podfile 提取 `pod 'Name', '~> 1.0'` 声明。
+ *
+ * 只识别语句级 `pod` 行（含缩进的 target 块内声明）；注释行跳过，本地
+ * `:path`/`:git` 依赖同样计入总数但不带版本。子规格保留原名（由技术
+ * 映射按首段归一）。
+ * @param {string} text - Podfile 内容。
+ * @returns {{name:string, version?:string}[]} pod 列表。
+ */
+function podfileDeps(text) {
+  const deps = []
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim()
+    const m = /^pod\s+['"](?<name>[^'"]+)['"](?<rest>.*)$/.exec(line)
+    if (!m) continue
+    const versions = [...m.groups.rest.matchAll(/['"]([^'"]+)['"]/g)].map(v => v[1])
+    const version = versions.find(v => /^[~<>=!^]*\s*\d/.test(v))
+    deps.push({ name: m.groups.name, ...(version ? { version } : {}) })
+  }
+  return deps
+}
+
+/**
+ * 从 Cartfile/Cartfile.private 提取 `github "owner/repo" ~> 1.0`、
+ * `git "url"` 与 `binary "url"` 依赖；仓库名取 URL 末段（去 `.git`）。
+ * @param {string} text - Cartfile 内容。
+ * @returns {{name:string, version?:string}[]} 仓库名与可选版本。
+ */
+function cartfileDeps(text) {
+  const deps = []
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim()
+    const m = /^(?:github|git|binary)\s+"(?<url>[^"]+)"(?<rest>.*)$/.exec(line)
+    if (!m) continue
+    const repo = m.groups.url.replace(/\.git$/, '').split('/').filter(Boolean).pop()
+    if (!repo) continue
+    const version = /(?:~>|==|>=)\s*([\d.]+)/.exec(m.groups.rest)?.[1]
+    deps.push({ name: repo, ...(version ? { version } : {}) })
+  }
+  return deps
+}
+
+/**
+ * 把 iOS 依赖名归一为技术展示名（小写、子规格取首段）。
+ * @param {string} name - pod/仓库名。
+ * @returns {string|undefined} 技术展示名。
+ */
+function iosTechName(name) {
+  return IOS_TECH[String(name).toLowerCase().split('/')[0]]
 }
 
 /**
@@ -1209,6 +1277,35 @@ export function detectStack(manifests) {
       for (const dep of deps) {
         const name = SWIFT_TECH[dep.name]
         if (name) info.technologies.push({ name, ecosystem: 'swiftpm', source: path })
+      }
+    } else if (path === 'Podfile' || path.endsWith('/Podfile')) {
+      const deps = podfileDeps(text)
+      info.dependencyCounts.cocoapods = (info.dependencyCounts.cocoapods ?? 0) + deps.length
+      for (const dep of deps) {
+        const name = iosTechName(dep.name)
+        if (name) {
+          info.technologies.push({
+            name,
+            ecosystem: 'cocoapods',
+            source: path,
+            ...(dep.version ? { version: dep.version } : {}),
+          })
+        }
+      }
+    } else if (path === 'Cartfile' || path === 'Cartfile.private'
+      || path.endsWith('/Cartfile') || path.endsWith('/Cartfile.private')) {
+      const deps = cartfileDeps(text)
+      info.dependencyCounts.carthage = (info.dependencyCounts.carthage ?? 0) + deps.length
+      for (const dep of deps) {
+        const name = iosTechName(dep.name)
+        if (name) {
+          info.technologies.push({
+            name,
+            ecosystem: 'carthage',
+            source: path,
+            ...(dep.version ? { version: dep.version } : {}),
+          })
+        }
       }
     } else if (path === 'build.sbt') {
       const deps = sbtDependencies(text)

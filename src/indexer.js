@@ -140,6 +140,18 @@ const MAX_PUBSPEC_MANIFESTS = 30
 const MAX_DUNE_PROJECTS = 20
 
 /**
+ * 单次索引最多读取的 `Podfile` 数（iOS 多 target/多工程仓库）。
+ * 根清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_PODFILE_MANIFESTS = 20
+
+/**
+ * 单次索引最多读取的 `Cartfile`/`Cartfile.private` 数。
+ * 根清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_CARTFILE_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -161,7 +173,7 @@ function isConfigManifest(rel, name) {
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
     || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
     || name.endsWith('.nimble') || name.endsWith('.opam') || name.endsWith('.cabal')
-    || name === 'Cargo.toml'
+    || name === 'Cargo.toml' || name === 'Podfile' || name === 'Cartfile' || name === 'Cartfile.private'
 }
 
 /**
@@ -2944,6 +2956,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let cargoManifestsRead = 0
   let pubspecManifestsRead = 0
   let duneProjectsRead = 0
+  let podfileManifestsRead = 0
+  let cartfileManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -3012,6 +3026,16 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedDune) {
       if (duneProjectsRead >= MAX_DUNE_PROJECTS) continue
       duneProjectsRead++
+    }
+    const nestedPodfile = !MANIFEST_FILES[rel] && baseName === 'Podfile'
+    if (nestedPodfile) {
+      if (podfileManifestsRead >= MAX_PODFILE_MANIFESTS) continue
+      podfileManifestsRead++
+    }
+    const nestedCartfile = !MANIFEST_FILES[rel] && (baseName === 'Cartfile' || baseName === 'Cartfile.private')
+    if (nestedCartfile) {
+      if (cartfileManifestsRead >= MAX_CARTFILE_MANIFESTS) continue
+      cartfileManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }
