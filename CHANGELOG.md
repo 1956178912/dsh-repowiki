@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.39.0] - 2026-11-27
+
+### Changed
+
+- **Empty states use the host's empty pattern** (practices.md: "Copy spacing,
+  font sizes and colors from the host pages"): aligned to
+  `dsh-client-ui-schedule/src/client/TaskManagerPage.module.css` — empty
+  containers now have `padding: 48px 20px`, centered text, and the host's
+  tertiary color at 14px/1.6 line height. This replaces the former minimal
+  `p` with muted color. (`--dsw-alias-label-tertiary` already from the
+  palette.)
+
+### Changed
+
+- **Card-row & overview stats adopt host's label-tertiary** (practices.md):
+  stats now use 11.5px font, 16px line height, color
+  `--dsw-alias-label-tertiary` instead of 12px/secondary. Also updated the
+  card-row primary text weight from 600 to 500 and its gap from 10 to 16 to
+  match the host's row pattern.
+
 ## [0.38.0] - 2026-11-27
 
 ### Changed

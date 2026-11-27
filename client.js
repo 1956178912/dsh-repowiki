@@ -1081,10 +1081,10 @@ window.__ModuleLoader__.load({
      */
     function OverviewPanel({ rows, status, t, tt, onOpen }) {
       if (status === 'loading' || status === 'idle') {
-        return h('p', { role: 'status', style: { ...mutedStyle() } }, t('loading'))
+        return h('p', { role: 'status', style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('loading'))
       }
       if (rows.length === 0) {
-        return h('p', { role: 'status', style: { ...mutedStyle() } }, t('empty'))
+        return h('p', { role: 'status', style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('empty'))
       }
       /** 行内状态文案（对齐单库视图的状态词汇）。 */
       const statusText = (row) => {
@@ -1129,8 +1129,8 @@ window.__ModuleLoader__.load({
           }, row.path),
           row.status === 'ready'
             ? h('span', {
-                style: { display: 'flex', gap: 10, flex: 'none', flexWrap: 'wrap',
-                  fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+                style: { display: 'flex', gap: 16, flex: 'none', flexWrap: 'wrap',
+                  fontSize: 11.5, lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
               },
               h('span', null, tt('statFiles', { n: row.files })),
               h('span', null, tt('statSymbols', { n: row.symbols })),
@@ -1141,7 +1141,7 @@ window.__ModuleLoader__.load({
                 : h('span', null, t('never')),
             )
             : h('span', {
-                style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+                style: { fontSize: 11.5, lineHeight: 16, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
               }, statusText(row)),
         )),
       )
@@ -1248,21 +1248,21 @@ window.__ModuleLoader__.load({
         type: 'button', onClick: onOpen,
         style: {
           ...cardChipStyle(),
-          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+          display: 'flex', alignItems: 'center', gap: 16, width: '100%',
           marginBottom: 8, padding: '8px 14px', textAlign: 'left',
         },
         'aria-label': card ? card.title : `${row.path} (${t('pending')})`,
       },
         statusDot(Boolean(card)),
         h('span', {
-          style: { flex: 1, fontSize: 13, overflow: 'hidden',
+          style: { flex: 1, fontSize: 13.5, fontWeight: 500, overflow: 'hidden',
             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             color: 'var(--dsw-alias-label-primary, #111827)' },
         }, card ? `${card.title} · ${row.path}` : row.path),
-        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b7280)', flex: 'none' } },
+        h('span', { style: { fontSize: 11.5, lineHeight: 16, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' } },
           tt('detailSymbols', { n: row.symbols })),
         h('span', {
-          style: { fontSize: 12, flex: 'none', color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+          style: { fontSize: 11.5, lineHeight: 16, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
         }, card ? card.generatedAt.slice(0, 10) : t('pending')),
       )
     }
@@ -1348,7 +1348,7 @@ window.__ModuleLoader__.load({
         )
       }
       if (entries.length === 0) {
-        return h('p', { style: { ...mutedStyle() } }, t('wikiEmpty'))
+        return h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('wikiEmpty'))
       }
       return h('div', null,
         ...entries.map((entry) => h('button', {
@@ -1400,7 +1400,7 @@ window.__ModuleLoader__.load({
         )
       }
       if (entries.length === 0) {
-        return h('p', { style: { ...mutedStyle() } }, t('memoryEmpty'))
+        return h('p', { style: { padding: '48px 20px', textAlign: 'center', color: 'var(--dsw-alias-label-tertiary, #6b7280)', fontSize: '14px', lineHeight: '1.6' } }, t('memoryEmpty'))
       }
       return h('div', null,
         ...entries.map((entry) => h('button', {
