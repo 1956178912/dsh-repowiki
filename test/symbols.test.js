@@ -1466,7 +1466,8 @@ test('Haskell：module/data/newtype/type/class 与签名定义合并', () => {
   assert.equal(byName.get('Wrap').kind, 'class')
   assert.equal(byName.get('Alias').kind, 'class')
   assert.equal(byName.get('Describe').kind, 'class')
-  assert.ok(!byName.has('describe'), '类方法不登记')
+  assert.equal(byName.get('describe').kind, 'method')
+  assert.equal(byName.get('describe').parent, 'Describe')
   assert.ok(!byName.has('Hidden') && !byName.has('Blocked'), '注释内声明不登记')
   assert.equal(byName.get('foo').kind, 'function')
   assert.equal(byName.get('foo').line, 10)
@@ -1475,6 +1476,28 @@ test('Haskell：module/data/newtype/type/class 与签名定义合并', () => {
   assert.equal(byName.get('<+>').line, 13)
   assert.equal(byName.get('<+>').endLine, 14)
   assert.ok(!byName.has('a'), '中缀操作符定义不登记首操作数')
+})
+
+test('Haskell：类方法与多行签名', () => {
+  const code = [
+    'class Describe a where',
+    '  describe',
+    '    :: a -> String',
+    '  describe x = "x"',
+    'render',
+    '  :: Int -> String',
+    'render n = show n',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'haskell')
+  const describe = symbols.find(s => s.name === 'describe')
+  assert.equal(describe.kind, 'method')
+  assert.equal(describe.parent, 'Describe')
+  assert.equal(describe.line, 2)
+
+  const render = symbols.find(s => s.name === 'render')
+  assert.equal(render.kind, 'function')
+  assert.equal(render.line, 5)
+  assert.equal(render.endLine, 7)
 })
 
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {

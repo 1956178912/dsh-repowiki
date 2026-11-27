@@ -3180,17 +3180,60 @@ export function haskellScan(lines) {
 }
 
 /**
+ * 计算一行 Haskell 代码的缩进宽度（Tab 按 4 计）。
+ * @param {string} line - 源码行。
+ * @returns {number} 缩进宽度。
+ */
+function haskellIndentOf(line) {
+  let width = 0
+  for (const ch of line) {
+    if (ch === ' ') width++
+    else if (ch === '\t') width += 4
+    else break
+  }
+  return width
+}
+
+/**
+ * 查找下一个非空行索引。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} start - 起始索引（0-based，不含）。
+ * @returns {number} 非空行索引；不存在返回 -1。
+ */
+function nextNonEmptyLine(masked, start) {
+  for (let i = start; i < masked.length; i++) {
+    if (masked[i].trim() !== '') return i
+  }
+  return -1
+}
+
+/**
+ * 计算 Haskell 缩进块的结束索引：下一个缩进不大于声明缩进的非空行。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @param {number} indent - 声明行缩进。
+ * @returns {number} 块结束索引（0-based；无则文件长度）。
+ */
+function haskellBlockEnd(masked, startIdx, indent) {
+  for (let j = startIdx + 1; j < masked.length; j++) {
+    if (masked[j].trim() === '') continue
+    if (haskellIndentOf(masked[j]) <= indent) return j
+  }
+  return masked.length
+}
+
+/**
  * 提取 Haskell 符号：`module`、`data`/`newtype`、`type`（含 `family`）、
- * `class`、顶层值签名（`name ::`）与定义（`name … =`）、操作符定义。
- * 只识别缩进 0 的声明；`where`/`let` 缩进体与实例方法不登记；
- * `data instance`/`type instance`/`type role`/`deriving`/`infix` 跳过。
+ * `class` 与其类方法签名、`pattern`、顶层值签名（`name ::`，含名称与
+ * `::` 分行的多行签名）与定义（含中缀操作符定义）。只识别缩进 0 的
+ * 顶层声明；`where`/`let` 缩进体与实例方法不登记。
  * 同一名称的签名与定义合并为一个符号（行号取签名，范围覆盖定义）。
  * @param {string[]} lines - 代码行。
  * @returns {SymbolInfo[]} 符号列表。
  */
 function extractHaskell(lines) {
   const masked = haskellScan(lines)
-  /** @type {Array<{name:string, kind:string, index:number, moduleDecl?:boolean}>} */
+  /** @type {Array<{name:string, kind:string, index:number, moduleDecl?:boolean, parent?:string}>} */
   const decls = []
   for (let i = 0; i < masked.length; i++) {
     const rawLine = masked[i]
@@ -3218,6 +3261,29 @@ function extractHaskell(lines) {
     const classMatch = /^class\s+(?:\([^)]*\)\s*=>\s*)?([A-Z][\w']*)/.exec(line)
     if (classMatch) {
       decls.push({ name: classMatch[1], kind: 'class', index: i })
+      // 类方法签名：class 缩进块内、与方法体同层（第一层缩进）的签名行
+      const blockEnd = haskellBlockEnd(masked, i, 0)
+      let memberIndent = null
+      for (let j = i + 1; j < blockEnd; j++) {
+        if (masked[j].trim() === '') continue
+        if (memberIndent === null) memberIndent = haskellIndentOf(masked[j])
+        if (haskellIndentOf(masked[j]) !== memberIndent) continue
+        const memberCode = masked[j].trim()
+        const sig = /^([a-z_][\w']*)\s*::/.exec(memberCode)
+        const opSig = /^\(([!#$%&*+./<=>?@\\^|~:-]+)\)\s*::/.exec(memberCode)
+        if (sig || opSig) {
+          decls.push({ name: sig ? sig[1] : opSig[1], kind: 'method', index: j, parent: classMatch[1] })
+          continue
+        }
+        // 多行签名：名称单独一行，下一非空行以 `::` 开头
+        const bare = /^([a-z_][\w']*)$/.exec(memberCode)
+        if (bare) {
+          const next = nextNonEmptyLine(masked, j + 1)
+          if (next >= 0 && next < blockEnd && /^\s*::/.test(masked[next])) {
+            decls.push({ name: bare[1], kind: 'method', index: j, parent: classMatch[1] })
+          }
+        }
+      }
       continue
     }
     const patternMatch = /^pattern\s+([A-Z][\w']*)\s*(?:::|[^=]*=)/.exec(line)
@@ -3237,6 +3303,15 @@ function extractHaskell(lines) {
       decls.push({ name: sigMatch[1], kind: 'function', index: i })
       continue
     }
+    // 多行签名：`foo` 单独一行，下一非空行以 `::` 开头
+    const bareMatch = /^([a-z_][\w']*)$/.exec(line)
+    if (bareMatch) {
+      const next = nextNonEmptyLine(masked, i + 1)
+      if (next >= 0 && /^\s*::/.test(masked[next])) {
+        decls.push({ name: bareMatch[1], kind: 'function', index: i })
+      }
+      continue
+    }
     const defMatch = /^([a-z_][\w']*)\s*([^=]*)=(?!=)/.exec(line)
     if (defMatch) {
       const name = defMatch[1]
@@ -3252,30 +3327,32 @@ function extractHaskell(lines) {
       }
     }
   }
-  // 先按声明计算范围，再按名称合并（签名 + 定义，范围取并集）
+  // 先按声明计算范围，再按作用域+名称合并（签名 + 定义，范围取并集）
   const lastNonEmpty = masked.length === 0 ? 0 : masked.reduce((last, row, index) => (
     row.trim() === '' ? last : index), 0)
-  const byName = new Map()
+  const byKey = new Map()
   for (let k = 0; k < decls.length; k++) {
     const decl = decls[k]
     const nextIndex = decls[k + 1]?.index ?? masked.length
     let last = nextIndex - 1
     while (last > decl.index && masked[last].trim() === '') last--
     const endLine = decl.moduleDecl ? lastNonEmpty + 1 : last + 1
-    const existing = byName.get(decl.name)
+    const key = decl.parent ? `${decl.parent}:${decl.name}` : decl.name
+    const existing = byKey.get(key)
     if (existing) {
       existing.endLine = Math.max(existing.endLine, endLine)
     } else {
-      byName.set(decl.name, {
+      byKey.set(key, {
         name: decl.name,
         kind: decl.kind,
         line: decl.index + 1,
         endLine,
         exported: !decl.name.startsWith('_'),
+        ...(decl.parent ? { parent: decl.parent } : {}),
       })
     }
   }
-  return [...byName.values()]
+  return [...byKey.values()]
 }
 
 /**

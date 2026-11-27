@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.204.0] - 2026-11-28
+
+### Added
+
+- **Haskell class methods and multi-line signatures**: `class … where`
+  bodies now register method signatures at the first member indentation
+  with `parent` ownership (default method bodies and nested `where`
+  bindings stay unindexed), and both top-level and class-level signatures
+  may split the name and `::` across lines (`foo` on one line, `::` on the
+  next). Method keys are scoped by class, so a class method and a
+  top-level function with the same name no longer collapse into one
+  symbol. `INDEX_PARSER_VERSION` moves to 8 so existing indexes re-parse
+  Haskell files.
+
+### Tests
+
+- 609 cases pass (LANG=en and LANG=zh); a fixture pins class-method
+  ownership, multi-line class and top-level signatures, and definition
+  ranges.
+
 ## [0.203.0] - 2026-11-28
 
 ### Added
