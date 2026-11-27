@@ -1857,6 +1857,27 @@ test('Nix：import 相对路径、目录 default.nix 与外部搜索路径跳过
   assert.deepEqual(flakeEdges.map(e => [e.line, e.to]), [[3, 'default.nix']])
 })
 
+test('VB.NET：命名空间后缀解析与 Inherits 依赖', async () => {
+  const dir = makeProject({
+    'src/Demo/Core/Widget.vb': 'Namespace Demo.Core\n    Public Class Widget\n    End Class\nEnd Namespace\n',
+    'src/Demo/Base.vb': 'Namespace Demo\n    Public Class Base\n    End Class\nEnd Namespace\n',
+    'src/App.vb': [
+      'Imports Demo.Core.Widget',
+      'Public Class App',
+      '    Inherits Demo.Base',
+      'End Class',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { vbnet: 3 })
+
+  const edges = doc.edges.filter(e => e.from === 'src/App.vb')
+  assert.deepEqual(edges.map(e => [e.line, e.to]).sort(), [
+    [1, 'src/Demo/Core/Widget.vb'],
+    [3, 'src/Demo/Base.vb'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

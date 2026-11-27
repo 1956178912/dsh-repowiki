@@ -3,6 +3,23 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.223.0] - 2026-11-28
+
+- **VB.NET 支持（第 36 种语言）**：`Namespace`/`Class`/`Module`/
+  `Structure`/`Interface`/`Enum` 声明（类型范围按 `End <type>` 配平）、
+  `Sub`/`Function`/`Property`/`Event` 成员（修饰符栈含 `Partial`/
+  `Shared`/`Async` 等），构造器为 `Sub New`，`Property` 块覆盖其
+  `Get`/`Set` 体；接口与 `MustOverride` 声明止于本行；
+  `Private`/`Friend`/`Protected` 标记非导出。
+- **VB.NET 屏蔽**：`'` 行注释、`REM` 注释行与双引号字符串（双写转义）
+  在配平前屏蔽。
+- **VB.NET 依赖边**：`Imports`（含 `Alias = …`）与 `Inherits`/
+  `Implements` 经点分路径与命名空间后缀匹配解析，根命名空间不在目录
+  布局中也能命中；外部程序集不建边。
+- **测试**：653 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖命名空间、
+  类、接口、枚举、构造器、属性、事件、可见性、注释屏蔽与
+  `Imports`/`Inherits` 解析。
+
 ## [0.222.0] - 2026-11-28
 
 - **Nix 支持（第 35 种语言）**：属性集与 `let` 内的属性绑定登记为符号——

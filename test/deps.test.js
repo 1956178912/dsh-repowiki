@@ -735,6 +735,28 @@ test('Nix：import/callPackage/readFile 相对路径与注释屏蔽', () => {
   ])
 })
 
+test('VB.NET：Imports（含别名）、Inherits/Implements 与注释屏蔽', () => {
+  const code = [
+    'Imports System.Text',
+    'Imports Alias = Demo.Core.Widget',
+    'Imports Demo.Core.Widget',
+    "' Imports Commented.Nope",
+    'REM Imports Remmed.Nope',
+    'Public Class Foo',
+    '    Inherits Demo.Base',
+    '    Implements Demo.IThing',
+    'End Class',
+  ].join('\n')
+  const imports = extractImports(code, 'vbnet')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['System.Text', 1],
+    ['Demo.Core.Widget', 2],
+    ['Demo.Core.Widget', 3],
+    ['Demo.Base', 7],
+    ['Demo.IThing', 8],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

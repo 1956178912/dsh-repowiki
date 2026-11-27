@@ -2002,6 +2002,66 @@ test('Nix：属性绑定、嵌套属性集 parent、lambda 与缩进字符串屏
   assert.ok(!byName.has('block'), '块注释不登记')
 })
 
+test('VB.NET：Namespace/Class/Interface/Enum 与例程、属性、事件范围', () => {
+  const code = [
+    'Imports System.Text',
+    '',
+    'Namespace Demo.Core',
+    '    Public Class Widget',
+    '        Private _name As String',
+    '        Public Sub New(name As String)',
+    '            _name = name',
+    '        End Sub',
+    '        Public Function Render() As String',
+    '            Return "<" & _name & ">"',
+    '        End Function',
+    '        Public Property Name As String',
+    '            Get',
+    '                Return _name',
+    '            End Get',
+    '            Set(value As String)',
+    '                _name = value',
+    '            End Set',
+    '        End Property',
+    '        Public Event Changed()',
+    '    End Class',
+    '',
+    '    Public Interface IWidget',
+    '        Sub Render()',
+    '    End Interface',
+    '',
+    '    Public Enum Kind',
+    '        Basic',
+    '        Advanced',
+    '    End Enum',
+    'End Namespace',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'vbnet')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  const render = symbols.filter(s => s.name === 'Render')
+
+  assert.equal(byName.get('Demo.Core').kind, 'class')
+  assert.equal(byName.get('Demo.Core').endLine, 31)
+  assert.equal(byName.get('Widget').kind, 'class')
+  assert.equal(byName.get('Widget').endLine, 21)
+  assert.equal(byName.get('Widget').parent, 'Demo.Core')
+  assert.equal(byName.get('New').kind, 'method')
+  assert.equal(byName.get('New').parent, 'Widget')
+  assert.equal(byName.get('New').endLine, 8)
+  assert.equal(render[0].endLine, 11)
+  assert.equal(render[1].endLine, 24, '接口声明无 body，止于本行')
+  assert.equal(byName.get('Name').kind, 'variable')
+  assert.equal(byName.get('Name').endLine, 19, 'Property 块含 Get/Set')
+  assert.equal(byName.get('Changed').kind, 'variable')
+  assert.equal(byName.get('Changed').endLine, 20, 'Event 为单行声明')
+  assert.equal(byName.get('IWidget').kind, 'interface')
+  assert.equal(byName.get('IWidget').endLine, 25)
+  assert.equal(byName.get('Kind').kind, 'type')
+  assert.equal(byName.get('Kind').endLine, 30)
+  assert.ok(!byName.has('_name'), '字段声明不登记')
+  assert.ok(!byName.has('Basic'), '枚举值不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

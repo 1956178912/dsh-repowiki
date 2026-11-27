@@ -4695,6 +4695,141 @@ function extractNix(lines) {
 }
 
 /**
+ * 扫描 Visual Basic .NET 源码行：`'` 行注释、`REM` 注释行与双引号
+ * 字符串（`""` 双写转义）内容替换为空格。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function vbnetScan(lines) {
+  const out = []
+  let quote = null
+  for (const raw of lines) {
+    if (/^\s*REM\b/i.test(raw)) { out.push(' '.repeat(raw.length)); continue }
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        if (ch === '"') {
+          if (raw[i + 1] === '"') { i++; masked += '  ' }
+          else { quote = null; masked += ch }
+        } else masked += ' '
+        continue
+      }
+      if (ch === "'") break
+      if (ch === '"') { quote = ch; masked += ch; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/** VB.NET 修饰符前缀（类型与例程声明共用，可叠加）。 */
+const VB_MODIFIERS = '(?:Public|Private|Protected|Friend|Partial|MustInherit|NotInheritable|Shared|ReadOnly|WriteOnly|Default|Overloads|Shadows|Custom|Async|Iterator|Overrides|Overridable|MustOverride|NotOverridable)'
+
+/** 是否标记为非导出（Private/Friend/Protected 任一出现）。 */
+function vbnetNonExported(line) {
+  return /\b(?:Private|Friend|Protected)\b/i.test(line)
+}
+
+/**
+ * 计算 VB.NET 类型声明（Class/Module/Structure/Interface/Enum/Namespace）
+ * 的结束行：统计类型声明与 `End <type>` 配平。
+ * @param {string[]} lines - 掩码行。
+ * @param {number} startIdx - 声明起始行（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function vbnetTypeEnd(lines, startIdx) {
+  const openRe = new RegExp(`^(?:${VB_MODIFIERS}\\s+)*(?:Class|Module|Structure|Interface|Enum|Namespace)\\b`, 'i')
+  const closeRe = /^End\s+(?:Class|Module|Structure|Interface|Enum|Namespace)\b/i
+  let depth = 0
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (openRe.test(line)) depth++
+    if (closeRe.test(line)) depth--
+    if (depth <= 0) return i + 1
+  }
+  return startIdx + 1
+}
+
+/**
+ * 计算 VB.NET 例程（Sub/Function/Property/Event）的结束行：命中
+ * `End <keyword>` 为止；若先遇到下一个声明（接口声明/MustOverride 等
+ * 无 body 形式）则止于声明行。
+ * @param {string[]} lines - 掩码行。
+ * @param {number} startIdx - 声明起始行（0-based）。
+ * @param {string} keyword - 声明关键字（原样，用于匹配 End）。
+ * @returns {number} 结束行（1-based）。
+ */
+function vbnetRoutineEnd(lines, startIdx, keyword) {
+  const endRe = new RegExp(`^End\\s+${keyword}\\b`, 'i')
+  const declRe = new RegExp(`^(?:${VB_MODIFIERS}\\s+)*(?:Sub|Function|Property|Event|Operator|Class|Module|Structure|Interface|Enum|Namespace)\\b`, 'i')
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (i > startIdx && declRe.test(line)) return startIdx + 1
+    if (endRe.test(line)) return i + 1
+  }
+  return startIdx + 1
+}
+
+/**
+ * 提取 Visual Basic .NET 符号：`Namespace`/`Class`/`Module`/`Structure`/
+ * `Interface`/`Enum`（class/interface/type）与 `Sub`/`Function`/
+ * `Property`/`Event`（function/variable；类内为 method 并带 `parent`）。
+ * `Private`/`Friend`/`Protected` 标记非导出；注释与字符串不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractVbnet(lines) {
+  const masked = vbnetScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const types = []
+  const typeRe = new RegExp(`^(?:${VB_MODIFIERS}\\s+)*(Class|Module|Structure|Interface|Enum|Namespace)\\s+([A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*)`, 'i')
+  const routineRe = new RegExp(`^(?:${VB_MODIFIERS}\\s+)*(Sub|Function|Property|Event|Operator)\\s+([A-Za-z_]\\w*)`, 'i')
+  for (let i = 0; i < masked.length; i++) {
+    while (types.length > 0 && types[types.length - 1].end <= i + 1) types.pop()
+    const line = masked[i].trim()
+    if (line === '') continue
+
+    const typeMatch = typeRe.exec(line)
+    if (typeMatch) {
+      const keyword = typeMatch[1].toLowerCase()
+      const kind = keyword === 'interface' ? 'interface' : keyword === 'enum' ? 'type' : 'class'
+      const end = vbnetTypeEnd(masked, i)
+      const parent = types.length > 0 ? types[types.length - 1].name : undefined
+      /** @type {object} */
+      const symbol = {
+        name: typeMatch[2], kind, line: i + 1, endLine: end, exported: !vbnetNonExported(line),
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      types.push({ name: typeMatch[2], end })
+      continue
+    }
+
+    const routineMatch = routineRe.exec(line)
+    if (!routineMatch) continue
+    const keyword = routineMatch[1].toLowerCase()
+    const parent = types.length > 0 ? types[types.length - 1].name : undefined
+    const kind = keyword === 'property' || keyword === 'event'
+      ? 'variable'
+      : parent ? 'method' : 'function'
+    /** @type {object} */
+    const symbol = {
+      name: routineMatch[2],
+      kind,
+      line: i + 1,
+      endLine: vbnetRoutineEnd(masked, i, routineMatch[1]),
+      exported: !vbnetNonExported(line),
+    }
+    if (parent) symbol.parent = parent
+    symbols.push(symbol)
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4841,6 +4976,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'perl') return extractPerl(lines)
   if (lang === 'pascal') return extractPascal(lines)
   if (lang === 'nix') return extractNix(lines)
+  if (lang === 'vbnet') return extractVbnet(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

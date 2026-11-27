@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.223.0] - 2026-11-28
+
+### Added
+
+- **VB.NET indexing (36th language)**: `Namespace`/`Class`/`Module`/
+  `Structure`/`Interface`/`Enum` declarations (type ranges balanced by
+  `End <type>`), `Sub`/`Function`/`Property`/`Event` members with
+  modifier stacks (`Partial`, `Shared`, `Async`, …), constructors as
+  `Sub New`, and `Property` blocks spanning their `Get`/`Set` bodies.
+  Interface and `MustOverride` declarations end at their own line;
+  `Private`/`Friend`/`Protected` mark non-exported symbols.
+- **VB.NET masking**: `'` line comments, `REM` comment lines and
+  double-quoted strings (doubled-quote escaping) are masked before range
+  matching.
+- **VB.NET dependency edges**: `Imports` (including `Alias = …` forms)
+  and `Inherits`/`Implements` resolve through dotted paths with
+  namespace-suffix matching, so a project root namespace that is absent
+  from the directory layout still resolves; external assemblies stay
+  edge-free.
+
+### Tests
+
+- 653 cases pass (LANG=en and LANG=zh); new coverage for namespaces,
+  classes, interfaces, enums, constructors, properties, events,
+  visibility, comment masking and `Imports`/`Inherits` resolution.
+
 ## [0.222.0] - 2026-11-28
 
 ### Added

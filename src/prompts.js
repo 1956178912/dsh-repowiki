@@ -182,6 +182,7 @@ export function fenceLang(lang) {
     case 'perl': return 'perl'
     case 'pascal': return 'pascal'
     case 'nix': return 'nix'
+    case 'vbnet': return 'vbnet'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

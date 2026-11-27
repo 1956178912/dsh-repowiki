@@ -2436,7 +2436,8 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *     kotlin:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     php:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     scala:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
- *     groovy:{byDotted:Map<string,string>, byClass:Map<string,string[]>}}}} ctx - 解析上下文。
+ *     groovy:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
+ *     vbnet:{byDotted:Map<string,string>, byClass:Map<string,string[]>}}}} ctx - 解析上下文。
  * @returns {string|null} 命中的目标文件；外部或无法解析返回 null。
  */
 function resolveImportEdge(lang, fromRel, imp, ctx) {
@@ -2474,6 +2475,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
   if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
@@ -2783,6 +2785,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       php: buildDottedPaths(indexed, ['.php'], { lowercase: true }),
       scala: buildDottedPaths(indexed, ['.scala']),
       groovy: buildDottedPaths(indexed, ['.groovy', '.java']),
+      vbnet: buildDottedPaths(indexed, ['.vb']),
     },
   }
   /** Go internal 可见性违规（去重后进入 warnings）。 */

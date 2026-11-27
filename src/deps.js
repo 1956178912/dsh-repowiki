@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan,
+  nixScan, vbnetScan,
 } from './symbols.js'
 
 /**
@@ -1365,6 +1365,42 @@ function extractNixImports(lines) {
 }
 
 /**
+ * 提取 Visual Basic .NET 的 `Imports`（含别名）与 `Inherits`/`Implements`
+ * 点分引用；注释与字符串内的伪语句由 `vbnetScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractVbnetImports(lines) {
+  const result = []
+  const masked = vbnetScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    const imports = /^Imports\s+(?:([A-Za-z_]\w*)\s*=\s*)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/i.exec(line)
+    if (imports) {
+      result.push({
+        specifier: imports[2],
+        line: i + 1,
+        kind: 'import',
+        relative: false,
+        imported: [imports[2].split('.').pop()],
+      })
+      continue
+    }
+    const inherits = /^(?:Inherits|Implements)\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/i.exec(line)
+    if (inherits) {
+      result.push({
+        specifier: inherits[1],
+        line: i + 1,
+        kind: 'import',
+        relative: false,
+        imported: [inherits[1].split('.').pop()],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1483,6 +1519,7 @@ export function extractImports(code, lang) {
   if (lang === 'perl') return extractPerlImports(lines)
   if (lang === 'pascal') return extractPascalImports(lines)
   if (lang === 'nix') return extractNixImports(lines)
+  if (lang === 'vbnet') return extractVbnetImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }
