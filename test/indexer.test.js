@@ -175,6 +175,10 @@ test('Java：通配符与 static 成员 import 解析到类文件', async () => 
   const fromApp = doc.edges.filter(e => e.from === 'src/main/java/com/acme/App.java')
   assert.equal(fromApp.length, 2, '通配符与 static 导入各产生一条边')
   assert.ok(fromApp.every(e => e.to === 'src/main/java/com/acme/util/Helper.java'))
+  const staticEdge = fromApp.find(e => e.line === 3)
+  assert.deepEqual(staticEdge?.symbols, ['run'], 'static 成员导入符号为成员名')
+  const wildcardEdge = fromApp.find(e => e.line === 2)
+  assert.deepEqual(wildcardEdge?.symbols, [], '普通通配导入保持文件级边')
 })
 
 test('Go：无 go.mod 时不解析、module 根导入解析到根包文件', async () => {

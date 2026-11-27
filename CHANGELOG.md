@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.266.0] - 2026-11-28
+
+### Changed
+
+- **Java static imports**: `import static a.b.C.member;` used to point at the
+  full member path (which rarely resolves) and record the class name. It now
+  points the edge at the class file and records the member name, so
+  references and impact are member-precise; `import static a.b.C.*;` becomes
+  `*` potential references, while plain wildcard imports stay file-level.
+  Parser v22 re-parses cached imports.
+
+### Tests
+
+- 817 cases pass (LANG=en); updated extraction and real-index assertions for
+  static member/wildcard imports.
+
 ## [0.265.0] - 2026-11-28
 
 ### Fixed

@@ -66,8 +66,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v18：Go 导入别名写 aliases；`.`/`_` 导入分别为 `*` 与无符号引用。
  *  v19：Dart 无组合子导入/导出记 `*`，`hide` 排除名写 hidden。
  *  v20：JS `export * as ns` 不再记通配符（只导出命名空间对象）。
- *  v21：Rust `use a::b::{self}` 路径去掉 `::self`，导入名取模块名。 */
-export const INDEX_PARSER_VERSION = 21
+ *  v21：Rust `use a::b::{self}` 路径去掉 `::self`，导入名取模块名。
+ *  v22：Java `import static` 归到成员名/`*`，specifier 指向类文件。 */
+export const INDEX_PARSER_VERSION = 22
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

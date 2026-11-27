@@ -459,15 +459,25 @@ function extractJavaImports(lines) {
   for (let i = 0; i < lines.length; i++) {
     const m = /^\s*import\s+(?<static>static\s+)?(?<spec>[\w$.*]+)\s*;/.exec(lines[i])
     if (!m) continue
-    const segments = m.groups.spec.split('.')
-    // 通配符导入没有具体类型名；static 成员导入的类名是最后一个大写段
+    const spec = m.groups.spec
+    const segments = spec.split('.')
+    const last = segments[segments.length - 1] || ''
+    let specifier = spec
     let imported = []
-    if (!segments[segments.length - 1] || segments[segments.length - 1] !== '*') {
+    if (m.groups.static) {
+      // `import static a.b.C.member;`：依赖边指向类文件，符号归到成员名
+      // （方法/字段），比归到类名更精确；`import static a.b.C.*;` 把类的
+      // 全部静态成员带入作用域，按潜在通配引用处理。
+      specifier = segments.slice(0, -1).join('.')
+      if (last === '*') imported = ['*']
+      else if (/^[A-Za-z_$][\w$]*$/.test(last)) imported = [last]
+    } else if (last !== '*') {
+      // 普通导入：取最后一个大写段作为类型名（通配导入保持空符号）
       const typeName = [...segments].reverse().find(s => /^[A-Z][\w$]*$/.test(s))
       if (typeName) imported = [typeName]
     }
     result.push({
-      specifier: m.groups.spec,
+      specifier,
       line: i + 1,
       kind: 'import',
       relative: true,

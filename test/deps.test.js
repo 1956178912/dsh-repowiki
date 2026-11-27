@@ -252,11 +252,13 @@ test('Java：普通/静态/通配符 import', () => {
   const refs = extractImports(code, 'java')
   const bySpec = new Map(refs.map(r => [r.specifier, r]))
 
-  assert.deepEqual(bySpec.get('com.acme.util.Helper').imported, ['Helper'])
-  assert.deepEqual(bySpec.get('com.acme.util.Helper.run').imported, ['Helper'], 'static 成员导入归到类名')
+  const helperRefs = refs.filter(r => r.specifier === 'com.acme.util.Helper')
+  assert.deepEqual(helperRefs.map(r => r.imported), [['Helper'], ['run']],
+    '普通导入归类名、static 导入归成员名')
   assert.ok(bySpec.get('java.util.*'))
-  assert.deepEqual(bySpec.get('java.util.*').imported, [])
-  assert.ok(bySpec.get('org.junit.Assert.*'))
+  assert.deepEqual(bySpec.get('java.util.*').imported, [], '普通通配导入不声称具体符号')
+  const assertRefs = refs.filter(r => r.specifier === 'org.junit.Assert')
+  assert.deepEqual(assertRefs.map(r => r.imported), [['*']], '静态通配导入按潜在通配引用')
 })
 
 test('C#：using / global using / static / 别名', () => {
