@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.136.0] - 2026-11-27
+
+### Added
+
+- **Page-level coverage details**: `repowiki-status` now reports
+  `citationCoveragePages` — up to ten pages with untracked citations, most
+  affected first, each with `total` / `tracked` / `untracked` and the reason
+  breakdown. The `Citation digests` line appends an example page, so callers
+  know which page to regenerate. `citationCoveragePages` is a shared pure
+  helper built on the same per-page counting as the aggregate.
+- **Coverage issue without penalty**: health issues now list
+  `N citation(s) have no content digest`; the score is unchanged because an
+  untracked citation is unknown, not proven bad.
+
+### Tests
+
+- 490 cases pass (LANG=en and LANG=zh); new coverage for page ordering,
+  bounding and truncation, the status detail/render path, and the
+  no-penalty health issue.
+
 ## [0.135.0] - 2026-11-27
 
 ### Changed

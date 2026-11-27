@@ -31,6 +31,53 @@ export const MAX_CITATION_DRIFT_PAGES = 10
 export const MAX_CITATION_DRIFT_ISSUES = 10
 
 /**
+ * 单页的引用指纹覆盖率（sources 去重、未覆盖原因分桶）。
+ * @param {{sources?:string[], sections?:Array<{sources?:string[]}>,
+ *   citationDigests?:Record<string, string>,
+ *   citationMisses?:Record<string, string>}} page - 清单页面条目。
+ * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean,
+ *   reasons:{unreadable:number, range:number, cap:number, unknown:number}}}
+ *   页面覆盖率。
+ */
+function pageCoverage(page) {
+  const digests = page?.citationDigests && typeof page.citationDigests === 'object'
+    ? page.citationDigests
+    : null
+  const misses = page?.citationMisses && typeof page.citationMisses === 'object'
+    ? page.citationMisses
+    : null
+  /** @type {Set<string>} */
+  const sources = new Set()
+  for (const source of Array.isArray(page?.sources) ? page.sources : []) {
+    if (typeof source === 'string' && source) sources.add(source)
+  }
+  for (const section of Array.isArray(page?.sections) ? page.sections : []) {
+    for (const source of Array.isArray(section?.sources) ? section.sources : []) {
+      if (typeof source === 'string' && source) sources.add(source)
+    }
+  }
+  const reasons = { unreadable: 0, range: 0, cap: 0, unknown: 0 }
+  let tracked = 0
+  for (const source of sources) {
+    if (digests && typeof digests[source] === 'string' && digests[source]) {
+      tracked++
+      continue
+    }
+    const reason = misses && typeof misses[source] === 'string' ? misses[source] : 'unknown'
+    if (reason === 'unreadable' || reason === 'range' || reason === 'cap') reasons[reason]++
+    else reasons.unknown++
+  }
+  return {
+    total: sources.size,
+    tracked,
+    untracked: sources.size - tracked,
+    hasDigests: Boolean(digests
+      && Object.values(digests).some(value => typeof value === 'string' && value)),
+    reasons,
+  }
+}
+
+/**
  * 汇总清单的引用指纹覆盖率：按页面去重后统计引用条数与已记录指纹数。
  *
  * 生成时读取失败或超过读取上限的引用不会写入 `citationDigests`；本函数
@@ -50,37 +97,51 @@ export function summarizeCitationCoverage(manifest) {
   let hasDigests = false
   const reasons = { unreadable: 0, range: 0, cap: 0, unknown: 0 }
   for (const page of manifest.pages) {
-    const digests = page?.citationDigests && typeof page.citationDigests === 'object'
-      ? page.citationDigests
-      : null
-    if (digests && Object.values(digests).some(value => typeof value === 'string' && value)) {
-      hasDigests = true
-    }
-    const misses = page?.citationMisses && typeof page.citationMisses === 'object'
-      ? page.citationMisses
-      : null
-    /** @type {Set<string>} */
-    const sources = new Set()
-    for (const source of Array.isArray(page?.sources) ? page.sources : []) {
-      if (typeof source === 'string' && source) sources.add(source)
-    }
-    for (const section of Array.isArray(page?.sections) ? page.sections : []) {
-      for (const source of Array.isArray(section?.sources) ? section.sources : []) {
-        if (typeof source === 'string' && source) sources.add(source)
-      }
-    }
-    for (const source of sources) {
-      total++
-      if (digests && typeof digests[source] === 'string' && digests[source]) {
-        tracked++
-        continue
-      }
-      const reason = misses && typeof misses[source] === 'string' ? misses[source] : 'unknown'
-      if (reason === 'unreadable' || reason === 'range' || reason === 'cap') reasons[reason]++
-      else reasons.unknown++
+    const stats = pageCoverage(page)
+    total += stats.total
+    tracked += stats.tracked
+    hasDigests = hasDigests || stats.hasDigests
+    for (const key of ['unreadable', 'range', 'cap', 'unknown']) {
+      reasons[key] += stats.reasons[key]
     }
   }
   return { total, tracked, untracked: total - tracked, hasDigests, reasons }
+}
+
+/**
+ * 列出存在未覆盖引用的页面（有界），供 status 直接指出需要刷新的页面。
+ * @param {{pages?:Array<{slug?:string, title?:string, sources?:string[],
+ *   sections?:Array<{sources?:string[]}>, citationDigests?:Record<string, string>,
+ *   citationMisses?:Record<string, string>}>}|null} manifest - Wiki 清单。
+ * @param {{limit?:number}} [options] - 明细条数上限（默认/最多 10）。
+ * @returns {{pages:Array<{slug:string, title:string, total:number, tracked:number,
+ *   untracked:number, reasons:{unreadable:number, range:number, cap:number,
+ *   unknown:number}}>, truncated:boolean}} 页级明细。
+ */
+export function citationCoveragePages(manifest, options = {}) {
+  if (!manifest || !Array.isArray(manifest.pages)) return { pages: [], truncated: false }
+  const limit = Number.isInteger(options.limit) && options.limit > 0
+    ? Math.min(Math.floor(options.limit), MAX_CITATION_DRIFT_PAGES)
+    : MAX_CITATION_DRIFT_PAGES
+  const details = []
+  for (const page of manifest.pages) {
+    const stats = pageCoverage(page)
+    if (stats.untracked <= 0) continue
+    const slug = typeof page.slug === 'string' ? page.slug : ''
+    const title = typeof page.title === 'string' && page.title ? page.title : slug
+    details.push({
+      slug,
+      title,
+      total: stats.total,
+      tracked: stats.tracked,
+      untracked: stats.untracked,
+      reasons: stats.reasons,
+    })
+  }
+  details.sort((a, b) => (b.untracked - a.untracked)
+    || a.title.localeCompare(b.title)
+    || a.slug.localeCompare(b.slug))
+  return { pages: details.slice(0, limit), truncated: details.length > limit }
 }
 
 

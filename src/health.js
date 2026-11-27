@@ -10,7 +10,8 @@
  *   分母是"有资格生成卡片"的文件，而不是全部文件——简单文件本就不该
  *   为凑数生成卡片（见 src/config.js 的 selectCandidates）。
  * - Wiki（25%）：是否生成过页面、陈旧与孤儿比例，以及引用完整性
- *   （缺失路径、行号越界、内容漂移）；引用缺陷只扣 Wiki 分量，不改变权重。
+ *   （缺失路径、行号越界、内容漂移；未覆盖引用作为提示项，不扣分）；
+ *   引用缺陷只扣 Wiki 分量，不改变权重。
  * - 架构（20%）：文件级 import 环数量、最高 fan-in 入口的集中度。
  * - 卫生（15%）：索引告警与被跳过文件。
  *
@@ -100,10 +101,10 @@ export function documentationCoverage(files = [], cardsMap = new Map(), eligible
 
 /**
  * 归一化引用完整性计数：缺省/非法值按 0，避免负分或 NaN。
- * @param {{broken?:number, outOfRange?:number, drift?:number, unchecked?:number}} [citations]
- *   引用问题计数。
- * @returns {{broken:number, outOfRange:number, drift:number, unchecked:number}}
- *   规范化结果。
+ * @param {{broken?:number, outOfRange?:number, drift?:number, untracked?:number,
+ *   unchecked?:number}} [citations] 引用问题计数。
+ * @returns {{broken:number, outOfRange:number, drift:number, untracked:number,
+ *   unchecked:number}} 规范化结果。
  */
 function citationCounts(citations) {
   const pick = value => (Number.isInteger(value) && value > 0 ? value : 0)
@@ -111,6 +112,7 @@ function citationCounts(citations) {
     broken: pick(citations?.broken),
     outOfRange: pick(citations?.outOfRange),
     drift: pick(citations?.drift),
+    untracked: pick(citations?.untracked),
     unchecked: pick(citations?.unchecked),
   }
 }
@@ -121,8 +123,9 @@ function citationCounts(citations) {
  * @param {{eligible:number, documented:number, fresh:number, stale:number, percent:number}} input.coverage
  *   文档覆盖率。
  * @param {{count:number, stale:number, orphaned:number}} input.wiki - Wiki 页面统计。
- * @param {{broken?:number, outOfRange?:number, drift?:number, unchecked?:number}} [input.citations]
- *   引用完整性问题计数（缺失路径/行号越界/内容漂移/未验证）；只扣 Wiki 分量。
+ * @param {{broken?:number, outOfRange?:number, drift?:number, untracked?:number,
+ *   unchecked?:number}} [input.citations]
+ *   引用完整性问题计数（缺失路径/行号越界/内容漂移/未覆盖/未验证）；前 3 类扣 Wiki 分量。
  * @param {Array<{files:string[], size:number}>} [input.cycles] - 文件级循环组。
  * @param {Array<{path:string, dependents:number}>} [input.hubs] - fan-in 排名。
  * @param {string[]} [input.warnings] - 索引/环境告警。
@@ -173,6 +176,7 @@ export function assessHealth(input) {
   else if (wiki.stale > 0) issues.push(`${wiki.stale} wiki page(s) are stale`)
   if (citations.outOfRange > 0) issues.push(`${citations.outOfRange} wiki citation line range(s) exceed the cited file length`)
   if (citations.drift > 0) issues.push(`${citations.drift} wiki citation(s) changed since generation`)
+  if (citations.untracked > 0) issues.push(`${citations.untracked} citation(s) have no content digest`)
   if (cycles.length > 0) issues.push(`${cycles.length} import cycle group(s)`)
   if (warnings.length > 0) issues.push(`${warnings.length} index/environment warning(s)`)
   if (skipped > 0) issues.push(`${skipped} file(s) were skipped during indexing`)

@@ -129,6 +129,10 @@ test('health：引用缺失/越界/漂移扣 Wiki 分量并进入待办', () => 
   assert.equal(capped.components[1].score, 20, '引用扣分上限 80，Wiki 分量不归零')
   assert.equal(capped.score, 80)
   assert.ok(capped.grade === 'B')
+
+  const untracked = assessHealth({ ...base, citations: { untracked: 3 } })
+  assert.equal(untracked.score, clean.score, '未覆盖只提示，不扣分')
+  assert.match(untracked.issues.join(' '), /3 citation\(s\) have no content digest/)
 })
 
 test('health：等级边界', () => {
@@ -209,8 +213,12 @@ test('status：健康分把引用缺陷计入 Wiki 分量', async () => {
     total: 2, tracked: 1, untracked: 1, hasDigests: true,
     reasons: { unreadable: 0, range: 0, cap: 0, unknown: 1 },
   }, 'missing.ts 没有指纹，覆盖率必须如实报告')
+  assert.deepEqual(out.citationCoveragePages.pages.map(page => page.slug), ['overview'])
+  assert.equal(out.citationCoveragePages.pages[0].untracked, 1)
+  assert.match(out.health.issues.join(' '), /1 citation\(s\) have no content digest/)
   const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
   assert.match(rendered, /Citation digests: 1\/2 tracked, 1 untracked \(1 unknown\)/)
+  assert.match(rendered, /— e\.g\. Overview: 1 untracked \(1 unknown\)/)
   const wiki = out.health.components.find(item => item.key === 'wiki')
   assert.equal(wiki.score, 85, '缺失 10 分 + 漂移 5 分')
   assert.match(wiki.detail, /2 citation issue\(s\)/)

@@ -4,7 +4,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { checkCitationDrift, summarizeCitationCoverage } from '../src/citation-drift.js'
+import { checkCitationDrift, summarizeCitationCoverage, citationCoveragePages } from '../src/citation-drift.js'
 import { citationDigest } from '../src/citation-digest.js'
 
 test('citation-coverage：按页去重统计引用与已记录指纹', () => {
@@ -62,6 +62,39 @@ test('citation-coverage：空清单、旧清单与空指纹', () => {
     },
     '空字符串不算已记录指纹',
   )
+})
+
+test('citation-coverage-pages：仅列出未覆盖页面并按数量降序', () => {
+  const manifest = {
+    pages: [
+      {
+        slug: 'full', title: 'Full',
+        sources: ['x.ts#L1'], citationDigests: { 'x.ts#L1': 'dddddddddddd' },
+      },
+      {
+        slug: 'b', title: 'B',
+        sources: ['y.ts#L1', 'z.ts#L1'],
+        citationMisses: { 'y.ts#L1': 'range' },
+      },
+      {
+        slug: 'c', title: 'C',
+        sources: ['w.ts#L1', 'v.ts#L1', 'u.ts#L1'],
+        citationMisses: { 'w.ts#L1': 'unreadable' },
+      },
+    ],
+  }
+  const result = citationCoveragePages(manifest, { limit: 2 })
+  assert.equal(result.pages.length, 2)
+  assert.equal(result.truncated, false)
+  assert.equal(result.pages[0].slug, 'c', '未覆盖最多的页面排前')
+  assert.deepEqual(result.pages[0].reasons, {
+    unreadable: 1, range: 0, cap: 0, unknown: 2,
+  })
+  assert.equal(result.pages[1].slug, 'b')
+
+  const limited = citationCoveragePages(manifest, { limit: 1 })
+  assert.equal(limited.pages.length, 1)
+  assert.equal(limited.truncated, true)
 })
 
 test('citation-drift：一致、变化、不可读与不安全路径', async () => {
