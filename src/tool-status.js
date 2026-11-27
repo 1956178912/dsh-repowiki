@@ -20,7 +20,8 @@ import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
-import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource } from './wiki-references.js'
+import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource, parseWikiSource } from './wiki-references.js'
+import { citationDigest } from './citation-digest.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
@@ -41,6 +42,14 @@ const RENDERED_WARNINGS = 3
 
 /** Wiki 引用存在性检查的文件系统探测上限。 */
 const WIKI_CITATION_CHECK_LIMIT = 200
+
+/** 引用漂移检查：最多比较的指纹条目与读取的文件数。 */
+const MAX_CITATION_DRIFT_ENTRIES = 500
+const MAX_CITATION_DRIFT_READS = 100
+
+/** 引用漂移报告里返回的页面/每页条目上限。 */
+const MAX_CITATION_DRIFT_PAGES = 10
+const MAX_CITATION_DRIFT_ISSUES = 10
 
 /**
  * 渲染循环依赖组：`a.ts ↔ b.ts (+2)`，组间以分号分隔；短环附加具体
@@ -77,6 +86,20 @@ function formatCitationRanges(info) {
   return `${body}${info.unchecked > 0 ? `; ${info.unchecked} unchecked` : ''}`
 }
 
+/**
+ * 渲染引用内容漂移摘要：无漂移时给出已验证数，有漂移时给示例引用。
+ * @param {{total:number, checked:number, unchecked:number, truncated:boolean,
+ *   pages:Array<{title:string, issues:Array<{source:string}>}>}} info - 漂移统计。
+ * @returns {string} 单行文本。
+ */
+function formatCitationDrift(info) {
+  const example = info.pages[0]?.issues[0]
+  const body = info.total === 0
+    ? `(none; ${info.checked} verified)`
+    : `${info.total} changed${example ? ` — e.g. ${info.pages[0].title}: ${example.source}` : ''}${info.truncated ? ' (bounded)' : ''}`
+  return `${body}${info.unchecked > 0 ? `; ${info.unchecked} unchecked` : ''}`
+}
+
 /** 工具描述。 */
 const DESCRIPTION = [
   'Read-only health report for the .dsh-repowiki knowledge base: index presence and schema',
@@ -84,10 +107,11 @@ const DESCRIPTION = [
   'plan source, the current in-process write-lock queue, and architecture signals (top cross-module',
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
-  'against the index and the filesystem, including #Lx-Ly bounds when the index records line counts;',
-  'export candidates without named-import evidence are reported conservatively (files with any',
-  'unnamed inbound edge are skipped); module Ca/Ce coupling and instability are reported for',
-  'cross-module imports. Use it to diagnose why a panel or tool looks out of',
+  'against the index and the filesystem, including #Lx-Ly bounds when the index records line counts',
+  'and content-drift digests recorded by manifest v3; export candidates without named-import',
+  'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
+  'Ca/Ce coupling and instability are reported for cross-module imports. Use it to diagnose',
+  'why a panel or tool looks out of',
   'date before re-running index/extract/generate. No model calls, no writes.',
 ].join(' ')
 
@@ -255,6 +279,45 @@ export function repowikiStatusTool(ctx) {
               truncated: { type: 'boolean' },
             },
             required: ['total', 'unchecked', 'pages', 'truncated'],
+          },
+          citationDrift: {
+            type: 'object',
+            description: 'Wiki citations whose content digest (recorded by manifest v3) no longer matches the current source. Present only when the manifest carries citation digests.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Citations whose current content digest differs from the recorded one.' },
+              checked: { type: 'integer', description: 'Citations whose digest could be verified.' },
+              unchecked: { type: 'integer', description: 'Citations that could not be verified (unreadable file, invalid range or the read cap).' },
+              pages: {
+                type: 'array',
+                description: 'Affected pages (up to 10) with up to 10 issues each.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    slug: { type: 'string' },
+                    title: { type: 'string' },
+                    issues: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          source: { type: 'string', description: 'Original citation string, e.g. src/a.ts#L3-L9.' },
+                          path: { type: 'string' },
+                          start: { type: 'integer', description: '0 when the citation has no line range.' },
+                          end: { type: 'integer', description: '0 when the citation has no line range.' },
+                        },
+                        required: ['source', 'path', 'start', 'end'],
+                      },
+                    },
+                  },
+                  required: ['slug', 'title', 'issues'],
+                },
+              },
+              truncated: { type: 'boolean' },
+            },
+            required: ['total', 'checked', 'unchecked', 'pages', 'truncated'],
           },
           coverage: {
             type: 'object',
@@ -477,6 +540,9 @@ export function repowikiStatusTool(ctx) {
           ...(value.citationRangeIssues
             ? [`Citation ranges: ${formatCitationRanges(value.citationRangeIssues)}`]
             : []),
+          ...(value.citationDrift
+            ? [`Citation drift: ${formatCitationDrift(value.citationDrift)}`]
+            : []),
           ...(value.index.exists
             ? [`Docs coverage: ${value.coverage.documented}/${value.coverage.eligible} eligible file(s) (${value.coverage.percent}%)${value.coverage.stale ? `, ${value.coverage.stale} stale` : ''}${value.coverage.gaps.length > 0 ? `; largest gap: ${value.coverage.gaps[0].module} (${value.coverage.gaps[0].eligible - value.coverage.gaps[0].documented})` : ''}`]
             : []),
@@ -608,6 +674,7 @@ export function repowikiStatusTool(ctx) {
       // 不冒充缺失。
       let brokenCitations = null
       let citationRanges = null
+      let citationDrift = null
       if (manifest) {
         const known = new Set((index?.files ?? []).map(file => file.path))
         const cited = new Set()
@@ -661,6 +728,98 @@ export function repowikiStatusTool(ctx) {
         citationRanges = findCitationRangeIssues(manifest, lineCounts, known)
         if (citationRanges.total > 0) {
           warnings.push(`${citationRanges.total} wiki citation line range(s) exceed the cited file length.`)
+        }
+
+        // 引用内容漂移：仅清单 v3 起有 citationDigests；旧清单不判定。
+        /** @type {Array<{slug:string, title:string, source:string, expected:string}>} */
+        const driftEntries = []
+        for (const page of Array.isArray(manifest.pages) ? manifest.pages : []) {
+          const digests = page?.citationDigests
+          if (!digests || typeof digests !== 'object') continue
+          const slug = typeof page.slug === 'string' ? page.slug : ''
+          const title = typeof page.title === 'string' && page.title ? page.title : slug
+          for (const [source, expected] of Object.entries(digests)) {
+            if (typeof expected === 'string' && expected) {
+              driftEntries.push({ slug, title, source, expected })
+            }
+          }
+        }
+        if (driftEntries.length > 0) {
+          const entriesTruncated = driftEntries.length > MAX_CITATION_DRIFT_ENTRIES
+          /** @type {Map<string, string|null>} */
+          const textCache = new Map()
+          let reads = 0
+          let checked = 0
+          let unchecked = 0
+          let total = 0
+          /** @type {Map<string, {slug:string, title:string, issues:Map<string, {source:string, path:string, start:number, end:number}>}>} */
+          const byPage = new Map()
+          for (const entry of driftEntries.slice(0, MAX_CITATION_DRIFT_ENTRIES)) {
+            const parsed = parseWikiSource(entry.source)
+            if (!parsed.path
+              || parsed.path.startsWith('/')
+              || /^[A-Za-z]:\//.test(parsed.path)
+              || parsed.path.split('/').includes('..')) {
+              unchecked++
+              continue
+            }
+            let text = textCache.get(parsed.path)
+            if (text === undefined) {
+              if (reads >= MAX_CITATION_DRIFT_READS) {
+                text = null
+              } else {
+                reads++
+                try {
+                  text = await fs.readText(await fs.resolve(parsed.path, { cwd: root }))
+                } catch {
+                  text = null
+                }
+              }
+              textCache.set(parsed.path, text)
+            }
+            const actual = text === null ? null : citationDigest(text, parsed.start, parsed.end)
+            if (actual === null) {
+              unchecked++
+              continue
+            }
+            checked++
+            if (actual === entry.expected) continue
+            total++
+            const pageKey = `${entry.slug}\u0000${entry.title}`
+            let pageEntry = byPage.get(pageKey)
+            if (!pageEntry) {
+              pageEntry = { slug: entry.slug, title: entry.title, issues: new Map() }
+              byPage.set(pageKey, pageEntry)
+            }
+            pageEntry.issues.set(entry.source, {
+              source: entry.source,
+              path: parsed.path,
+              start: Number.isInteger(parsed.start) ? parsed.start : 0,
+              end: Number.isInteger(parsed.end) ? parsed.end : 0,
+            })
+          }
+          const pages = [...byPage.values()]
+            .map(page => ({
+              slug: page.slug,
+              title: page.title,
+              issues: [...page.issues.values()].sort((a, b) => a.source.localeCompare(b.source)),
+            }))
+            .sort((a, b) => a.title.localeCompare(b.title) || a.slug.localeCompare(b.slug))
+          citationDrift = {
+            total,
+            checked,
+            unchecked,
+            pages: pages.slice(0, MAX_CITATION_DRIFT_PAGES).map(page => ({
+              ...page,
+              issues: page.issues.slice(0, MAX_CITATION_DRIFT_ISSUES),
+            })),
+            truncated: entriesTruncated
+              || pages.length > MAX_CITATION_DRIFT_PAGES
+              || pages.some(page => page.issues.length > MAX_CITATION_DRIFT_ISSUES),
+          }
+          if (total > 0) {
+            warnings.push(`${total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
+          }
         }
       }
 
@@ -741,6 +900,7 @@ export function repowikiStatusTool(ctx) {
         },
         ...(brokenCitations ? { brokenCitations } : {}),
         ...(citationRanges ? { citationRangeIssues: citationRanges } : {}),
+        ...(citationDrift ? { citationDrift } : {}),
         memory: memoryCounts,
         plan: { source: planSource, ...(planError ? { error: planError } : {}) },
         lock: { pending: pendingLocks() },

@@ -550,13 +550,17 @@ test('repowiki-generate execute：granularity=module 确定性生成模块页与
 
   const manifestPath = path.join(dir, '.dsh-repowiki/wiki/zh/_index.json')
   const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
-  assert.strictEqual(manifest.schemaVersion, 2, '清单 v2 记录章节级引用')
+  assert.strictEqual(manifest.schemaVersion, 3, '清单 v3 记录章节级引用与内容指纹')
   assert.match(manifest.inputDigest, /^[0-9a-f]{16}$/)
   assert.strictEqual(manifest.pages.length, 1)
   assert.strictEqual(manifest.pages[0].slug, 'modules/root')
   assert.strictEqual(manifest.pages[0].path, 'wiki/zh/modules/root.md')
   assert.ok(Array.isArray(manifest.pages[0].sections), '清单应含 sections 数组')
   assert.ok(manifest.pages[0].sections.every(s => typeof s.heading === 'string' && Array.isArray(s.sources)))
+  const citationDigests = manifest.pages[0].citationDigests
+  assert.ok(citationDigests && typeof citationDigests === 'object', '清单记录引用内容指纹')
+  assert.ok('a.ts' in citationDigests && 'b.ts' in citationDigests, '模块页源文件均有指纹')
+  for (const value of Object.values(citationDigests)) assert.match(value, /^[0-9a-f]{12}$/)
   assert.strictEqual(out.manifest, '.dsh-repowiki/wiki/zh/_index.json')
 })
 

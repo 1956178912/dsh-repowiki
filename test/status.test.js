@@ -14,6 +14,7 @@ import { repowikiGenerateTool } from '../src/tool-generate.js'
 import { repowikiMemoryTool } from '../src/tool-memory.js'
 import { writeCard } from '../src/knowledge.js'
 import { encodeFrontmatter } from '../src/util.js'
+import { citationDigest } from '../src/citation-digest.js'
 
 /** 最小 ctx。 */
 function makeCtx(dir) {
@@ -415,4 +416,52 @@ test('repowiki-status：Wiki 引用行号越界与未检查计数', async () => 
   assert.ok(out.warnings.some(warning => warning.includes('line range')))
   const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
   assert.match(rendered, /Citation ranges: 1 out-of-range — e\.g\. 总览: src\/a\.ts#L1-L99 \(file has 1 lines\); 1 unchecked/)
+})
+
+test('repowiki-status：引用内容漂移（清单 v3 指纹）', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-drift-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki/wiki/zh'), { recursive: true })
+  const source = 'export const a = 1\n'
+  nodefs.writeFileSync(path.join(dir, 'src/a.ts'), source)
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const manifestPath = path.join(dir, '.dsh-repowiki/wiki/zh/_index.json')
+  nodefs.writeFileSync(manifestPath, JSON.stringify({
+    schemaVersion: 3,
+    pages: [{
+      slug: 'overview',
+      title: '总览',
+      sources: ['src/a.ts#L1-L1'],
+      sections: [{ heading: '核心', sources: ['src/a.ts#L1-L1'] }],
+      citationDigests: {
+        'src/a.ts#L1-L1': citationDigest(source, 1, 1),
+        'src/a.ts#L1': 'deadbeefdead',
+        'src/missing.ts#L1-L1': 'cafebabecafe',
+      },
+    }],
+  }))
+
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.citationDrift.total, 1)
+  assert.equal(out.citationDrift.checked, 2)
+  assert.equal(out.citationDrift.unchecked, 1, '缺失源文件计入未检查')
+  assert.deepEqual(out.citationDrift.pages, [{
+    slug: 'overview',
+    title: '总览',
+    issues: [{ source: 'src/a.ts#L1', path: 'src/a.ts', start: 1, end: 1 }],
+  }])
+  assert.equal(out.citationDrift.truncated, false)
+  assert.ok(out.warnings.some(warning => warning.includes('changed since the wiki was generated')))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Citation drift: 1 changed — e\.g\. 总览: src\/a\.ts#L1; 1 unchecked/)
+
+  // 旧清单（无 citationDigests）不做漂移断言
+  nodefs.writeFileSync(manifestPath, JSON.stringify({
+    schemaVersion: 2,
+    pages: [{ slug: 'overview', title: '总览', sources: [], sections: [] }],
+  }))
+  const legacy = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(legacy.citationDrift, undefined)
+  assert.ok(!repowikiStatusTool(ctx).output.render({}, legacy)[0].text.includes('Citation drift'))
 })

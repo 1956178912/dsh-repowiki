@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.128.0] - 2026-11-27
+
+### Added
+
+- **Citation content drift**: the wiki manifest is now schema v3 and records
+  a sha256-12 content digest per citation (`citationDigests`), computed at
+  generation time from the cited line range (whole file when no range is
+  given). Cited paths are sanitized with the same whitelist used for page
+  sources and read outside the write lock, capped at 200 files per run.
+  `repowiki-status` recomputes the digests (100-file read cap), reports
+  changed citations in `citationDrift` with bounded page details and a
+  warning, and states `(none; N verified)` when everything matches. Manifests
+  without digests (v1/v2) produce no drift claim; unreadable files, invalid
+  ranges and over-cap entries are counted as `unchecked`, never as changed.
+- **Shared digest helper**: `src/citation-digest.js` defines line slicing
+  aligned with `countSourceLines` (empty file = 0 lines, trailing newline
+  does not add a line).
+
+### Tests
+
+- 474 cases pass (LANG=en and LANG=zh); the module-page generation test now
+  asserts manifest v3 digests for both source files, and status drift covers
+  matching, mismatching, unreadable and legacy-v2 manifests.
+
 ## [0.127.0] - 2026-11-27
 
 ### Added
