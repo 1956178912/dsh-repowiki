@@ -98,6 +98,26 @@ test('repowiki-status：跨文件重复代码块进入报告与渲染', async ()
   assert.match(rendered[0].text, /Duplicates: 1 block/)
 })
 
+test('repowiki-status：高复杂度函数进入报告与渲染', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-complex-'))
+  const lines = ['export function huge(x: number) {']
+  for (let i = 0; i < 16; i++) lines.push('  if (x > 0) { x -= 1 }')
+  lines.push('  return x', '}')
+  nodefs.writeFileSync(path.join(dir, 'huge.ts'), `${lines.join('\n')}\n`)
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+
+  assert.ok(out.complexity)
+  assert.equal(out.complexity.total, 1)
+  assert.equal(out.complexity.high.length, 1)
+  assert.equal(out.complexity.high[0].name, 'huge')
+  assert.ok(out.complexity.high[0].complexity >= 15)
+  assert.ok(out.warnings.some(w => /complexity/.test(w)))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /Complexity: 1 function/)
+})
+
 test('repowiki-status：单文件项目不输出重复区块', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-dupsingle-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export const a = 1\n')

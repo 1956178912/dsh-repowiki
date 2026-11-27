@@ -27,6 +27,7 @@ import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { evaluateLayers } from './layers.js'
 import { findDuplicates, MAX_DUPLICATE_FILES } from './duplicates.js'
+import { computeComplexity } from './complexity.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -38,13 +39,14 @@ const STATUS_MODULE_RELATIONS = 10
 const DUPLICATE_READ_CONCURRENCY = 8
 
 /**
- * 并发读取重复检测所需的源码（数量与行数上限由 findDuplicates 兜底）。
+ * 并发读取重复检测与复杂度统计所需的源码（数量上限由调用方截断，
+ * 行数上限由各分析器兜底）。
  * @param {FsService} fs - ctx.fs。
  * @param {string} root - 项目根。
  * @param {Array<{path:string}>} files - 索引文件（已按路径排序）。
  * @returns {Promise<Array<{path:string, text:string}>>} 读取成功的源码，按路径排序。
  */
-async function readDuplicateSources(fs, root, files) {
+async function readStatusSources(fs, root, files) {
   const targets = files.slice(0, MAX_DUPLICATE_FILES)
   const sources = []
   let cursor = 0
@@ -178,7 +180,7 @@ const DESCRIPTION = [
   'Ca/Ce coupling and instability are reported for cross-module imports; and architecture layers',
   'declared in repowiki-plan.json are checked so cross-layer imports outside mayDependOn are listed',
   'as violations; cross-file duplicate code candidates are reported from bounded line-window',
-  'fingerprints. Use it to diagnose',
+  'fingerprints, and function-level complexity is estimated from symbol ranges. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. The weighted health score also counts',
   'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
@@ -762,6 +764,34 @@ export function repowikiStatusTool(ctx) {
             },
             required: ['total', 'windowLines', 'filesScanned', 'filesSkipped', 'groups'],
           },
+          complexity: {
+            type: 'object',
+            description: 'Function-level cyclomatic complexity estimate from line-prefixed branch keywords and &&/|| operators inside each indexed symbol range. Comments and strings are not masked, so it is a review heuristic rather than an exact McCabe value. Present when at least one indexed source was readable.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Functions scored.' },
+              threshold: { type: 'integer', description: 'Complexity at which a function enters high (default 15).' },
+              average: { type: 'number', description: 'Mean complexity (2 decimals).' },
+              max: { type: 'integer' },
+              high: {
+                type: 'array',
+                description: 'Functions at or above the threshold (up to 10, highest first).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    path: { type: 'string' },
+                    name: { type: 'string' },
+                    line: { type: 'integer' },
+                    endLine: { type: 'integer' },
+                    complexity: { type: 'integer' },
+                  },
+                  required: ['path', 'name', 'line', 'endLine', 'complexity'],
+                },
+              },
+            },
+            required: ['total', 'threshold', 'average', 'max', 'high'],
+          },
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
@@ -813,6 +843,9 @@ export function repowikiStatusTool(ctx) {
           `Core files (PageRank): ${value.coreFiles.length > 0
             ? value.coreFiles.map(entry => `${entry.path} (${entry.score.toFixed(4)})`).join('; ')
             : '(none)'}`,
+          ...(value.complexity
+            ? [`Complexity: ${value.complexity.total} function(s), avg ${value.complexity.average}, max ${value.complexity.max}${value.complexity.high.length > 0 ? ` — ${value.complexity.high.length} ≥ ${value.complexity.threshold} (e.g. ${value.complexity.high[0].path}#${value.complexity.high[0].name} ${value.complexity.high[0].complexity})` : ''}`]
+            : []),
           ...(value.duplicates
             ? [`Duplicates: ${value.duplicates.total === 0
               ? `(none, ${value.duplicates.filesScanned} file(s) scanned)`
@@ -1121,13 +1154,19 @@ export function repowikiStatusTool(ctx) {
       if (layerReport && layerReport.total > 0) {
         warnings.push(`${layerReport.total} cross-layer import edge(s) violate the declared layers; see status.layers.`)
       }
-      // 重复代码：需要读取源码，仅在索引至少两个文件时执行（有界并发 + 上限）
-      const duplicateSources = index && (index.files ?? []).length >= 2
-        ? await readDuplicateSources(fs, root, index.files ?? [])
+      // 重复代码与复杂度：共用一次有界源码读取（数量上限内）
+      const statusSources = index && (index.files ?? []).length > 0
+        ? await readStatusSources(fs, root, index.files ?? [])
         : []
-      const duplicates = duplicateSources.length >= 2 ? findDuplicates(duplicateSources) : null
+      const duplicates = statusSources.length >= 2 ? findDuplicates(statusSources) : null
       if (duplicates && duplicates.total > 0) {
         warnings.push(`${duplicates.total} cross-file duplicate block(s) detected; see status.duplicates.`)
+      }
+      const complexity = statusSources.length > 0
+        ? computeComplexity(index?.files ?? [], statusSources)
+        : null
+      if (complexity && complexity.high.length > 0) {
+        warnings.push(`${complexity.high.length} function(s) reach complexity ≥ ${complexity.threshold}; see status.complexity.`)
       }
 
       const git = await readGitInfo(fs, root)
@@ -1209,6 +1248,7 @@ export function repowikiStatusTool(ctx) {
         coverage,
         ...(layerReport ? { layers: layerReport } : {}),
         ...(duplicates ? { duplicates } : {}),
+        ...(complexity ? { complexity } : {}),
         ...(health ? { health } : {}),
         wiki: {
           count: wikiPages.length,

@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.227.0] - 2026-11-28
+
+### Added
+
+- **Complexity estimates**: the bounded source read already used by
+  duplicate detection also feeds a function-level cyclomatic estimate —
+  every indexed `function`/`method` symbol range counts line-prefixed
+  branch keywords (`if`/`for`/`while`/`case`/`catch`/`when`/`elif`/
+  `elseif`/`except`/`match`) plus `&&`/`||`, with complexity = 1 +
+  branches.
+- **Reporting**: `status.complexity` returns the scored function count,
+  average (2 decimals), max and up to 10 functions at or above 15
+  (highest first, each with path/name/line/endLine). A non-empty high
+  list raises a warning and the text report gains a `Complexity:` line.
+  Comments and strings are not masked, so the value is a review
+  heuristic rather than an exact McCabe number.
+
+### Tests
+
+- 678 cases pass (LANG=en and LANG=zh); new coverage for branch counting,
+  non-function exclusion, missing sources, threshold ordering, end-line
+  truncation and status integration.
+
 ## [0.226.0] - 2026-11-28
 
 ### Added
