@@ -7,6 +7,7 @@
  * 纯文件操作：无 LLM、无模型调用。
  */
 
+import * as path from 'node:path'
 import { resolveAssetRoot, readIndex } from './assets.js'
 import {
   copyTree, dirHasContent, readSnapshotManifest, verifySnapshot, SNAPSHOT_MANIFEST,
@@ -27,6 +28,21 @@ const DESCRIPTION = [
   'content digest before copying; a partial or corrupted snapshot is refused unless',
   'allowCorrupt=true. After import, index.json compatibility is verified and reported.',
 ].join(' ')
+
+/**
+ * 归一快照清单中的相对路径：统一正斜杠、去掉前导 `./`。
+ * 绝对路径与向上越界的条目返回空串（丢弃），避免清单被篡改后把
+ * 复制范围扩大到资产目录之外。
+ * @param {*} value - 清单条目的 path 字段。
+ * @returns {string} 可用的相对路径；不可用时为空串。
+ */
+function normalizeManifestPath(value) {
+  if (typeof value !== 'string' || !value.trim()) return ''
+  const rel = path.posix.normalize(value.trim().replace(/\\/g, '/'))
+  if (!rel || rel === '.' || rel.startsWith('../') || rel.startsWith('/')) return ''
+  if (/^[A-Za-z]:/.test(rel)) return ''
+  return rel.replace(/^\.\//, '')
+}
 
 /**
  * 构造 repowiki-import 工具定义。
@@ -72,6 +88,8 @@ export function repowikiImportTool(ctx) {
           snapshotChecked: { type: 'integer', description: 'Number of snapshot files whose digest was compared.' },
           snapshotProblems: { type: 'integer', description: 'Mismatched + missing + unreadable + invalid entries reported by the manifest.' },
           snapshotCapped: { type: 'boolean', description: 'True when verification stopped at the 20,000-file cap.' },
+          snapshotUnlisted: { type: 'integer', description: 'Text files present in the snapshot but absent from the manifest; they were not imported.' },
+          snapshotUnlistedPaths: { type: 'array', items: { type: 'string' }, description: 'First 5 unlisted paths (bounded).' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
@@ -79,7 +97,7 @@ export function repowikiImportTool(ctx) {
         required: [
           'root', 'source', 'files', 'dirs', 'skipped', 'snapshotManifest',
           'snapshotVerified', 'snapshotChecked', 'snapshotProblems', 'snapshotCapped',
-          'indexOk', 'durationMs',
+          'snapshotUnlisted', 'snapshotUnlistedPaths', 'indexOk', 'durationMs',
         ],
       },
       render: (_args, value) => [{
@@ -91,6 +109,9 @@ export function repowikiImportTool(ctx) {
               ? `Snapshot: verified ${value.snapshotChecked} file(s).`
               : `Warning: snapshot verification found ${value.snapshotProblems} problem(s)${value.snapshotCapped ? ' (check capped)' : ''}; imported anyway.`)
             : 'Snapshot: no manifest found; integrity was not verified (legacy or hand-made snapshot).',
+          ...(value.snapshotUnlisted > 0
+            ? [`Skipped ${value.snapshotUnlisted} unlisted file(s) not present in the manifest${value.snapshotUnlistedPaths.length > 0 ? `: ${value.snapshotUnlistedPaths.join(', ')}` : ''}.`]
+            : []),
           ...(value.aborted ? ['Cancelled: the import may be partial.'] : []),
           ...(value.failed?.length ? [`Failed items (first ${value.failed.length}):`, ...value.failed.map(f => `- ${f.path}: ${f.reason}`)] : []),
           value.indexOk ? 'index.json is present and compatible.' : 'Warning: index.json is missing or its schema version is incompatible — run repowiki-index.',
@@ -109,7 +130,7 @@ export function repowikiImportTool(ctx) {
         return {
           root, source: '', files: 0, dirs: 0, skipped: 0,
           snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
-          snapshotProblems: 0, snapshotCapped: false,
+          snapshotProblems: 0, snapshotCapped: false, snapshotUnlisted: 0, snapshotUnlistedPaths: [],
           indexOk: false, durationMs: 0,
           hint: 'source is required: the snapshot directory to import from.',
         }
@@ -119,7 +140,7 @@ export function repowikiImportTool(ctx) {
         return {
           root, source: sourceAbs, files: 0, dirs: 0, skipped: 0,
           snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
-          snapshotProblems: 0, snapshotCapped: false,
+          snapshotProblems: 0, snapshotCapped: false, snapshotUnlisted: 0, snapshotUnlistedPaths: [],
           indexOk: false, durationMs: 0,
           hint: `Source ${sourceAbs} does not exist or is empty. Nothing to import.`,
         }
@@ -132,6 +153,7 @@ export function repowikiImportTool(ctx) {
             root, source: sourceAbs, files: 0, dirs: 0, skipped: 0,
             snapshotManifest: false, snapshotVerified: false, snapshotChecked: 0,
             snapshotProblems: 0, snapshotCapped: false,
+            snapshotUnlisted: 0, snapshotUnlistedPaths: [],
             indexOk: false, durationMs: 0,
             hint: `${assetDir} already holds assets. Pass overwrite=true to replace them.`,
           }
@@ -169,13 +191,20 @@ export function repowikiImportTool(ctx) {
             snapshotChecked: verification?.checked ?? 0,
             snapshotProblems: problems,
             snapshotCapped: verification?.capped ?? false,
+            snapshotUnlisted: 0, snapshotUnlistedPaths: [],
             indexOk: false, durationMs: Date.now() - startedAt,
             hint: `Snapshot verification failed (${detail}). Pass allowCorrupt=true to import anyway.`,
           }
         }
+        // 只复制清单登记过的文件：快照目录里混入的未登记文本文件会被
+        // 跳过并计数，避免手工添加/被注入的内容随导入进入资产。
+        const only = snapshot.exists && Array.isArray(snapshot.value?.files)
+          ? new Set(snapshot.value.files.map(item => normalizeManifestPath(item?.path)).filter(Boolean))
+          : null
         const counts = await copyTree(fs, sourceAbs, assetDir, {
           signal: exec.signal,
           exclude: new Set([SNAPSHOT_MANIFEST]),
+          ...(only ? { only } : {}),
         })
         // 导入后校验索引可读性（版本不兼容时提示重建而非失败）
         const indexOk = (await readIndex(fs, root)) !== null
@@ -192,6 +221,8 @@ export function repowikiImportTool(ctx) {
           snapshotChecked: verification?.checked ?? 0,
           snapshotProblems: problems,
           snapshotCapped: verification?.capped ?? false,
+          snapshotUnlisted: counts.unlisted,
+          snapshotUnlistedPaths: counts.unlistedPaths,
           indexOk,
           ...(counts.aborted ? { hint: 'Cancelled: the import may be partial. Re-run repowiki-import to complete it.' } : {}),
           ...(snapshot.exists && !verification ? { hint: `Snapshot manifest is invalid (${manifestError}); imported because allowCorrupt=true.` } : {}),

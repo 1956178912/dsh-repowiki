@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.168.0] - 2026-11-28
+
+### Fixed
+
+- **Import no longer copies unlisted files**: when the snapshot contains
+  `_snapshot.json`, `repowiki-import` now copies only the relative paths the
+  manifest lists. Text files added to the snapshot directory by hand — or
+  injected by a third party after export — are skipped, counted in
+  `snapshotUnlisted` and reported in `snapshotUnlistedPaths` (first 5, bounded),
+  so a verified snapshot cannot smuggle extra Markdown/JSON into the asset
+  directory. Snapshots without a manifest keep the legacy full-copy behaviour;
+  manifest paths are normalized (backslashes, `./`) and absolute or escaping
+  entries are discarded before the copy filter is built.
+
+### Tests
+
+- 538 cases pass (LANG=en and LANG=zh); new coverage asserts `copyTree`'s
+  `only` filter (including an empty listing copying nothing), and the
+  export→inject→import end-to-end path proving the unlisted file is neither
+  copied nor silently dropped (count, path list and render line verified).
+
 ## [0.167.0] - 2026-11-27
 
 ### Added

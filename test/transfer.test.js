@@ -171,6 +171,33 @@ test('copyTree：返回复制文件的内容指纹并可排除清单文件', asy
   assert.ok(!nodefs.existsSync(path.join(dir, 'dst', '_snapshot.json')))
 })
 
+test('copyTree：only 集合只复制清单列出的文件，未列文件计数但不落盘', async () => {
+  const dir = makeDir({
+    'src/index.json': '{"ok":true}',
+    'src/wiki/zh/a.md': '# A\n',
+    'src/wiki/zh/injected.md': '# injected\n',
+  })
+  const counts = await copyTree(makeFakeFs(dir), path.join(dir, 'src'), path.join(dir, 'dst'), {
+    only: new Set(['index.json', 'wiki/zh/a.md']),
+  })
+  assert.equal(counts.files, 2)
+  assert.equal(counts.unlisted, 1)
+  assert.deepEqual(counts.unlistedPaths, ['wiki/zh/injected.md'])
+  assert.ok(nodefs.existsSync(path.join(dir, 'dst', 'wiki/zh/a.md')))
+  assert.ok(!nodefs.existsSync(path.join(dir, 'dst', 'wiki/zh/injected.md')), '未列文件不得进入资产')
+  assert.deepEqual(counts.entries.map(e => e.path).sort(), ['index.json', 'wiki/zh/a.md'])
+})
+
+test('copyTree：空 only 集合复制零文件（空清单快照不放行任何文件）', async () => {
+  const dir = makeDir({ 'src/index.json': '{"ok":true}', 'src/a.md': 'a' })
+  const counts = await copyTree(makeFakeFs(dir), path.join(dir, 'src'), path.join(dir, 'dst'), {
+    only: new Set(),
+  })
+  assert.equal(counts.files, 0)
+  assert.equal(counts.unlisted, 2)
+  assert.equal(nodefs.existsSync(path.join(dir, 'dst')), false)
+})
+
 test('快照清单：写入后可验证，篡改/缺失文件被识别', async () => {
   const dir = makeDir({
     'snapshot/index.json': '{"ok":true}',

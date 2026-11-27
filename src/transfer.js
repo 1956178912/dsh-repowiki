@@ -37,18 +37,22 @@ const SNAPSHOT_VERIFY_CONCURRENCY = 8
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} srcAbs - 源目录绝对路径。
  * @param {string} dstAbs - 目标目录绝对路径。
- * @param {{signal?:AbortSignal, exclude?:Set<string>}} [opts] - 协作式取消信号与
- *   按文件名跳过的条目（导入时用于跳过快照清单本身）。
- * @returns {Promise<{files:number, dirs:number, skipped:number, failed:Array,
- *   entries:Array<{path:string, digest:string}>, aborted:boolean}>} 复制计数；
- *   entries 为复制成功的文件及其内容指纹（相对目标根，供快照清单/校验）。
+ * @param {{signal?:AbortSignal, exclude?:Set<string>, only?:Set<string>}} [opts] - 协作式取消信号、
+ *   按文件名跳过的条目（导入时用于跳过快照清单本身），以及只复制清单列出的相对路径。
+ * @returns {Promise<{files:number, dirs:number, skipped:number, unlisted:number,
+ *   unlistedPaths:string[], failed:Array, entries:Array<{path:string, digest:string}>,
+ *   aborted:boolean}>} 复制计数；entries 为复制成功的文件及其内容指纹
+ *   （相对目标根，供快照清单/校验）；unlisted 为 only 模式下未被清单列出的文本文件。
  * failed 为失败明细（path+reason，最多 20 条），满 20 条后只累计 skipped
  * 不再收集明细——用户不必猜"N skipped"到底是哪些文件、为什么。
  */
 export async function copyTree(fs, srcAbs, dstAbs, opts = {}) {
-  const counts = { files: 0, dirs: 0, skipped: 0, failed: [], entries: [], aborted: false }
+  const counts = {
+    files: 0, dirs: 0, skipped: 0, unlisted: 0, unlistedPaths: [], failed: [], entries: [], aborted: false,
+  }
   const signal = opts.signal
   const excludeNames = opts.exclude instanceof Set ? opts.exclude : new Set()
+  const onlyPaths = opts.only instanceof Set ? opts.only : null
   /** 记一条失败明细（有界收集，skipped 同步递增）。 */
   const noteFailed = (item, reason) => {
     counts.skipped++
@@ -94,6 +98,12 @@ export async function copyTree(fs, srcAbs, dstAbs, opts = {}) {
           counts.skipped++
           continue
         }
+        const relPath = path.posix.join(relDir, entry.name)
+        if (onlyPaths && !onlyPaths.has(relPath)) {
+          counts.unlisted++
+          if (counts.unlistedPaths.length < 5) counts.unlistedPaths.push(relPath)
+          continue
+        }
         try {
           const text = await fs.readText(entry.target)
           const outTarget = await fs.resolve(path.posix.join(dstDir, entry.name))
@@ -102,7 +112,7 @@ export async function copyTree(fs, srcAbs, dstAbs, opts = {}) {
           await writeTextVerified(fs, outTarget, text)
           counts.files++
           counts.entries.push({
-            path: path.posix.join(relDir, entry.name),
+            path: relPath,
             digest: digestText(text, 16),
           })
         } catch (err) {

@@ -474,6 +474,32 @@ test('repowiki-export/import execute：快照导出与恢复端到端', async ()
   assert.match(noSource.hint, /does not exist or is empty/)
 })
 
+test('repowiki-import execute：只导入快照清单登记的文件，未登记文件被跳过', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-unlisted-'))
+  nodefs.writeFileSync(path.join(dir, 'app.ts'), 'export function main() {}\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  await repowikiExportTool(ctx).execute({ target: 'snapshot' }, fakeExec)
+
+  // 快照目录里混入未登记文件（模拟手工添加或被注入的内容）
+  nodefs.mkdirSync(path.join(dir, 'snapshot', 'wiki', 'zh'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'snapshot', 'wiki', 'zh', 'injected.md'), '# injected\n')
+
+  nodefs.rmSync(path.join(dir, '.dsh-repowiki'), { recursive: true, force: true })
+  const importTool = repowikiImportTool(ctx)
+  const imported = await importTool.execute({ source: 'snapshot' }, fakeExec)
+  assert.equal(imported.files, 1, '只复制清单登记的 index.json')
+  assert.equal(imported.snapshotVerified, true, '未登记文件不影响已登记文件的校验')
+  assert.equal(imported.snapshotUnlisted, 1)
+  assert.deepEqual(imported.snapshotUnlistedPaths, ['wiki/zh/injected.md'])
+  assert.ok(
+    !nodefs.existsSync(path.join(dir, '.dsh-repowiki', 'wiki', 'zh', 'injected.md')),
+    '未登记文件不得进入资产目录',
+  )
+  const rendered = importTool.output.render({}, imported)
+  assert.match(rendered[0].text, /Skipped 1 unlisted file\(s\).*wiki\/zh\/injected\.md/)
+})
+
 test('repowiki-memory execute：write/list/accept/reject 审核闭环', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-mem-tool-'))
   const ctx = makeCtx(dir)
