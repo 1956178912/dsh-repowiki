@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面内部链接/清单路径完整性、status 缺页/路径非法计数、缺页健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.153.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面内部链接/清单路径完整性、status 缺页/路径非法计数、缺页健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.154.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -377,7 +377,7 @@ npm run verify:host
 # 陈旧 Wiki/清单页缺失/清单路径非法/页面内部 .md 死链或越界链接/上次
 # 生成失败页/严格模式下的空清单失败；未覆盖/未验证默认警告，--strict
 # 时失败（缺陈旧指纹、探测截断、旧索引与无法验证的行号范围也失败）；
-# --require 在无资产或空清单时失败；支持 --root/--locale/--json（v0.146.0）
+# --require 在无资产或空清单时失败；支持 --root/--locale/--json（v0.154.0）
 npm run verify:wiki -- --root . --strict --require
 ```
 
@@ -393,6 +393,34 @@ npm run verify:wiki -- --root . --strict --require
 `problems[].code`（如 `citation/missing`、`wiki/stale-cards`），便于 CI
 按码聚合或抑制。仓库工作流会用生成的 fixture 实际执行该配方，并断言干净
 资产通过、卡片变化后退出码为 1。
+
+### 问题码
+
+`--json` 会把每个发现写入 `problems[]`，带稳定 `code` 与 `severity`
+（`error`/`warning`）。CI 可按码聚合或抑制：
+
+| 问题码 | 默认级别 | 含义 |
+|---|---|---|
+| `index/read-error` | error | `index.json` 无法读取 |
+| `index/outdated` | warning（`--strict`：error） | 索引早于 schema v6（没有行数） |
+| `assets/missing` | warning（`--require`：error） | 没有 Wiki 清单 |
+| `manifest/missing`、`manifest/invalid` | error | 指定清单缺失或非法 |
+| `manifest/empty` | warning（`--strict`/`--require`：error） | 清单没有任何页面 |
+| `manifest/missing-digests` | warning（`--strict`：error） | 缺卡片/记忆陈旧指纹 |
+| `citation/missing` | error | 引用路径不存在 |
+| `citation/range` | error | 引用行号越界 |
+| `citation/range-unchecked` | warning（`--strict`：error） | 行数未知，行号范围无法验证 |
+| `citation/drift` | error | 引用内容在生成后变化 |
+| `citation/untracked` | warning（`--strict`：error） | 引用没有内容指纹 |
+| `citation/unchecked` | warning（`--strict`：error） | 指纹无法验证 |
+| `citation/probe-capped` | warning（`--strict`：error） | 存在性探测触及 200 路径上限 |
+| `wiki/stale-cards`、`wiki/stale-memory` | error | 卡片/已采信记忆在生成后变化 |
+| `wiki/missing-pages` | error | 清单页文件缺失 |
+| `wiki/orphaned-pages` | warning | 页面文件未列入清单 |
+| `wiki/generation-failed` | warning（`--strict`：error） | 上次生成记录了失败页 |
+| `wiki/invalid-page-path`、`wiki/page-path-mismatch` | error | 清单路径非法或与实际文件不符 |
+| `wiki/unsafe-link`、`wiki/broken-link` | error | 相对 `.md` 链接越出项目根或目标缺失 |
+| `wiki/link-probe-capped` | warning（`--strict`：error） | 链接探测触及 200 链接上限 |
 
 ## 升级运维约定（dsh 处于 rc 阶段，公开 seam 高频变动）
 

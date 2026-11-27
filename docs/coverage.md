@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.153.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.154.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.153.0）；测试 517/517（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.01%、分支 86.51%、函数 95.36%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.154.0）；测试 517/517（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.04%、分支 86.57%、函数 95.36%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -213,7 +213,7 @@
 | 陈旧 Wiki 检测 | `scripts/verify-wiki.mjs` 读取 `knowledge/<locale>/*.md`，按 `path:sourceDigest` 排序哈希重算 `inputDigest`（与 generate 同口径，sha256-16），与清单不一致时默认失败；v0.140.0 起同时按 `slug:body` 重算已采信记忆的 `memoryDigest`（与 generate 增量短路同口径），`staleReasons` 区分 `cards`/`memory`，文本报告标记 `(stale: cards, memory)`；旧清单缺指纹时默认告警、`--strict` 失败。`--require` 让无 Wiki 清单也失败，避免 CI 静默通过 | v0.139.0 / v0.140.0 |
 | 页面完整性 | 递归枚举 `wiki/<locale>` 的 `.md`（slug 优先取 frontmatter，深度 ≤3，与 `listWikiPages` 一致）；清单登记但磁盘缺失的页面默认失败并点名示例，未入清单的孤儿页仅告警；JSON 输出 `missingPages`/`orphanedPages` 与 `pageFiles`；`repowiki-status` 以同口径输出 `wiki.missing`/`wiki.missingPages`、`wiki.invalid`/`wiki.invalidPages` 并在文本 `Wiki:` 行显示；健康分把缺页计入 Wiki 分母并按 40 分权重扣减 | v0.141.0 / v0.152.0 |
 | 页面结构与链接 | 清单页面路径必须位于 `wiki/<locale>/`、不含 `..`/绝对路径且以 `.md` 结尾；清单 `path` 与实际文件位置不符即失败；页面正文的相对 `.md` 链接（跳过代码块/图片/外链/锚点）指向缺失文件或越出项目根即失败，存在性探测上限 200（strict 下截断失败）；JSON 输出 `invalidPagePaths`/`pagePathMismatches`/`brokenLinks`/`unsafeLinks` | v0.146.0 |
-| 结构化问题码 | `--json` 在 issues/warnings 之外输出 `problems[{code, severity, message, locale?}]`；码覆盖索引读取/版本过旧、清单缺失/非法/空、断链/越界/漂移/未覆盖/未验证/探测截断、卡片/记忆陈旧、缺页/孤儿、页面路径/内部链接、生成失败与资产缺失，CI 可按码聚合或抑制 | v0.142.0 / v0.146.0 |
+| 结构化问题码 | `--json` 在 issues/warnings 之外输出 `problems[{code, severity, message, locale?}]`；码覆盖索引读取/版本过旧、清单缺失/非法/空、断链/越界/漂移/未覆盖/未验证/探测截断、卡片/记忆陈旧、缺页/孤儿、页面路径/内部链接、生成失败与资产缺失，CI 可按码聚合或抑制；README 双语问题码表列出默认级别与 strict/require 升级 | v0.142.0 / v0.154.0 |
 | CI 自证 job | `.github/workflows/tests.yml` 的 `verify-wiki` job 生成 fixture，先断言 `--strict --require` 通过，再改卡片指纹断言退出码 1；文档配方在每次推送被执行，而不是只写在 README | v0.145.0 |
 | 生成失败持久化 | `repowiki-generate` 在清单写 `failed`（最多 10 条 slug/reason）与 `failedTotal`；`verify:wiki` 以 `wiki/generation-failed` 报告（默认警告、`--strict` 失败，locale 输出 `failedPages`）；`repowiki-status` 输出 `wiki.failed`/`wiki.failedPages` 并在文本 `Wiki:` 行显示 | v0.143.0 |
 | CI Wiki 门禁 | `scripts/verify-wiki.mjs` 复用 `wiki-references`/`citation-drift`：断链（索引 + 200 探测）、越界（索引 v6）、漂移（清单 v3）、陈旧 Wiki（卡片/已采信记忆指纹变化）、清单页缺失、页面路径非法与内部死链默认失败；上次生成失败页默认警告、`--strict` 失败；空清单默认告警、`--strict`/`--require` 失败；未覆盖/未验证/探测截断/旧索引默认警告、`--strict` 失败；`--require` 要求存在非空清单；卡片/记忆/页面按 8 路有界并发读取，链接/存在性探测保持上限与串行；支持 `--root`/`--locale`/`--json`（含 `problems[].code`），退出码 0/1/2 | v0.137.0 / v0.151.0 |

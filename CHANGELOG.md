@@ -5,6 +5,16 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.154.0] - 2026-11-27
+
+### Docs
+
+- README (English and Chinese) now includes a problem-code reference table for
+  `verify:wiki --json`: code, default severity, `--strict`/`--require`
+  escalation, and meaning. This makes CI aggregation/suppression practical
+  without reading the script source. Also removed a duplicated gate command
+  line in the English quick-start block.
+
 ## [0.153.0] - 2026-11-27
 
 ### Added
