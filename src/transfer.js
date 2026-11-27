@@ -94,7 +94,9 @@ export async function copyTree(fs, srcAbs, dstAbs, opts = {}) {
         try {
           const text = await fs.readText(entry.target)
           const outTarget = await fs.resolve(path.posix.join(dstDir, entry.name))
-          await fs.writeText(outTarget, text)
+          // 写后回读校验：快照是备份/迁移载体，后端截断或写坏必须当场
+          // 记为失败，而不是等导入时才发现内容不一致。
+          await writeTextVerified(fs, outTarget, text)
           counts.files++
           counts.entries.push({
             path: path.posix.join(relDir, entry.name),

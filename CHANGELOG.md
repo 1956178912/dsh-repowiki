@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.164.0] - 2026-11-27
+
+### Fixed
+
+- **Snapshot writes are verified**: `copyTree` now reads every copied file
+  back and compares it to the source before counting it as exported. A
+  backend that truncates or corrupts a write is recorded in `failed` and
+  excluded from the snapshot manifest instead of producing a snapshot that
+  only fails later during import.
+
+### Tests
+
+- 531 cases pass (LANG=en and LANG=zh); a truncating filesystem wrapper
+  asserts one failed entry, one successful file and a manifest with only the
+  successful file.
+
 ## [0.163.0] - 2026-11-27
 
 ### Added

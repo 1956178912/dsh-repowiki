@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索与嵌套/字符类忽略规则与带指纹校验的快照（v0.163.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索与嵌套/字符类忽略规则与带写后校验与指纹校验的快照（v0.164.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -20,7 +20,7 @@
 | `repowiki-impact` 工具 | 改动前的影响面分析（只读、确定性、无 LLM）：把变更路径匹配到索引文件（绝对路径/后缀/唯一 basename，歧义只列候选不猜）；在反向 import 图上按最小跳数展开直接与传递依赖方（`depth` 1–3，明细有界但总数精确）；列出涉及变更文件的循环组（含代表路径）、变更文件的 fan-in；返回会受影响的卡片（含陈旧标记）与 Wiki 页面/章节引用；给出可解释的风险分层（直接依赖 / 传递依赖 / 循环 / hub 四个计分因子，low–critical）与按优先级排序的验证建议。可选 `symbols` 支持裸符号名与 `path#name`：直接层要求具名 import 证据，传递层保留文件图保守展开；解析不到时不悄悄放大范围，`conservativeImpactedTotal` 保留文件级上界；默认扫描直接具名导入方并返回 `usages` 词法使用点（`path:line` + 源码行），排除 import/export 列表、解构绑定与整行注释，最多 20 个文件 / 每符号 10 条 / 总计 100 条，读取失败列入 `usagesUnreadable`（未知而非无使用），`includeUsages=false` 可关闭源码读取；受影响的测试文件按路径启发式单列为 `affectedTests`（最近跳数优先、上限 50），并在验证建议中首先点名 |
 | `repowiki-context` 工具 | 一次调用生成任务证据包（只读、确定性、无 LLM）：按标识符、路径、显式 anchor 与卡片/Wiki/记忆 BM25 命中给文件排序；把相关符号定义、带真实行号的源码片段、直接 imports/dependents、相关循环与 fan-in 热点合成一个 Markdown 包。`budget` 为 2,000–40,000 字符硬上限（默认 12,000），源码/文档/关系省略分别计数，不把截断内容冒充完整证据；主文件列表与源码读取均有界；任务未命中任何索引文件且 import 图有边时，用 PageRank 前 5 个文件作为 repo map 兜底，逐条标 `(repo map)` 并输出 `fallback: 'repo-map'`，明确"起点而非任务相关性"；可选 `symbols`（裸名或 `path#name`）可脱离 query 直接锚定定义，裸名多文件定义时报告歧义候选而不猜，锚点失败时不扩大搜索、也不被 repo map 兜底掩盖 |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold / concurrency / attempts |
-| `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；写 `_snapshot.json` 记录每个文件与内容指纹；目标非空时默认拒绝，除非 `overwrite`；取消时如实上报 `aborted` |
+| `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；每个文件写后回读校验，再写 `_snapshot.json` 记录文件与内容指纹；目标非空时默认拒绝，除非 `overwrite`；取消时如实上报 `aborted` |
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；存在 `_snapshot.json` 时逐文件校验指纹，损坏/不完整快照默认拒绝（`allowCorrupt` 可强制；旧快照无清单时提示未校验）；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
 | `repowiki-edit` 工具 | 人工修订知识卡片：`create` 新建人工卡（path 可为索引外路径），`update` 改写现有卡片；两者置 `manuallyEdited`，`repowiki-extract` 不再自动刷新该卡 |
 | `repowiki-memory` 工具 | 把本会话学到的知识沉淀到 `.dsh-repowiki/memory/<locale>/`（默认 `pending` 待审），再经 `list` / `accept` / `reject` 完成审核闭环；条目为带 JSON frontmatter 的 Markdown，随 Git 共享；同名 slug 不同标题哈希共存，审核记录 `reviewedAt` |
@@ -491,7 +491,7 @@ src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
 src/types.d.ts         ctx.fs / 工具定义的共享类型声明
-test/                  单元与集成测试（530 用例）
+test/                  单元与集成测试（531 用例）
 ```
 
 ## 许可

@@ -78,6 +78,27 @@ test('copyTree：失败明细有界上报（O2——不再只有匿名 skipped �
   nodefs.chmodSync(path.join(dir, 'src', 'b.md'), 0o644)
 })
 
+test('copyTree：目标写入被截断时计失败而非静默成功', async () => {
+  const dir = makeDir({ 'src/a.md': '# A\n', 'src/b.md': '# B\n' })
+  const base = makeFakeFs(dir)
+  let writes = 0
+  const truncating = {
+    ...base,
+    async writeText(target, text) {
+      writes++
+      // 第一个文件截断，第二个正常写入
+      const value = writes === 1 ? text.slice(0, Math.max(0, text.length - 1)) : text
+      return base.writeText(target, value)
+    },
+  }
+  const counts = await copyTree(truncating, path.join(dir, 'src'), path.join(dir, 'dst'))
+  assert.equal(counts.files, 1, '只有未截断的文件计入成功')
+  assert.equal(counts.skipped, 1)
+  assert.equal(counts.failed.length, 1)
+  assert.match(counts.failed[0].reason, /verification failed/)
+  assert.equal(counts.entries.length, 1, '失败文件不进入快照清单')
+})
+
 test('dirHasContent：存在且非空判定', async () => {
   const dir = makeDir({ 'full/a.md': 'a' })
   nodefs.mkdirSync(path.join(dir, 'empty'))
