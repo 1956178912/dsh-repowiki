@@ -1094,27 +1094,38 @@ window.__ModuleLoader__.load({
         return tt('loadFailed', { code: row.errorCode ?? 'unknown' })
       }
       return h('div', null,
-        ...rows.map((row) => h('button', {
+        ...rows.map((row, i) => h('button', {
           key: row.workspaceId,
           type: 'button',
           onClick: () => onOpen(row.workspaceId),
+          // 官方管理列表行模式（PluginManagerPage .row，practices.md 指定的
+          // 参照）：无卡片边框、0.5px 发丝分隔（末行无）、padding 12px 2px、
+          // 标题 13.5px/500、次行等宽字体
           style: {
-            ...cardChipStyle(),
-            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-            width: '100%', marginBottom: 8, padding: '10px 14px', textAlign: 'left',
+            display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+            width: '100%', padding: '12px 2px', textAlign: 'left',
+            background: 'transparent', border: 'none', borderRadius: 0, cursor: 'pointer',
+            ...(i < rows.length - 1
+              ? { borderBottom: '0.5px solid var(--dsw-alias-border-l2, #d1d5db)' }
+              : {}),
           },
           'aria-label': `${t('modeSingle')}: ${row.title}`,
         },
           statusDot(row.status === 'ready'),
           h('span', {
-            style: { flex: 1, minWidth: 120, fontSize: 14, fontWeight: 600,
+            style: { flex: 1, minWidth: 120, fontSize: 13.5, fontWeight: 500,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               color: 'var(--dsw-alias-label-primary, #111827)' },
           }, row.title),
           h('span', {
-            style: { fontSize: 12, flex: 'none', overflow: 'hidden', maxWidth: 260,
-              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              color: 'var(--dsw-alias-label-secondary, #6b7280)' },
+            style: {
+              fontSize: 11.5, lineHeight: '16px', flex: 'none',
+              overflow: 'hidden', maxWidth: 260, textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              // 官方 rowModule 同款：等宽字体 + tertiary（--dsw-font-mono 无
+              // CSS 定义，官方页亦只靠其回退链，故直接用回退链）
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              color: 'var(--dsw-alias-label-tertiary, #6b7280)',
+            },
           }, row.path),
           row.status === 'ready'
             ? h('span', {

@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.38.0] - 2026-11-27
+
+### Changed
+
+- **Overview rows adopt the official management-list pattern**
+  (practices.md: "The Plugin Manager page is the reference for management
+  lists"): verified against the shipped `PluginManagerPage.module.css` —
+  rows are borderless with `0.5px` hairline separators (`border-l2`, none
+  on the last row), `padding: 12px 2px`, gap 16, row titles 13.5px /
+  weight 500, secondary lines in the monospace stack at 11.5px / 16 line
+  height with `label-tertiary`. Our rows were card chips (bordered,
+  radius, 8px margins). The workspace rows now read exactly like the
+  sibling host pages' lists. (`--dsw-font-mono` has no CSS definition in
+  the shipped styles — the official pages' own mono stack is their
+  fallback chain, which we use verbatim; `label-tertiary` joined the
+  15 tracked tokens.)
+
 ## [0.37.0] - 2026-11-27
 
 ### Changed
