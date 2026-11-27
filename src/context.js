@@ -73,6 +73,93 @@ function termScore(name, term) {
 }
 
 /**
+ * 把调用方给出的符号锚点解析到索引定义。
+ *
+ * 支持 `path#name` 与裸名：
+ * - 限定路径：复用影响面的路径匹配（精确/后缀/唯一 basename），再在该文件
+ *   内精确查名；路径歧义或未命中直接报告，不猜。
+ * - 裸名：在全部索引文件中查找精确同名定义；恰好一个文件命中才解析，多个
+ *   文件命中列入 ambiguous（附候选），零命中列入 unmatched。同一文件内的
+ *   重载按 `path#name` 去重并保留最小行号。
+ * @param {ContextIndex} index - readIndex 返回的索引。
+ * @param {string[]} inputs - 符号锚点。
+ * @param {string} [root] - 项目根（用于剥离限定路径的绝对前缀）。
+ * @returns {{resolved:Array<{path:string, name:string, kind:string, line:number}>,
+ *   unmatched:string[], ambiguous:Array<{query:string, candidates:string[]}>}} 解析结果。
+ */
+export function resolveSymbolAnchors(index, inputs = [], root = '') {
+  const byPath = new Map((index.files ?? []).map(file => [file.path, file]))
+  const files = [...byPath.keys()]
+  /** @type {Map<string, {path:string, name:string, kind:string, line:number}>} */
+  const resolved = new Map()
+  const unmatched = []
+  const ambiguous = []
+  for (const raw of inputs) {
+    const input = String(raw ?? '').trim()
+    if (!input) continue
+    const hash = input.lastIndexOf('#')
+    const qualifier = hash > 0 ? input.slice(0, hash).trim() : ''
+    const name = (hash > 0 ? input.slice(hash + 1) : input).trim()
+    if (!name) {
+      unmatched.push(input)
+      continue
+    }
+    /** @type {string[]} */
+    let candidates = files
+    if (qualifier) {
+      const match = matchChangedPaths(index, [qualifier], root)
+      if (match.ambiguous.length > 0) {
+        ambiguous.push({ query: input, candidates: match.ambiguous[0].candidates })
+        continue
+      }
+      if (match.matched.length === 0) {
+        unmatched.push(input)
+        continue
+      }
+      candidates = match.matched
+    }
+    /** @type {Array<{path:string, name:string, kind:string, line:number}>} */
+    const hits = []
+    for (const path of candidates) {
+      const file = byPath.get(path)
+      for (const symbol of file?.symbols ?? []) {
+        if (!symbol || symbol.name !== name) continue
+        hits.push({
+          path,
+          name,
+          kind: typeof symbol.kind === 'string' ? symbol.kind : '',
+          line: Number.isInteger(symbol.line) && symbol.line > 0 ? symbol.line : 0,
+        })
+      }
+    }
+    if (hits.length === 0) {
+      unmatched.push(input)
+      continue
+    }
+    if (!qualifier) {
+      const hitPaths = [...new Set(hits.map(hit => hit.path))].sort()
+      if (hitPaths.length > 1) {
+        ambiguous.push({ query: input, candidates: hitPaths.slice(0, 10) })
+        continue
+      }
+    }
+    for (const hit of hits) {
+      const key = `${hit.path}\u0000${hit.name}`
+      const existing = resolved.get(key)
+      if (!existing || (hit.line > 0 && (existing.line === 0 || hit.line < existing.line))) {
+        resolved.set(key, hit)
+      }
+    }
+  }
+  return {
+    resolved: [...resolved.values()]
+      .sort((a, b) => a.path.localeCompare(b.path) || a.name.localeCompare(b.name)),
+    unmatched,
+    ambiguous,
+  }
+}
+
+/**
  * 选择任务相关文件。显式路径优先；标识符命中符号优先于命中路径；文档
  * 命中的源文件获得少量加分，使纯中文任务也能通过卡片回到代码。
  * @param {ContextIndex} index - readIndex 返回的索引。

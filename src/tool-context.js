@@ -20,16 +20,19 @@ import { cyclesForChanged, hubsForChanged } from './impact.js'
 import { computeFileRank } from './graph-rank.js'
 import {
   contextTerms, rankContextFiles, buildContextSnippets, packContextPack,
+  resolveSymbolAnchors,
   DEFAULT_CONTEXT_BUDGET, MIN_CONTEXT_BUDGET, MAX_CONTEXT_BUDGET, MAX_CONTEXT_FILES,
 } from './context.js'
 
 const DESCRIPTION = [
   'Build a bounded evidence pack for a coding task in one read-only call. Given a natural-language',
-  'task and optional anchor paths, rank relevant files from symbols, paths and knowledge documents;',
-  'include line-numbered source snippets, direct imports/dependents, cycles and fan-in, plus BM25',
-  'matches from cards, wiki and accepted memory. Every source excerpt has path:line evidence. The',
-  'budget is characters (not tokens); omitted items are counted and the pack never claims runtime',
-  'call-graph certainty. Run repowiki-index first. No model calls.',
+  'task and optional anchor paths or symbols (bare names or path#name), rank relevant files from',
+  'symbols, paths and knowledge documents; include line-numbered source snippets, direct',
+  'imports/dependents, cycles and fan-in, plus BM25 matches from cards, wiki and accepted memory.',
+  'Every source excerpt has path:line evidence. The budget is characters (not tokens); omitted',
+  'items are counted and the pack never claims runtime call-graph certainty. Symbol anchors work',
+  'without a query and never guess when a bare name is defined in multiple files. Run',
+  'repowiki-index first. No model calls.',
 ].join(' ')
 
 /** @param {unknown} value @returns {string[]} 非空字符串数组。 */
@@ -67,8 +70,13 @@ export function repowikiContextTool(ctx) {
     name: 'repowiki-context',
     description: DESCRIPTION,
     parameters: {
-      query: { type: 'string', description: 'Natural-language coding task. Identifier-like terms locate symbols; the full query also drives BM25 over knowledge documents.' },
+      query: { type: 'string', description: 'Natural-language coding task. Identifier-like terms locate symbols; the full query also drives BM25 over knowledge documents. Optional when paths or symbols are provided.' },
       paths: { type: 'array', items: { type: 'string' }, description: 'Optional anchor files. Explicit matches rank first; ambiguous paths are reported, never guessed.' },
+      symbols: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional symbol anchors as bare names or path#name. Defined files rank first and the anchor names drive snippet selection; a bare name defined in multiple files is reported as ambiguous instead of guessed. Works without a query.',
+      },
       root: { type: 'string', description: 'Optional project root. Defaults to the current directory and walks up for .dsh-repowiki.' },
       locale: { type: 'string', enum: ['zh', 'en'], description: 'Knowledge document locale. Omit for session language with content-first fallback.' },
       budget: { type: 'integer', description: `Maximum characters in the rendered evidence pack (${MIN_CONTEXT_BUDGET}-${MAX_CONTEXT_BUDGET}, default ${DEFAULT_CONTEXT_BUDGET}); this is not a token count.` },
@@ -154,6 +162,30 @@ export function repowikiContextTool(ctx) {
           },
           unmatched: { type: 'array', items: { type: 'string' } },
           ambiguous: { type: 'array', items: { type: 'object' } },
+          symbolAnchors: {
+            type: 'array',
+            description: 'Resolved symbol anchors used as primary evidence (path#name plus definition line).',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                path: { type: 'string' }, name: { type: 'string' },
+                kind: { type: 'string' }, line: { type: 'integer' },
+              },
+              required: ['path', 'name', 'kind', 'line'],
+            },
+          },
+          unmatchedSymbols: { type: 'array', items: { type: 'string' } },
+          ambiguousSymbols: {
+            type: 'array',
+            description: 'Bare symbol anchors defined in more than one file; candidates are listed instead of guessing.',
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                query: { type: 'string' }, candidates: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['query', 'candidates'],
+            },
+          },
           fallback: { type: 'string', enum: ['repo-map'], description: 'Set when no file matched the task and the pack instead lists top files by static import-graph PageRank; these are a starting point, not task relevance.' },
           hint: { type: 'string' }, durationMs: { type: 'integer' },
         },
@@ -185,12 +217,22 @@ export function repowikiContextTool(ctx) {
       }
       const index = /** @type {import('./context.js').ContextIndex} */ (rawIndex)
       const query = typeof args.query === 'string' ? args.query.trim() : ''
-      if (!query) {
+      const pathInputs = strings(args.paths)
+      const symbolInputs = strings(args.symbols)
+      if (!query && pathInputs.length === 0 && symbolInputs.length === 0) {
         return {
           indexed: true, root, query: '', durationMs: Date.now() - startedAt,
-          hint: 'query is required: describe the coding task so relevant symbols and documents can be ranked.',
+          hint: 'query is required unless paths or symbols are provided: describe the task or anchor it.',
         }
       }
+      // 符号锚点先解析再排序：解析失败/裸名歧义如实报告，绝不静默回退为
+      // 词法搜索或扩大成整个文件。
+      const symbolResolution = resolveSymbolAnchors(index, symbolInputs, root)
+      const anchorPaths = symbolResolution.resolved.map(item => item.path)
+      const hasAnchors = pathInputs.length > 0 || symbolInputs.length > 0
+      const taskLabel = query || (symbolInputs.length > 0
+        ? `symbols: ${symbolInputs.join(', ')}`
+        : `paths: ${pathInputs.join(', ')}`)
       const budget = boundedInt(args.budget, DEFAULT_CONTEXT_BUDGET, MIN_CONTEXT_BUDGET, MAX_CONTEXT_BUDGET)
       const limit = boundedInt(args.limit, 8, 1, MAX_CONTEXT_FILES)
       const explicitLocale = typeof args.locale === 'string' && SUPPORTED_LOCALES.includes(args.locale)
@@ -219,14 +261,15 @@ export function repowikiContextTool(ctx) {
         }))
       }
       const ranked = rankContextFiles(index, {
-        query, paths: strings(args.paths), root, limit,
+        query, paths: [...pathInputs, ...anchorPaths], root, limit,
         documentPaths: documents.map(doc => doc.path),
       })
-      // 无任何词法/文档命中时，用静态 import 图的 PageRank 给出仓库起点：
-      // 这不是任务相关性，只在大图（有边）时提供，并显式标注 fallback。
+      // 无任何词法/文档命中且调用方没有给锚点时，用静态 import 图的 PageRank
+      // 给出仓库起点：这不是任务相关性，并显式标注 fallback。给了锚点却全部
+      // 未命中时不做兜底，避免掩盖"锚点写错/歧义"的真实信号。
       let fallback = ''
       let selectedFiles = ranked.files
-      if (ranked.files.length === 0 && (index.edges ?? []).length > 0) {
+      if (ranked.files.length === 0 && !hasAnchors && (index.edges ?? []).length > 0) {
         const core = computeFileRank(index.edges, { limit: Math.min(5, limit) }).entries
         if (core.length > 0) {
           fallback = 'repo-map'
@@ -234,7 +277,10 @@ export function repowikiContextTool(ctx) {
         }
       }
       const byPath = new Map((index.files ?? []).map(file => [file.path, file]))
-      const terms = contextTerms(query)
+      const terms = [...new Set([
+        ...contextTerms(query),
+        ...symbolResolution.resolved.map(item => item.name),
+      ])]
       const snippets = []
       const sourceWarnings = []
       if (args.includeSource !== false) {
@@ -270,6 +316,8 @@ export function repowikiContextTool(ctx) {
       const warnings = [...sourceWarnings]
       if (ranked.unmatched.length > 0) warnings.push(`Unmatched anchor paths: ${ranked.unmatched.join(', ')}`)
       for (const item of ranked.ambiguous) warnings.push(`Ambiguous anchor ${item.query}: ${item.candidates.join(' | ')}`)
+      if (symbolResolution.unmatched.length > 0) warnings.push(`Unmatched symbol anchors: ${symbolResolution.unmatched.join(', ')}; they were not broadened to file or lexical search.`)
+      for (const item of symbolResolution.ambiguous) warnings.push(`Ambiguous symbol anchor ${item.query}: ${item.candidates.join(' | ')}`)
       if (localeInfo.source === 'fallback') warnings.push(`Knowledge locale ${requestedLocale} has no assets; using ${localeInfo.locale}.`)
       if (includeDocs && documents.length === 0) warnings.push('No knowledge document matched; source and static relations are still included when available.')
       if (fallback === 'repo-map') warnings.push('Repo-map fallback: the task matched no indexed file; these files rank highest on the static import graph, not on task relevance.')
@@ -278,17 +326,22 @@ export function repowikiContextTool(ctx) {
         return `- ${file.path}${names.length > 0 ? ` — ${names.join(', ')}` : ''}${fallback ? ' (repo map)' : ` (rank ${file.score})`}`
       })
       const pack = packContextPack({
-        query, budget, files: fileLines, snippets, documents, relations: relationLines, warnings,
+        query: taskLabel, budget, files: fileLines, snippets, documents, relations: relationLines, warnings,
       })
       const notes = []
       if (pack.truncated) notes.push('The evidence pack reached its character budget; omitted counts are reported explicitly.')
       if (fallback === 'repo-map') notes.push('No indexed file matched the task; the pack lists top static-import PageRank files as a starting point, not as task relevance.')
-      else if (selectedFiles.length === 0) notes.push('No source file matched. Try an identifier, a path anchor, or run repowiki-extract to enrich document-based routing.')
+      else if (selectedFiles.length === 0) notes.push(hasAnchors
+        ? 'None of the provided anchors matched the index; unmatched or ambiguous anchors are listed above.'
+        : 'No source file matched. Try an identifier, a path anchor, or run repowiki-extract to enrich document-based routing.')
       return {
         indexed: true, root, query,
         locale: localeInfo.locale, localeRequested: requestedLocale, localeSource: localeInfo.source,
         budget, usedChars: pack.usedChars, truncated: pack.truncated, text: pack.text,
         ...(fallback ? { fallback } : {}),
+        symbolAnchors: symbolResolution.resolved,
+        unmatchedSymbols: symbolResolution.unmatched,
+        ambiguousSymbols: symbolResolution.ambiguous,
         files: selectedFiles.map(file => ({
           path: file.path, score: file.score,
           symbols: file.symbols.map(symbol => ({
@@ -305,7 +358,12 @@ export function repowikiContextTool(ctx) {
     },
     presentCall: (args) => ({
       card: 'generic', title: 'Build task context', kind: 'search',
-      rawInput: { query: args.query ?? '', paths: Array.isArray(args.paths) ? args.paths.join(', ') : '', budget: args.budget ?? DEFAULT_CONTEXT_BUDGET },
+      rawInput: {
+        query: args.query ?? '',
+        paths: Array.isArray(args.paths) ? args.paths.join(', ') : '',
+        symbols: Array.isArray(args.symbols) ? args.symbols.join(', ') : '',
+        budget: args.budget ?? DEFAULT_CONTEXT_BUDGET,
+      },
     }),
   }
 }

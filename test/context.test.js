@@ -9,7 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import {
-  contextTerms, rankContextFiles, buildContextSnippets, packContextPack,
+  contextTerms, rankContextFiles, buildContextSnippets, packContextPack, resolveSymbolAnchors,
 } from '../src/context.js'
 import { repowikiContextTool } from '../src/tool-context.js'
 import { repowikiIndexTool } from '../src/tool-index.js'
@@ -161,6 +161,99 @@ test('repowiki-context：无命中时用 PageRank 仓库地图兜底并明确标
   assert.doesNotMatch(out.hint, /No source file matched/)
   const rendered = tool.output.render({}, out)[0].text
   assert.match(rendered, /Context pack: \d+\/4000 chars/)
+})
+
+test('context：符号锚点解析（限定路径/裸名唯一/歧义/未命中/重载）', () => {
+  const index = {
+    files: [
+      {
+        path: 'src/a.ts',
+        symbols: [
+          { name: 'shared', kind: 'function', line: 2 },
+          { name: 'onlyA', kind: 'class', line: 8 },
+        ],
+      },
+      { path: 'src/b.ts', symbols: [{ name: 'shared', kind: 'function', line: 5 }] },
+      { path: 'lib/a.ts', symbols: [{ name: 'shared', kind: 'function', line: 1 }] },
+    ],
+    edges: [],
+  }
+  assert.deepEqual(resolveSymbolAnchors(index, ['src/a.ts#shared']).resolved, [
+    { path: 'src/a.ts', name: 'shared', kind: 'function', line: 2 },
+  ])
+  assert.deepEqual(resolveSymbolAnchors(index, ['/repo/src/a.ts#shared'], '/repo').resolved, [
+    { path: 'src/a.ts', name: 'shared', kind: 'function', line: 2 },
+  ])
+  assert.deepEqual(resolveSymbolAnchors(index, ['onlyA']).resolved, [
+    { path: 'src/a.ts', name: 'onlyA', kind: 'class', line: 8 },
+  ])
+  const bareAmbiguous = resolveSymbolAnchors(index, ['shared'])
+  assert.deepEqual(bareAmbiguous.resolved, [])
+  assert.deepEqual(bareAmbiguous.ambiguous, [
+    { query: 'shared', candidates: ['lib/a.ts', 'src/a.ts', 'src/b.ts'] },
+  ])
+  const pathAmbiguous = resolveSymbolAnchors(index, ['a.ts#shared'])
+  assert.deepEqual(pathAmbiguous.resolved, [])
+  assert.deepEqual(pathAmbiguous.ambiguous, [
+    { query: 'a.ts#shared', candidates: ['lib/a.ts', 'src/a.ts'] },
+  ])
+  assert.deepEqual(resolveSymbolAnchors(index, ['missing', 'nope.ts#shared']).unmatched, [
+    'missing', 'nope.ts#shared',
+  ])
+  const overloads = {
+    files: [{
+      path: 'x.ts',
+      symbols: [
+        { name: 'over', kind: 'function', line: 9 },
+        { name: 'over', kind: 'function', line: 5 },
+      ],
+    }],
+    edges: [],
+  }
+  assert.deepEqual(resolveSymbolAnchors(overloads, ['over']).resolved, [
+    { path: 'x.ts', name: 'over', kind: 'function', line: 5 },
+  ])
+  assert.deepEqual(resolveSymbolAnchors(index, []), { resolved: [], unmatched: [], ambiguous: [] })
+})
+
+test('repowiki-context：符号锚点可在无 query 时定位定义并生成片段', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-context-symbols-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/config.ts'),
+    'export function parseConfig() { return 1 }\nexport function shared() { return 2 }\n')
+  nodefs.writeFileSync(path.join(dir, 'src/other.ts'),
+    'export function shared() { return 3 }\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const tool = repowikiContextTool(ctx)
+
+  const anchored = await tool.execute({
+    symbols: ['src/config.ts#parseConfig'], budget: 3000, includeDocs: false,
+  }, fakeExec)
+  assert.equal(anchored.indexed, true)
+  assert.equal(anchored.query, '')
+  assert.deepEqual(anchored.symbolAnchors, [
+    { path: 'src/config.ts', name: 'parseConfig', kind: 'function', line: 1 },
+  ])
+  assert.equal(anchored.files[0].path, 'src/config.ts')
+  assert.ok(anchored.snippets.some(snippet => snippet.path === 'src/config.ts'
+    && snippet.line <= 1 && snippet.endLine >= 1))
+  assert.match(anchored.text, /Task: symbols: src\/config\.ts#parseConfig/)
+  assert.match(anchored.text, /parseConfig/)
+
+  const bare = await tool.execute({ symbols: ['shared'], budget: 3000, includeDocs: false }, fakeExec)
+  assert.deepEqual(bare.symbolAnchors, [])
+  assert.deepEqual(bare.ambiguousSymbols, [
+    { query: 'shared', candidates: ['src/config.ts', 'src/other.ts'] },
+  ])
+  assert.equal(bare.files.length, 0, '给了锚点却歧义时不回退到 repo map')
+  assert.match(bare.text, /Ambiguous symbol anchor shared/)
+  assert.match(bare.hint, /None of the provided anchors matched/)
+
+  const missing = await tool.execute({ symbols: ['notThere'], budget: 3000, includeDocs: false }, fakeExec)
+  assert.deepEqual(missing.unmatchedSymbols, ['notThere'])
+  assert.match(missing.text, /Unmatched symbol anchors: notThere/)
+  assert.match(missing.hint, /None of the provided anchors matched/)
 })
 
 test('repowiki-context：无索引、空查询与无源码命中均如实降级', async () => {

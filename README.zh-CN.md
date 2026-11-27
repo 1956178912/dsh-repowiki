@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链、跨语言资产回退、文档健康度、符号级影响面与使用点证据、PageRank 核心文件与有预算的任务上下文包（v0.119.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链、跨语言资产回退、文档健康度、符号级影响面与使用点证据、PageRank 核心文件、带符号锚点的任务上下文包（v0.120.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -18,7 +18,7 @@
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈（+ 已采信的会话记忆作为约定/决策）与最多 15 条跨模块依赖摘要、最多 5 组文件级循环依赖、最多 5 个 fan-in 热点文件，凝练 Wiki 页面写入 `.dsh-repowiki/wiki/<locale>/`；`granularity=theme/module/all`（模块页确定性生成，无模型调用，区分出边/入边模块依赖、标注双向依赖的循环模块并追加高风险入口节）；`locales: ['zh','en']` 时主题页按 locale 各合成一次；自动目录、页级/章节引用为相对路径 + 可选 `#Lx-Ly` 并按索引白名单净化；每轮写 `wiki/<locale>/_index.json`（含 `inputDigest` 供陈旧检测）；重复 slug 自动改名，单页失败进入 `failed` 清单而非丢弃整轮；清单里的卡片指纹与已采信记忆指纹一致时跳过主题合成（不调用模型），`force=true` 可强制重跑；抛错或空页面列表按可取消退避重试（`attempts` 1–3） |
 | `repowiki-status` 工具 | 只读健康诊断（无 LLM）：索引存在/版本/兼容、文件/符号/模块数（含跳过文件）、语言分布、Git 分支/提交、最近抽取快照（`lastExtract`：计数、失败/重试、并发、尝试次数、耗时）、卡片陈旧/孤儿、Wiki 清单/陈旧/孤儿、记忆审核计数、plan 来源、进程内锁队列、跨模块依赖热点、文件级循环依赖组（每组附一条代表性最短环路径）、fan-in hub（被最多文件依赖的入口）、PageRank 核心文件（前 10，计入间接重要性，仅索引有依赖边时）与告警（文本报告最多 3 条 + 折叠计数）；新增文档覆盖率（分母为 plan 阈值下有资格生成卡片的文件，附缺口最大的模块）与加权健康分（文档 40 / Wiki 25 / 架构 20 / 卫生 15，A–D 等级 + 前四条待办）；读取 locale 支持"环境语言 → 有资产语言"回退并在输出中标注 |
 | `repowiki-impact` 工具 | 改动前的影响面分析（只读、确定性、无 LLM）：把变更路径匹配到索引文件（绝对路径/后缀/唯一 basename，歧义只列候选不猜）；在反向 import 图上按最小跳数展开直接与传递依赖方（`depth` 1–3，明细有界但总数精确）；列出涉及变更文件的循环组（含代表路径）、变更文件的 fan-in；返回会受影响的卡片（含陈旧标记）与 Wiki 页面/章节引用；给出可解释的风险分层（直接依赖 / 传递依赖 / 循环 / hub 四个计分因子，low–critical）与按优先级排序的验证建议。可选 `symbols` 支持裸符号名与 `path#name`：直接层要求具名 import 证据，传递层保留文件图保守展开；解析不到时不悄悄放大范围，`conservativeImpactedTotal` 保留文件级上界；默认扫描直接具名导入方并返回 `usages` 词法使用点（`path:line` + 源码行），排除 import/export 列表、解构绑定与整行注释，最多 20 个文件 / 每符号 10 条 / 总计 100 条，读取失败列入 `usagesUnreadable`（未知而非无使用），`includeUsages=false` 可关闭源码读取 |
-| `repowiki-context` 工具 | 一次调用生成任务证据包（只读、确定性、无 LLM）：按标识符、路径、显式 anchor 与卡片/Wiki/记忆 BM25 命中给文件排序；把相关符号定义、带真实行号的源码片段、直接 imports/dependents、相关循环与 fan-in 热点合成一个 Markdown 包。`budget` 为 2,000–40,000 字符硬上限（默认 12,000），源码/文档/关系省略分别计数，不把截断内容冒充完整证据；主文件列表与源码读取均有界；任务未命中任何索引文件且 import 图有边时，用 PageRank 前 5 个文件作为 repo map 兜底，逐条标 `(repo map)` 并输出 `fallback: 'repo-map'`，明确"起点而非任务相关性" |
+| `repowiki-context` 工具 | 一次调用生成任务证据包（只读、确定性、无 LLM）：按标识符、路径、显式 anchor 与卡片/Wiki/记忆 BM25 命中给文件排序；把相关符号定义、带真实行号的源码片段、直接 imports/dependents、相关循环与 fan-in 热点合成一个 Markdown 包。`budget` 为 2,000–40,000 字符硬上限（默认 12,000），源码/文档/关系省略分别计数，不把截断内容冒充完整证据；主文件列表与源码读取均有界；任务未命中任何索引文件且 import 图有边时，用 PageRank 前 5 个文件作为 repo map 兜底，逐条标 `(repo map)` 并输出 `fallback: 'repo-map'`，明确"起点而非任务相关性"；可选 `symbols`（裸名或 `path#name`）可脱离 query 直接锚定定义，裸名多文件定义时报告歧义候选而不猜，锚点失败时不扩大搜索、也不被 repo map 兜底掩盖 |
 | 项目级规划 | `.dsh-repowiki/repowiki-plan.json`（随 Git 共享）：exclude / includeOnly / maxCardsPerRun / cardComplexityThreshold / concurrency / attempts |
 | `repowiki-export` 工具 | 把 `.dsh-repowiki/` 资产复制为目录快照（备份或转移；仅 Markdown/JSON，无模型调用）；目标非空时默认拒绝，除非 `overwrite`；取消时如实上报 `aborted` |
 | `repowiki-import` 工具 | 从快照目录恢复 `.dsh-repowiki/`；已有资产默认受保护，除非 `overwrite`；恢复后校验 `index.json` 兼容性 |
@@ -229,6 +229,9 @@
   import 图 PageRank 排名文件，补上 fan-in 看不到的间接重要性；
   `repowiki-context` 在任务无任何命中时用同一排名兜底，并明确标注
   "起点而非任务相关性"
+- 任务上下文符号锚点（v0.120.0）：`repowiki-context symbols=[...]` 支持
+  裸名与 `path#name`，无 query 也能定位定义；裸名多文件定义时列候选不猜，
+  锚点失败不被 repo map 兜底掩盖
 - 可选语义索引按方案保持后置（YAGNI）
 - 会话记忆条目对后续会话可见，与知识卡片一同构成知识库
 
@@ -351,7 +354,7 @@ src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
 src/types.d.ts         ctx.fs / 工具定义的共享类型声明
-test/                  单元与集成测试（446 用例）
+test/                  单元与集成测试（448 用例）
 ```
 
 ## 许可

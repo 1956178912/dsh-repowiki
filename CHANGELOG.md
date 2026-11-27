@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.120.0] - 2026-11-27
+
+### Added
+
+- **Symbol anchors for task context**: `repowiki-context` accepts `symbols`
+  (bare names or `path#name`) in addition to paths and a natural-language
+  query. Resolved definitions rank first, anchor names drive snippet
+  selection, and a query is no longer mandatory when an anchor is supplied.
+  Qualified paths reuse the impact tool's path matching (exact/suffix/unique
+  basename); a bare name defined in multiple files is reported as ambiguous
+  with candidates instead of guessed; unresolved anchors are reported and
+  never broadened to file or lexical search. When explicit anchors fail, the
+  PageRank repo-map fallback stays off so anchor mistakes are not masked.
+
+### Tests
+
+- 448 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.119.0] - 2026-11-27
 
 ### Added

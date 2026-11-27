@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.120.0] - 2026-11-27
+
+- **任务上下文符号锚点**：`repowiki-context` 在路径与自然语言任务之外新增
+  `symbols`（裸名或 `path#name`）。已解析定义所在文件排第一，锚点符号名
+  驱动源码片段选择；提供锚点时 query 可省略。限定路径复用影响面工具的
+  路径匹配（精确/后缀/唯一 basename）；裸名在多个文件定义时报告歧义候选
+  而不猜；未命中的锚点如实报告，绝不扩大为文件级或词法搜索。显式锚点
+  全部失败时不触发 PageRank repo map 兜底，避免掩盖锚点错误。
+- **测试**：448 例在 LANG=en 与 LANG=zh 下全通过；覆盖率与基准见
+  `docs/coverage.md`、`docs/benchmarks.md`。
+
 ## [0.119.0] - 2026-11-27
 
 - **PageRank 核心文件排名**：新增纯函数 `src/graph-rank.js`，在静态 import
