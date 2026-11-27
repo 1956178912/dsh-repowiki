@@ -30,7 +30,7 @@ import { cwdOf, digestText, resolveLocales, delayWithSignal } from './util.js'
 import { normalizeAttempts } from './config.js'
 import { parseWikiSource } from './wiki-references.js'
 import { citationDigest } from './citation-digest.js'
-import { checkCitationDrift } from './citation-drift.js'
+import { checkCitationDrift, summarizeCitationCoverage } from './citation-drift.js'
 
 /** 主题合成失败重试的指数退避基数与上限（毫秒）。 */
 const RETRY_BASE_MS = 200
@@ -91,6 +91,32 @@ export function sanitizeSources(value, knownPaths) {
     if (out.length >= MAX_SOURCES_PER_SECTION) break
   }
   return out
+}
+
+/**
+ * 跳过合成时的引用指纹状态：完整覆盖、部分未覆盖或旧清单。
+ * @param {{citationCoverage?:{total?:number, tracked?:number, untracked?:number}}} value
+ *   工具输出。
+ * @returns {string} 单行状态。
+ */
+function citationStateForSkip(value) {
+  const coverage = value.citationCoverage
+  if (!coverage || !(coverage.total > 0)) return 'manifest has no citation digests'
+  if (coverage.untracked > 0) {
+    return `${coverage.tracked}/${coverage.total} cited source(s) verified; ${coverage.untracked} have no content digest`
+  }
+  return 'cited sources verified'
+}
+
+/**
+ * 未覆盖引用的指纹提示；完整覆盖时返回空字符串。
+ * @param {{total?:number, tracked?:number, untracked?:number}|undefined} coverage
+ *   引用指纹覆盖率。
+ * @returns {string} 提示文本。
+ */
+function untrackedCitationNote(coverage) {
+  if (!coverage || !(coverage.total > 0) || !(coverage.untracked > 0)) return ''
+  return `${coverage.tracked}/${coverage.total} cited source(s) have content digests; ${coverage.untracked} untracked (file unavailable or read cap reached), so drift checks skip them.`
 }
 
 /**
@@ -161,9 +187,10 @@ export function repowikiGenerateTool(ctx) {
                 aborted: { type: 'boolean' },
                 attempts: { type: 'integer', description: 'Theme-synthesis attempts made (0 when skipped or module-only).' },
                 retried: { type: 'integer', description: 'Retries performed after a thrown error or empty page list.' },
-                skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, cited sources are unchanged, and no model call was made.' },
+                skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, tracked cited sources are unchanged, and no model call was made.' },
                 hint: { type: 'string' },
                 citationDrift: { type: 'integer', description: 'Number of cited sources whose content changed since the last wiki; non-zero disables the fresh skip and triggers re-synthesis.' },
+                citationCoverage: { type: 'object', additionalProperties: false, description: 'How many citations have content digests; untracked citations cannot be checked for drift.', properties: { total: { type: 'integer' }, tracked: { type: 'integer' }, untracked: { type: 'integer' }, hasDigests: { type: 'boolean' } }, required: ['total', 'tracked', 'untracked', 'hasDigests'] },
               },
               required: ['locale', 'pages', 'cardsRead', 'memoriesRead', 'failed', 'orphaned', 'renamed'],
             },
@@ -181,8 +208,9 @@ export function repowikiGenerateTool(ctx) {
           aborted: { type: 'boolean' },
           attempts: { type: 'integer', description: 'Theme-synthesis attempts made (0 when skipped or module-only).' },
           retried: { type: 'integer', description: 'Retries performed after a thrown error or empty page list.' },
-          skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, cited sources are unchanged, and no model call was made.' },
+          skippedFresh: { type: 'boolean', description: 'True when the input digest matched the manifest, tracked cited sources are unchanged, and no model call was made.' },
           citationDrift: { type: 'integer', description: 'Cited sources whose content changed since the last wiki; non-zero disables the fresh skip.' },
+          citationCoverage: { type: 'object', additionalProperties: false, description: 'How many citations have content digests; untracked citations cannot be checked for drift.', properties: { total: { type: 'integer' }, tracked: { type: 'integer' }, untracked: { type: 'integer' }, hasDigests: { type: 'boolean' } }, required: ['total', 'tracked', 'untracked', 'hasDigests'] },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
         },
@@ -191,7 +219,7 @@ export function repowikiGenerateTool(ctx) {
       render: (_args, value) => [{
         type: 'text',
         text: value.skippedFresh
-          ? `Wiki is up to date: ${value.pages.length} page(s) in ${value.wikiDir}; no model call was made (cards and accepted memory unchanged${typeof value.citationDrift === 'number' ? ', cited sources verified' : '; manifest has no citation digests'}). Pass force=true to re-synthesize.`
+          ? `Wiki is up to date: ${value.pages.length} page(s) in ${value.wikiDir}; no model call was made (cards and accepted memory unchanged; ${citationStateForSkip(value)}). Pass force=true to re-synthesize.`
           : value.pages.length > 0 || value.failed?.length > 0
           ? [
             `Generated ${value.pages.length} wiki page(s) from ${value.cardsRead} card(s) and ${value.memoriesRead} accepted memory entrie(s) in ${value.durationMs}ms → ${value.wikiDir}: ${value.pages.join(', ') || '(none)'}${value.retried > 0 ? ` (${value.retried} retry(ies))` : ''}`,
@@ -200,6 +228,7 @@ export function repowikiGenerateTool(ctx) {
             value.orphaned?.length > 0 ? `Orphaned pages (not in this run): ${value.orphaned.join(', ')}` : '',
             value.cardsTruncated > 0 ? `${value.cardsTruncated} card(s) were omitted from the prompt (cap reached).` : '',
             value.citationDrift > 0 ? `${value.citationDrift} cited source(s) changed since the last wiki; re-synthesized.` : '',
+            untrackedCitationNote(value.citationCoverage),
             value.aborted ? 'Cancelled: remaining pages were not written.' : '',
             Array.isArray(value.byLocale) && value.byLocale.length > 1
               ? `Per locale: ${value.byLocale.map(r => `${r.locale} ${r.pages.length} page(s)${r.failed.length ? `, ${r.failed.length} failed` : ''}${r.hint ? ` (${r.hint})` : ''}`).join('; ')}`
@@ -292,6 +321,7 @@ export function repowikiGenerateTool(ctx) {
       // 主题合成没有新输入，跳过模型调用（模块页是确定性聚合，不在短路范围）
       let citationDriftCount = 0
       let citationDriftUnchecked = 0
+      let citationCoverage = null
       let freshnessHint = ''
       if (!force && granularity === 'theme') {
         const [manifest, existingPages] = await Promise.all([
@@ -318,7 +348,13 @@ export function repowikiGenerateTool(ctx) {
           }, { maxReads: MAX_CITATION_SOURCE_READS })
           citationDriftCount = drift?.total ?? 0
           citationDriftUnchecked = drift?.unchecked ?? 0
+          citationCoverage = summarizeCitationCoverage(manifest)
           if (citationDriftCount === 0 && citationDriftUnchecked === 0) {
+            const citationState = citationCoverage && citationCoverage.total > 0
+              ? citationCoverage.untracked > 0
+                ? `${citationCoverage.tracked}/${citationCoverage.total} cited source(s) verified; ${citationCoverage.untracked} have no content digest`
+                : 'all cited sources verified'
+              : 'the manifest has no citation digests'
             return {
               locale,
               wikiDir: `${root}/.dsh-repowiki/wiki/${locale}`,
@@ -335,9 +371,8 @@ export function repowikiGenerateTool(ctx) {
               retried: 0,
               skippedFresh: true,
               ...(drift ? { citationDrift: 0 } : {}),
-              hint: drift
-                ? 'Wiki is up to date (cards, accepted memory and cited sources unchanged); pass force=true to re-synthesize.'
-                : 'Wiki is up to date (cards and accepted memory unchanged; manifest has no citation digests); pass force=true to re-synthesize.',
+              ...(citationCoverage && citationCoverage.total > 0 ? { citationCoverage } : {}),
+              hint: `Wiki is up to date (cards and accepted memory unchanged; ${citationState}); pass force=true to re-synthesize.`,
             }
           }
         }
@@ -528,6 +563,9 @@ export function repowikiGenerateTool(ctx) {
             .filter(p => !intended.has(p.slug))
             .map(p => p.slug)
         }
+        // 指纹覆盖率：本页写出的引用中有多少记录了内容指纹。读取失败的
+        // 引用不写指纹，必须如实报告，避免后续把未覆盖当成已验证。
+        citationCoverage = summarizeCitationCoverage({ pages: manifestPages })
         try {
           manifest = await writeWikiManifest(fs, root, locale, {
             schemaVersion: 3,
@@ -559,6 +597,7 @@ export function repowikiGenerateTool(ctx) {
         attempts: attemptsUsed,
         retried,
         ...(citationDriftCount > 0 ? { citationDrift: citationDriftCount } : {}),
+        ...(citationCoverage && citationCoverage.total > 0 ? { citationCoverage } : {}),
         ...(themeHint || freshnessHint ? { hint: themeHint || freshnessHint } : {}),
         ...(aborted ? { aborted: true } : {}),
       }
@@ -596,6 +635,7 @@ export function repowikiGenerateTool(ctx) {
         retried: primary.retried ?? 0,
         ...(primary.skippedFresh ? { skippedFresh: true } : {}),
         ...(typeof primary.citationDrift === 'number' ? { citationDrift: primary.citationDrift } : {}),
+        ...(primary.citationCoverage ? { citationCoverage: primary.citationCoverage } : {}),
         ...(primary.aborted ? { aborted: true } : {}),
         ...(abortMessage ? { hint: abortMessage } : (primary.hint ? { hint: primary.hint } : {})),
         durationMs: Date.now() - startedAt,

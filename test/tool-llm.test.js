@@ -251,12 +251,18 @@ test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', 
   const generate = repowikiGenerateTool(ctx)
   const first = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.deepEqual(first.pages, ['overview'])
+  assert.deepEqual(first.citationCoverage, {
+    total: 1, tracked: 1, untracked: 0, hasDigests: true,
+  })
   const dispatched = activationSpecs.length
 
   // 卡片、记忆与引用源码均未变：短路且指纹可验证
   const second = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.equal(second.skippedFresh, true)
   assert.equal(second.citationDrift, 0)
+  assert.deepEqual(second.citationCoverage, {
+    total: 1, tracked: 1, untracked: 0, hasDigests: true,
+  })
   assert.strictEqual(activationSpecs.length, dispatched, '跳过时不派发模型')
 
   // 只改被引用源码，不动卡片：内容指纹变化 → 不再短路
@@ -290,6 +296,10 @@ test('repowiki-generate execute：引用无法验证时保守重合成', async (
   assert.equal(second.skippedFresh, undefined)
   assert.strictEqual(activationSpecs.length, dispatched + 1, '未验证引用不得短路')
   assert.match(second.hint ?? '', /could not be verified/)
+  assert.deepEqual(second.citationCoverage, {
+    total: 1, tracked: 0, untracked: 1, hasDigests: false,
+  })
+  assert.match(generate.output.render({}, second)[0].text, /1 untracked/)
 })
 
 test('repowiki-generate execute：旧清单无指纹时保持原短路行为', async () => {
@@ -317,8 +327,11 @@ test('repowiki-generate execute：旧清单无指纹时保持原短路行为', a
   const second = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.equal(second.skippedFresh, true)
   assert.equal(second.citationDrift, undefined, '无指纹不得声称已验证')
-  assert.match(second.hint ?? '', /no citation digests/)
-  assert.match(generate.output.render({}, second)[0].text, /no citation digests/)
+  assert.deepEqual(second.citationCoverage, {
+    total: 1, tracked: 0, untracked: 1, hasDigests: false,
+  })
+  assert.match(second.hint ?? '', /0\/1 cited source\(s\) verified; 1 have no content digest/)
+  assert.match(generate.output.render({}, second)[0].text, /0\/1 cited source\(s\) verified/)
   assert.strictEqual(activationSpecs.length, dispatched, '旧清单仍可短路')
 })
 

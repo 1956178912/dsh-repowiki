@@ -21,7 +21,7 @@ import { findImportCycles } from './cycles.js'
 import { topDependents, MAX_HUB_ENTRIES } from './references.js'
 import { computeFileRank, MAX_CORE_FILES } from './graph-rank.js'
 import { findBrokenWikiCitations, findCitationRangeIssues, normalizeWikiSource } from './wiki-references.js'
-import { checkCitationDrift } from './citation-drift.js'
+import { checkCitationDrift, summarizeCitationCoverage } from './citation-drift.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { digestText, cwdOf } from './util.js'
@@ -100,7 +100,7 @@ const DESCRIPTION = [
   'import edges, file-level import cycles, the most imported files by fan-in, and PageRank core files',
   'that weigh indirect importance rather than fan-in alone). Wiki citation integrity is checked',
   'against the index and the filesystem, including #Lx-Ly bounds when the index records line counts',
-  'and content-drift digests recorded by manifest v3; export candidates without named-import',
+  'and content-drift digests recorded by manifest v3 with explicit digest coverage (untracked citations cannot be drift-checked); export candidates without named-import',
   'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
   'Ca/Ce coupling and instability are reported for cross-module imports. Use it to diagnose',
   'why a panel or tool looks out of',
@@ -312,6 +312,18 @@ export function repowikiStatusTool(ctx) {
               truncated: { type: 'boolean' },
             },
             required: ['total', 'checked', 'unchecked', 'pages', 'truncated'],
+          },
+          citationCoverage: {
+            type: 'object',
+            description: 'How many manifest citations have content digests. Untracked citations (unreadable file or generation read cap) cannot be checked for drift; hasDigests is false for legacy manifests.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer' },
+              tracked: { type: 'integer' },
+              untracked: { type: 'integer' },
+              hasDigests: { type: 'boolean' },
+            },
+            required: ['total', 'tracked', 'untracked', 'hasDigests'],
           },
           coverage: {
             type: 'object',
@@ -537,6 +549,10 @@ export function repowikiStatusTool(ctx) {
           ...(value.citationDrift
             ? [`Citation drift: ${formatCitationDrift(value.citationDrift)}`]
             : []),
+          ...(value.citationCoverage && value.citationCoverage.total > 0
+            && (!value.citationCoverage.hasDigests || value.citationCoverage.untracked > 0)
+            ? [`Citation digests: ${value.citationCoverage.tracked}/${value.citationCoverage.total} tracked${value.citationCoverage.untracked > 0 ? `, ${value.citationCoverage.untracked} untracked` : ''}${value.citationCoverage.hasDigests ? '' : ' (manifest has no digests)'}`]
+            : []),
           ...(value.index.exists
             ? [`Docs coverage: ${value.coverage.documented}/${value.coverage.eligible} eligible file(s) (${value.coverage.percent}%)${value.coverage.stale ? `, ${value.coverage.stale} stale` : ''}${value.coverage.gaps.length > 0 ? `; largest gap: ${value.coverage.gaps[0].module} (${value.coverage.gaps[0].eligible - value.coverage.gaps[0].documented})` : ''}`]
             : []),
@@ -669,6 +685,7 @@ export function repowikiStatusTool(ctx) {
       let brokenCitations = null
       let citationRanges = null
       let citationDrift = null
+      let citationCoverage = null
       // 引用告警已由健康分的 Wiki 分量按缺陷类型扣分；从卫生分量的
       // warnings 中排除，避免同一问题被重复计分。
       const citationWarnings = []
@@ -742,6 +759,10 @@ export function repowikiStatusTool(ctx) {
         if (citationDrift && citationDrift.total > 0) {
           pushCitationWarning(`${citationDrift.total} wiki citation(s) changed since the wiki was generated; regenerate to refresh.`)
         }
+        // 指纹覆盖率：生成时读取失败的引用不会写入 citationDigests，
+        // 如实输出覆盖率并由文本报告提示；缺失路径已有独立告警，
+        // 这里不再重复告警，避免同一引用产生多条噪声。
+        citationCoverage = summarizeCitationCoverage(manifest)
       }
 
       const memories = await listMemory(fs, root, locale)
@@ -828,6 +849,7 @@ export function repowikiStatusTool(ctx) {
         ...(brokenCitations ? { brokenCitations } : {}),
         ...(citationRanges ? { citationRangeIssues: citationRanges } : {}),
         ...(citationDrift ? { citationDrift } : {}),
+        ...(citationCoverage ? { citationCoverage } : {}),
         memory: memoryCounts,
         plan: { source: planSource, ...(planError ? { error: planError } : {}) },
         lock: { pending: pendingLocks() },

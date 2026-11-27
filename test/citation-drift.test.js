@@ -4,8 +4,44 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { checkCitationDrift } from '../src/citation-drift.js'
+import { checkCitationDrift, summarizeCitationCoverage } from '../src/citation-drift.js'
 import { citationDigest } from '../src/citation-digest.js'
+
+test('citation-coverage：按页去重统计引用与已记录指纹', () => {
+  const coverage = summarizeCitationCoverage({
+    pages: [
+      {
+        sources: ['a.ts#L1', 'b.ts#L1'],
+        sections: [{ sources: ['a.ts#L1', 'c.ts#L1'] }],
+        citationDigests: { 'a.ts#L1': 'aaaaaaaaaaaa' },
+      },
+      { sources: ['d.ts#L1'] },
+    ],
+  })
+  assert.deepEqual(coverage, {
+    total: 4,
+    tracked: 1,
+    untracked: 3,
+    hasDigests: true,
+  })
+})
+
+test('citation-coverage：空清单、旧清单与空指纹', () => {
+  assert.equal(summarizeCitationCoverage(null), null)
+  assert.equal(summarizeCitationCoverage({}), null)
+  assert.deepEqual(summarizeCitationCoverage({ pages: [] }), {
+    total: 0, tracked: 0, untracked: 0, hasDigests: false,
+  })
+  assert.deepEqual(
+    summarizeCitationCoverage({ pages: [{ sources: ['a.ts#L1'], citationDigests: {} }] }),
+    { total: 1, tracked: 0, untracked: 1, hasDigests: false },
+  )
+  assert.deepEqual(
+    summarizeCitationCoverage({ pages: [{ sources: ['a.ts#L1'], citationDigests: { 'a.ts#L1': '' } }] }),
+    { total: 1, tracked: 0, untracked: 1, hasDigests: false },
+    '空字符串不算已记录指纹',
+  )
+})
 
 test('citation-drift：一致、变化、不可读与不安全路径', async () => {
   const source = 'a\nb\n'

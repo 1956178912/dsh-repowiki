@@ -197,7 +197,7 @@ test('status：健康分把引用缺陷计入 Wiki 分量', async () => {
       order: 0,
       sources: ['a.ts#L1', 'missing.ts#L1'],
       sections: [{ heading: 'S', sources: ['a.ts#L1', 'missing.ts#L1'] }],
-      citationDigests: { 'a.ts#L1': 'deadbeefdead', 'missing.ts#L1': 'cafebabecafe' },
+      citationDigests: { 'a.ts#L1': 'deadbeefdead' },
       generatedAt: 'now',
     }],
   })
@@ -205,6 +205,11 @@ test('status：健康分把引用缺陷计入 Wiki 分量', async () => {
   const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.equal(out.brokenCitations.total, 1, 'missing.ts 是缺失引用')
   assert.equal(out.citationDrift.total, 1, 'a.ts 内容指纹不匹配')
+  assert.deepEqual(out.citationCoverage, {
+    total: 2, tracked: 1, untracked: 1, hasDigests: true,
+  }, 'missing.ts 没有指纹，覆盖率必须如实报告')
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)[0].text
+  assert.match(rendered, /Citation digests: 1\/2 tracked, 1 untracked/)
   const wiki = out.health.components.find(item => item.key === 'wiki')
   assert.equal(wiki.score, 85, '缺失 10 分 + 漂移 5 分')
   assert.match(wiki.detail, /2 citation issue\(s\)/)

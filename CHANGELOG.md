@@ -5,6 +5,28 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.131.0] - 2026-11-27
+
+### Added
+
+- **Citation digest coverage**: `repowiki-generate` and `repowiki-status` now
+  report `citationCoverage` (`total` / `tracked` / `untracked` /
+  `hasDigests`) derived from the manifest, so citations whose source could
+  not be read at generation time (or were beyond the read cap) stay visible
+  instead of being silently treated as verified. Generation renders an
+  untracked-citation note and its fresh-skip hint distinguishes tracked
+  verification from untracked citations and legacy manifests without
+  digests. `summarizeCitationCoverage` is a shared pure helper; status
+  renders a `Citation digests` line only when coverage is incomplete or the
+  manifest predates v3.
+
+### Tests
+
+- 485 cases pass (LANG=en and LANG=zh); new coverage for the helper
+  (per-page dedupe, empty pages, empty digest values, legacy manifests),
+  generation (full coverage on a fresh skip, untracked after a deleted
+  source, legacy wording) and status (incomplete coverage line).
+
 ## [0.130.0] - 2026-11-27
 
 ### Added

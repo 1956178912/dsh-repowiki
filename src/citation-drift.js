@@ -24,6 +24,48 @@ export const MAX_CITATION_DRIFT_PAGES = 10
 export const MAX_CITATION_DRIFT_ISSUES = 10
 
 /**
+ * 汇总清单的引用指纹覆盖率：按页面去重后统计引用条数与已记录指纹数。
+ *
+ * 生成时读取失败或超过读取上限的引用不会写入 `citationDigests`；本函数
+ * 让 status/generate 能如实报告"哪些引用无法被漂移检查覆盖"，而不是
+ * 把未覆盖误读为已验证。
+ * @param {{pages?:Array<{sources?:string[], sections?:Array<{sources?:string[]}>,
+ *   citationDigests?:Record<string, string>}>}|null} manifest - Wiki 清单。
+ * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean}|null}
+ *   覆盖率；清单结构不可用时返回 null（0 条引用返回全 0 对象）。
+ */
+export function summarizeCitationCoverage(manifest) {
+  if (!manifest || !Array.isArray(manifest.pages)) return null
+  let total = 0
+  let tracked = 0
+  let hasDigests = false
+  for (const page of manifest.pages) {
+    const digests = page?.citationDigests && typeof page.citationDigests === 'object'
+      ? page.citationDigests
+      : null
+    if (digests && Object.values(digests).some(value => typeof value === 'string' && value)) {
+      hasDigests = true
+    }
+    /** @type {Set<string>} */
+    const sources = new Set()
+    for (const source of Array.isArray(page?.sources) ? page.sources : []) {
+      if (typeof source === 'string' && source) sources.add(source)
+    }
+    for (const section of Array.isArray(page?.sections) ? page.sections : []) {
+      for (const source of Array.isArray(section?.sources) ? section.sources : []) {
+        if (typeof source === 'string' && source) sources.add(source)
+      }
+    }
+    for (const source of sources) {
+      total++
+      if (digests && typeof digests[source] === 'string' && digests[source]) tracked++
+    }
+  }
+  return { total, tracked, untracked: total - tracked, hasDigests }
+}
+
+
+/**
  * 比较清单记录与当前源码。
  * @param {{pages?:Array<{slug?:string, title?:string,
  *   citationDigests?:Record<string, string>}>}|null} manifest - Wiki 清单。

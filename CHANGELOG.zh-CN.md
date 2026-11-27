@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.131.0] - 2026-11-27
+
+- **引用指纹覆盖率**：`repowiki-generate` 与 `repowiki-status` 输出
+  `citationCoverage`（`total` / `tracked` / `untracked` / `hasDigests`），
+  由清单派生：生成时读取失败或超过读取上限的引用会被如实标为未覆盖，
+  不再被静默当作已验证。生成会渲染未覆盖提示，fresh 短路的 `hint`
+  区分"已记录指纹已验证"与"存在未覆盖引用"；无指纹旧清单也给出明确
+  状态。`summarizeCitationCoverage` 为共享纯函数；status 仅在覆盖率不完整
+  或清单早于 v3 时渲染 `Citation digests` 行。
+- **测试**：485 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖率助手
+  （按页去重、空页面、空指纹、旧清单）、生成（短路完整覆盖、删除源文件
+  后未覆盖、旧清单措辞）与 status（不完整覆盖行）用例。
+
 ## [0.130.0] - 2026-11-27
 
 - **引用感知健康分**：`repowiki-status` 把引用完整性计入加权健康分。缺失
