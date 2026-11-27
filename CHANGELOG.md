@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.259.0] - 2026-11-28
+
+### Added
+
+- **Python `__all__` star visibility**: module-level `__all__` (`=`/`+=`,
+  multi-line lists/tuples, `append`/`extend`) and underscore-prefixed names
+  now decide what `from x import *` exposes. Star-barrel references and
+  usage scans only attribute visible names, so excluded symbols no longer
+  receive potential references, and `__all__` declaration lines are skipped
+  as usage sites.
+- Parser v15 re-parses cached symbols.
+
+### Tests
+
+- 812 cases pass (LANG=en); new coverage for `__all__` parsing (`=`/`+=`/
+  `append`), star-visibility filtering in references/usages and a real-index
+  cards integration including an excluded symbol.
+
 ## [0.258.0] - 2026-11-28
 
 ### Added

@@ -10,7 +10,7 @@
  * 明显噪声而不假装精确。
  */
 
-import { reexportImportSites } from './reexports.js'
+import { reexportImportSites, starExportedNamesByFile } from './reexports.js'
 
 /** 单次影响面分析返回的使用点条目上限。 */
 export const MAX_USAGE_ENTRIES = 100
@@ -42,6 +42,8 @@ const IMPORT_BLOCK_STARTS = [
   /^\s*from\s+\S+\s+import\s*\(/,
   /^\s*use\b[^;]*\{/,
   /^\s*(?:const|let|var)\s*[{[]/,
+  // Python __all__ 声明是导出清单，不是使用点（跨行列表由括号配平跳过）
+  /^\s*__all__\s*(?:\+?=|\.(?:append|extend)\s*\()/,
 ]
 
 /**
@@ -173,13 +175,17 @@ export function findSymbolUsages(source, symbolName, options = {}) {
  *   aliases?:Array<{from:string, to:string}>}>} edges
  *   index.json 的依赖边。
  * @param {{path:string, name:string}} symbol - 已解析的符号定义。
- * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
  *   索引文件条目（用于解析再导出链）。
  * @returns {Array<{path:string, importLines:number[], names?:string[]}>}
  *   按路径排序的依赖方；别名导入时 `names` 为导入方实际使用的名字。
  */
 export function usageImporters(edges = [], symbol, files = []) {
   if (!symbol || typeof symbol.path !== 'string' || typeof symbol.name !== 'string') return []
+  const pythonFiles = new Set(
+    files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
+  )
+  const pythonStarVisibility = starExportedNamesByFile(files)
   /** @type {Map<string, {lines:Set<number>, names:Set<string>}>} */
   const byPath = new Map()
   /**
@@ -207,6 +213,9 @@ export function usageImporters(edges = [], symbol, files = []) {
     // `*`（命名空间导入/`export *`）可能引用任意符号：作为潜在导入方参与
     // 词法扫描，是否真的使用由扫描结果决定
     if (!names.includes(symbol.name) && !names.includes('*')) continue
+    // Python 星号导入按 __all__/下划线收窄：排除名不算潜在导入方
+    if (names.includes('*') && pythonFiles.has(edge.from) && pythonStarVisibility.has(edge.to)
+      && !pythonStarVisibility.get(edge.to).has(symbol.name)) continue
     // 再导出边上的 aliases 是导出名映射，不是导入方本地绑定名
     const reexportEdge = edge.kind === 'export-from' || edge.kind === 'reexport'
     const aliases = reexportEdge
@@ -264,7 +273,7 @@ export const MAX_USAGE_TARGETS = 5
  *   aliases?:Array<{from:string, to:string}>}>} edges - 索引依赖边。
  * @param {Array<{path:string, symbols?:Array<{name:string, line?:number, endLine?:number}>}>} matches
  *   - 定义文件命中（searchIndex 结果或符号锚点）。
- * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
  *   - 索引文件条目；提供时沿再导出链纳入 barrel 导入方。
  * @returns {Promise<{entries:Array, skipped:number, skippedFiles:number, truncated:boolean}>}
  *   逐符号使用点、目标数缺口、文件数缺口与截断标记。

@@ -243,6 +243,31 @@ test('usages：usageImporters 识别别名再导出', () => {
   ], '别名导入方带实际扫描名')
 })
 
+test('usages：Python __all__ 收窄星号导入方', () => {
+  const edges = [
+    { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },
+    { from: 'pkg/app.py', to: 'pkg/__init__.py', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'pkg/__init__.py', lang: 'python', symbols: [] },
+    {
+      path: 'pkg/core.py',
+      lang: 'python',
+      symbols: [
+        { name: 'parse', kind: 'function', starExported: true },
+        { name: 'hidden', kind: 'function', starExported: false },
+      ],
+    },
+    { path: 'pkg/app.py', lang: 'python', symbols: [] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'pkg/core.py', name: 'parse' }, files), [
+    { path: 'pkg/__init__.py', importLines: [1] },
+    { path: 'pkg/app.py', importLines: [1] },
+  ])
+  assert.deepEqual(usageImporters(edges, { path: 'pkg/core.py', name: 'hidden' }, files), [],
+    '__all__ 排除名没有星号导入方')
+})
+
 test('usages：具名导入别名作为本地扫描名', () => {
   const edges = [
     { from: 'src/app.ts', to: 'src/a.ts', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'parseValue' }] },

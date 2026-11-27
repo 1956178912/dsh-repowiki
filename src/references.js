@@ -15,6 +15,7 @@
 
 import {
   barrelFiles, buildReexportMaps, exportedNamesByFile, reexportTargets, resolveReexportOrigins,
+  starExportedNamesByFile,
 } from './reexports.js'
 
 /** 单次检索返回的反向引用条目上限（与其它有界输出一致）。 */
@@ -49,21 +50,30 @@ function compareSite(a, b) {
 /**
  * 构建反向引用索引。
  * @param {IndexEdge[]} [edges] - 索引中的依赖边。
- * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
+ * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} [files]
  *   索引文件条目；提供时沿 `export * from`/具名再导出链把引用归到真实
  *   定义文件（缺省保持只按直接边记账）。
  * @returns {Map<string, Map<string, ReferenceSite[]>>}
  *   目标文件 → 符号名 → 已排序引用位置（同一文件同一行只记一次）。
  */
 export function buildReferenceIndex(edges = [], files = []) {
+  const pythonFiles = new Set(
+    files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
+  )
+  const pythonStarVisibility = starExportedNamesByFile(files)
   /** @type {Map<string, Map<string, Map<string, ReferenceSite>>>} */
   const byTarget = new Map()
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.from === edge.to) continue // 自引用不产生反向引用
-    const names = (Array.isArray(edge.symbols) ? edge.symbols : [])
+    let names = (Array.isArray(edge.symbols) ? edge.symbols : [])
       .filter(name => typeof name === 'string' && name.length > 0)
     if (names.length === 0) continue // 副作用导入没有符号级引用信息
+    // Python 星号导入按 __all__/下划线收窄，不把排除名当成潜在引用
+    if (names.includes('*') && pythonFiles.has(edge.from) && pythonStarVisibility.has(edge.to)) {
+      names = [...pythonStarVisibility.get(edge.to)]
+      if (names.length === 0) continue
+    }
     const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
     /** @type {ReferenceSite} */
     const site = { path: edge.from, ...(line ? { line } : {}) }

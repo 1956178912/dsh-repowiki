@@ -50,6 +50,30 @@ export function exportedNamesByFile(files = []) {
 }
 
 /**
+ * Python 星号导入可见的名字：`__all__` 排除项与下划线开头符号不可见；
+ * 其他语言不建表（星号再导出沿用普通导出集合）。
+ * @param {Array<{path?:string, lang?:string,
+ *   symbols?:Array<{name?:string, kind?:string, starExported?:boolean}>}>} [files]
+ *   索引文件。
+ * @returns {Map<string, Set<string>>} Python 文件 → 星号可见名。
+ */
+export function starExportedNamesByFile(files = []) {
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map()
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string' || file.lang !== 'python') continue
+    const names = new Set()
+    for (const symbol of Array.isArray(file.symbols) ? file.symbols : []) {
+      if (!symbol || typeof symbol.name !== 'string' || symbol.name === '') continue
+      if (symbol.kind === 'method' || symbol.starExported === false || symbol.name.startsWith('_')) continue
+      names.add(symbol.name)
+    }
+    out.set(file.path, names)
+  }
+  return out
+}
+
+/**
  * 汇总再导出边：
  * - JS/TS：`export * from`、同名 `export { x } from` 与别名
  *   `export { x as y } from`；
@@ -63,9 +87,10 @@ export function exportedNamesByFile(files = []) {
  * @returns {{stars:Map<string, string[]>,
  *   named:Map<string, Map<string, Set<string>>>,
  *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>,
- *   defaults:Map<string, string>}}
+ *   defaults:Map<string, string>, starDefinitions:Map<string, Set<string>>}}
  *   barrel → 星号目标；barrel → 同名导出 → 目标；barrel → 别名导出 →
- *   {目标文件, 目标原名}；文件 → 具名默认导出符号。
+ *   {目标文件, 目标原名}；文件 → 具名默认导出符号；Python 文件 →
+ *   星号可见名。
  */
 export function buildReexportMaps(edges = [], files = []) {
   /** @type {Map<string, string[]>} */
@@ -147,7 +172,13 @@ export function buildReexportMaps(edges = [], files = []) {
       targets.add(edge.to)
     }
   }
-  return { stars, named, aliases, defaults }
+  return {
+    stars,
+    named,
+    aliases,
+    defaults,
+    starDefinitions: starExportedNamesByFile(files),
+  }
 }
 
 /**
@@ -158,15 +189,15 @@ export function buildReexportMaps(edges = [], files = []) {
  * @param {string} name - barrel 导出的符号名。
  * @param {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>,
  *   aliases:Map<string, Map<string, Array<{target:string, local:string}>>>,
- *   defaults:Map<string, string>}} maps
+ *   defaults:Map<string, string>, starDefinitions?:Map<string, Set<string>>}} maps
  *   再导出映射。
  * @param {Map<string, Set<string>>} definitions - 文件 → 导出符号。
  * @returns {Array<{path:string, name:string}>} 唯一定义位置（0 或 1 项）。
  */
 export function resolveReexportOrigins(barrel, name, maps, definitions) {
-  /** @type {Array<{path:string, name:string, depth:number}>} */
-  const queue = [{ path: barrel, name, depth: 0 }]
-  const visited = new Set([`${barrel}\u0000${name}`])
+  /** @type {Array<{path:string, name:string, depth:number, star:boolean}>} */
+  const queue = [{ path: barrel, name, depth: 0, star: false }]
+  const visited = new Set([`${barrel}\u0000${name}\u00000`])
   /** @type {Map<string, {path:string, name:string}>} */
   const origins = new Map()
   /**
@@ -174,13 +205,14 @@ export function resolveReexportOrigins(barrel, name, maps, definitions) {
    * @param {string} path - 文件。
    * @param {string} nextName - 该文件中的符号名。
    * @param {number} depth - 当前跳数。
+   * @param {boolean} star - 是否经星号导入到达（Python 用 __all__ 收窄）。
    * @returns {void}
    */
-  const push = (path, nextName, depth) => {
-    const key = `${path}\u0000${nextName}`
+  const push = (path, nextName, depth, star) => {
+    const key = `${path}\u0000${nextName}\u0000${star ? 1 : 0}`
     if (visited.has(key)) return
     visited.add(key)
-    queue.push({ path, name: nextName, depth })
+    queue.push({ path, name: nextName, depth, star })
   }
   for (let head = 0; head < queue.length; head++) {
     const current = queue[head]
@@ -192,21 +224,26 @@ export function resolveReexportOrigins(barrel, name, maps, definitions) {
         continue
       }
     }
-    if (definitions.get(current.path)?.has(current.name)) {
+    // 经星号到达时按 Python __all__/下划线规则收窄；其它情况用普通导出集
+    const starNames = current.star ? maps.starDefinitions?.get(current.path) : null
+    const visible = starNames
+      ? starNames.has(current.name)
+      : definitions.get(current.path)?.has(current.name)
+    if (visible) {
       origins.set(`${current.path}\u0000${current.name}`, { path: current.path, name: current.name })
       continue
     }
     if (current.depth >= MAX_BARREL_DEPTH) continue
     for (const target of maps.named.get(current.path)?.get(current.name) ?? []) {
-      push(target, current.name, current.depth + 1)
+      push(target, current.name, current.depth + 1, false)
     }
     for (const alias of maps.aliases.get(current.path)?.get(current.name) ?? []) {
-      push(alias.target, alias.local, current.depth + 1)
+      push(alias.target, alias.local, current.depth + 1, false)
     }
     // ES 的 `export *` 不转发 default（Python 星号导入也无 default 概念）
     if (current.name !== 'default') {
       for (const target of maps.stars.get(current.path) ?? []) {
-        push(target, current.name, current.depth + 1)
+        push(target, current.name, current.depth + 1, true)
       }
     }
   }

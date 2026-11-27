@@ -931,8 +931,9 @@ test('repowiki-cards execute：默认导出经别名再导出的引用与使用�
 test('repowiki-cards execute：Python 包 __init__ barrel 的引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-py-barrel-'))
   nodefs.mkdirSync(path.join(dir, 'pkg'), { recursive: true })
-  nodefs.writeFileSync(path.join(dir, 'pkg/__init__.py'), 'from .core import parse\n')
-  nodefs.writeFileSync(path.join(dir, 'pkg/core.py'), 'def parse():\n    return 1\n')
+  nodefs.writeFileSync(path.join(dir, 'pkg/__init__.py'), 'from .core import *\n')
+  nodefs.writeFileSync(path.join(dir, 'pkg/core.py'),
+    "__all__ = ['parse']\ndef parse():\n    return 1\ndef hidden():\n    return 2\n")
   nodefs.writeFileSync(path.join(dir, 'pkg/app.py'), 'from pkg import parse\nvalue = parse()\n')
   const ctx = makeCtx(dir)
   await repowikiIndexTool(ctx).execute({}, fakeExec)
@@ -948,6 +949,10 @@ test('repowiki-cards execute：Python 包 __init__ barrel 的引用与使用点'
     { path: 'pkg/app.py', line: 2, text: 'value = parse()' },
   ])
   assert.equal(out.symbolUsages[0].filesScanned, 3)
+
+  const hidden = await cards.execute({ query: 'hidden', references: true, usages: true }, fakeExec)
+  assert.deepEqual(hidden.references, [], '__all__ 排除名不能被星号再导出')
+  assert.deepEqual(hidden.symbolUsages[0].usages, [])
 })
 
 test('repowiki-cards execute：Rust pub use 再导出链的引用与使用点', async () => {

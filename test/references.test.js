@@ -163,6 +163,31 @@ test('buildReferenceIndex：Python 包 __init__ 具名导入作为 barrel', () =
   ], '缺少语言信息时不猜测 Python barrel')
 })
 
+test('buildReferenceIndex：Python __all__ 收窄星号再导出的潜在引用', () => {
+  const edges = [
+    { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },
+    { from: 'pkg/app.py', to: 'pkg/__init__.py', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'pkg/__init__.py', lang: 'python', symbols: [] },
+    {
+      path: 'pkg/core.py',
+      lang: 'python',
+      symbols: [
+        { name: 'parse', kind: 'function', starExported: true },
+        { name: 'hidden', kind: 'function', starExported: false },
+      ],
+    },
+    { path: 'pkg/app.py', lang: 'python', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('pkg/core.py').get('parse'), [
+    { path: 'pkg/__init__.py', line: 1 },
+    { path: 'pkg/app.py', line: 1 },
+  ], '可见名字按星号记录为潜在引用')
+  assert.equal(refs.get('pkg/core.py').get('hidden'), undefined, '__all__ 排除名不被星号引用')
+})
+
 test('buildReferenceIndex：Python `from x import *` 作为星号再导出', () => {
   const edges = [
     { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },
@@ -175,11 +200,10 @@ test('buildReferenceIndex：Python `from x import *` 作为星号再导出', () 
   ]
   const refs = buildReferenceIndex(edges, files)
   assert.deepEqual(refs.get('pkg/core.py').get('parse'), [
-    { path: 'pkg/app.py', line: 1 },
-  ], '星号再导出把 app 归到 core.py 的具体符号')
-  assert.deepEqual(refs.get('pkg/core.py').get('*'), [
     { path: 'pkg/__init__.py', line: 1 },
-  ], '__init__ 自身的星号导入仍是潜在引用')
+    { path: 'pkg/app.py', line: 1 },
+  ], '星号导入按可见名记账，app 归到具体符号')
+  assert.equal(refs.get('pkg/core.py').get('*'), undefined, 'Python 星号不再产生无差别通配键')
 })
 
 test('buildReferenceIndex：Rust `pub use` 再导出链', () => {

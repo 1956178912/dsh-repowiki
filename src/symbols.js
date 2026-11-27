@@ -24,6 +24,8 @@ import { scriptBlockText } from './sfc.js'
  * @property {string} [parent] - 所属类名（仅 method）。
  * @property {boolean} [default] - 是否为 `export default` 声明的符号
  *   （用于默认导出的再导出解析；匿名默认导出无法具名，不登记）。
+ * @property {boolean} [starExported] - Python 星号导入是否可见（false 表示
+ *   被 `__all__` 排除或以下划线开头；缺省视为可见）。
  */
 
 /** Dart 顶层/成员声明关键字（禁止被误识别为函数名）。 */
@@ -399,6 +401,42 @@ function extractJsLike(lines) {
 }
 
 /**
+ * 收集 Python 模块 `__all__` 的名字：支持 `=`/`+=` 的列表/元组字面量
+ * （可跨行）以及 `append`/`extend` 调用。只识别模块级（行首）声明；
+ * 无声明返回 null。
+ * @param {string[]} lines - 源码行。
+ * @returns {Set<string>|null} 名字集合或 null。
+ */
+function pythonAllNames(lines) {
+  const names = new Set()
+  let found = false
+  /**
+   * 从一段文本中收集引号字符串（去掉行尾注释）。
+   * @param {string} text - 声明文本。
+   * @returns {void}
+   */
+  const collect = (text) => {
+    for (const m of text.replace(/#.*$/gm, '').matchAll(/['"]([A-Za-z_]\w*)['"]/g)) names.add(m[1])
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!/^__all__\s*(?:\+?=|\.(?:append|extend)\s*\()/.test(line)) continue
+    found = true
+    let text = line
+    // 跨行列表/元组：按括号配平拼接（上限 20 行，避免异常文件拖慢索引）
+    const opens = (s) => (s.match(/[[(]/g) ?? []).length
+    const closes = (s) => (s.match(/[\])]/g) ?? []).length
+    let depth = opens(line) - closes(line)
+    for (let j = i + 1; j < lines.length && depth > 0 && j < i + 20; j++) {
+      text += `\n${lines[j]}`
+      depth += opens(lines[j]) - closes(lines[j])
+    }
+    collect(text)
+  }
+  return found ? names : null
+}
+
+/**
  * 提取 Python 符号（def / async def / class，含装饰器归属与缩进块范围）。
  * @param {string[]} lines - 代码行。
  * @returns {SymbolInfo[]} 符号列表。
@@ -478,6 +516,15 @@ function extractPython(lines) {
       })
       continue
     }
+  }
+  // 星号导入可见性：有 __all__ 时以声明为准，否则排除下划线开头的名字
+  const allNames = pythonAllNames(lines)
+  for (const symbol of symbols) {
+    if (symbol.kind === 'method' || typeof symbol.name !== 'string' || !symbol.name) continue
+    const starExported = allNames === null
+      ? !symbol.name.startsWith('_')
+      : allNames.has(symbol.name)
+    if (!starExported) symbol.starExported = false
   }
   return symbols
 }

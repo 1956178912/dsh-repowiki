@@ -123,6 +123,32 @@ test('Python：class/def/async def 与方法归属、缩进块范围', () => {
   assert.ok(byName.Bar.endLine >= byName.ameth.endLine, '类块覆盖其方法')
 })
 
+test('Python：__all__ 与下划线决定星号导入可见性', () => {
+  const code = [
+    "__all__ = ['parse', 'Widget']",
+    "def parse(): ...",
+    "def hidden(): ...",
+    "def _private(): ...",
+    "def extra(): ...",
+    "class Widget:",
+    "    def method(self): ...",
+    "__all__.append('extra')",
+  ].join('\n')
+  const symbols = extractSymbols(code, 'python')
+  const byName = new Map(symbols.map(symbol => [symbol.name, symbol]))
+  assert.equal(byName.get('parse').starExported, undefined, '未标记即星号可见')
+  assert.equal(byName.get('Widget').starExported, undefined)
+  assert.equal(byName.get('extra').starExported, undefined, 'append 的名字可见')
+  assert.equal(byName.get('hidden').starExported, false, '__all__ 未列出的名字不可见')
+  assert.equal(byName.get('_private').starExported, false, '下划线名字不可见')
+  assert.equal(byName.get('method').starExported, undefined, '方法不参与星号导出判断')
+
+  const noAll = extractSymbols('def parse(): ...\ndef _hidden(): ...', 'python')
+  const noAllByName = new Map(noAll.map(symbol => [symbol.name, symbol]))
+  assert.equal(noAllByName.get('parse').starExported, undefined)
+  assert.equal(noAllByName.get('_hidden').starExported, false, '无 __all__ 时下划线仍不可见')
+})
+
 test('Go：func/方法接收者/type/导出常量', () => {
   const code = [
     'package demo',
