@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.194.0] - 2026-11-28
+
+### Added
+
+- **R `NAMESPACE` exports**: the root manifest is now parsed so R package
+  symbols carry manifest-backed `exported` flags instead of the `.`-prefix
+  convention alone. `export(...)`, `exportClasses(...)`,
+  `exportMethods(...)` and `S3method(generic, class[, method])` (exporting
+  `generic.class`) are applied across every R file after manifest loading;
+  `exportPattern(...)` cannot be expanded statically, so it falls back to
+  the convention instead of marking every symbol unexported.
+
+### Tests
+
+- 586 cases pass (LANG=en and LANG=zh); the R indexer fixture now proves
+  exported/unexported functions, `.`-private names, S3 methods, R6 classes
+  and cross-file propagation, plus an `exportPattern` fallback fixture.
+
 ## [0.193.0] - 2026-11-28
 
 ### Added

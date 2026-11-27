@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.194.0] - 2026-11-28
+
+- **R `NAMESPACE` 导出**：解析根清单，让 R 包符号的 `exported` 来自清单
+  证据而不再只靠 `.` 前缀约定。`export(...)`、`exportClasses(...)`、
+  `exportMethods(...)` 与 `S3method(generic, class[, method])`（导出
+  `generic.class`）在清单读取后应用到所有 R 文件；`exportPattern(...)`
+  无法静态展开，回退到约定推断，避免把所有符号标成未导出。
+- **测试**：586 例在 LANG=en 与 LANG=zh 下全通过；R 索引夹具覆盖导出/
+  未导出函数、`.` 私有名、S3 方法、R6 类与跨文件传播，并新增
+  `exportPattern` 回退夹具。
+
 ## [0.193.0] - 2026-11-28
 
 - **status 展示解析器版本**：`repowiki-status` 返回 `index.parserVersion`，

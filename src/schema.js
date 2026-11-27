@@ -130,6 +130,7 @@ export const MANIFEST_FILES = {
   'build.zig.zon': 'zig',
   'gleam.toml': 'gleam',
   'DESCRIPTION': 'r',
+  'NAMESPACE': 'r',
   'CMakeLists.txt': 'cmake',
 }
 

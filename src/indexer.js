@@ -789,6 +789,58 @@ function resolveShellSpecifier(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 R 包 NAMESPACE 的导出声明。
+ * 支持 `export(a, b)` / `exportClasses(...)` / `exportMethods(...)` /
+ * `S3method(generic, class[, method])`；`exportPattern(...)` 是动态导出，
+ * 无法静态展开，标记 dynamic 供调用方回退。
+ * @param {string} text - NAMESPACE 内容。
+ * @returns {{names:Set<string>, dynamic:boolean}} 导出名与动态导出标记。
+ */
+function parseRNamespace(text) {
+  const names = new Set()
+  let dynamic = false
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim()
+    if (line === '') continue
+    const call = /^(export|exportClasses|exportMethods|S3method|exportPattern)\s*\((.*)\)\s*$/.exec(line)
+    if (!call) continue
+    const kind = call[1]
+    const args = call[2].split(',')
+      .map(arg => arg.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean)
+    if (kind === 'exportPattern') { dynamic = true; continue }
+    if (kind === 'S3method') {
+      if (args.length >= 3) names.add(args[2])
+      else if (args.length === 2) names.add(`${args[0]}.${args[1]}`)
+      continue
+    }
+    for (const name of args) names.add(name)
+  }
+  return { names, dynamic }
+}
+
+/**
+ * 按 NAMESPACE 收紧 R 符号的 exported 标记。
+ * 无 NAMESPACE 或存在 `exportPattern`（动态导出）时保持既有约定
+ * （`.` 前缀私有），避免把无法静态判定的导出全部标成未导出。
+ * @param {object[]} files - 索引文件条目。
+ * @param {string|undefined} text - NAMESPACE 内容。
+ * @returns {void}
+ */
+function applyRNamespaceExports(files, text) {
+  if (typeof text !== 'string') return
+  const { names, dynamic } = parseRNamespace(text)
+  if (dynamic) return
+  for (const file of files) {
+    if (file.lang !== 'r' || !Array.isArray(file.symbols)) continue
+    file.symbols = file.symbols.map(symbol => {
+      if (typeof symbol?.name !== 'string') return symbol
+      return { ...symbol, exported: names.has(symbol.name) && !symbol.name.startsWith('.') }
+    })
+  }
+}
+
+/**
  * 解析 R 的 `source("path")`：先按引用文件目录、再按项目根尝试原路径与
  * `.R`/`.r` 后缀；绝对路径与越界路径不建边。
  * @param {string} fromRel - 引用方文件相对路径。
@@ -1931,6 +1983,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (typeof text === 'string') manifestTexts[selectedManifests[index].rel] = text
   }
   const stack = detectStack(manifestTexts)
+  // R 包的导出以根 NAMESPACE 为权威证据；在卡片/检索使用符号前收紧标记
+  applyRNamespaceExports(files, manifestTexts['NAMESPACE'])
   const modules = buildModules(files)
 
   // 依赖边第二遍：需要完整文件集合与清单（go.mod 的 module 前缀、

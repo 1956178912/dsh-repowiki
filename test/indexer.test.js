@@ -1370,8 +1370,16 @@ test('Shell：source 相对脚本目录与项目根解析', async () => {
 test('R：source 相对脚本目录与项目根解析、DESCRIPTION 技术栈', async () => {
   const dir = makeProject({
     'DESCRIPTION': 'Package: demo\nVersion: 0.2.0\nImports:\n    dplyr,\n    ggplot2\n',
+    'NAMESPACE': 'export(main)\nexportClasses(Counter)\nS3method(print, person)\n',
     'R/util.R': 'util_fun <- function(x) x + 1\n',
-    'R/main.R': 'source("R/util.R")\nmain <- function() util_fun(1)\n',
+    'R/main.R': [
+      'source("R/util.R")',
+      'main <- function() util_fun(1)',
+      'internal <- function() 2',
+      '.hidden <- function() 3',
+      'print.person <- function(x) x',
+      'Counter <- R6Class("Counter")',
+    ].join('\n'),
     'tests/testthat/test-main.R': 'source("../../R/main.R")\ntest_that("works", { expect_true(TRUE) })\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
@@ -1387,7 +1395,25 @@ test('R：source 相对脚本目录与项目根解析、DESCRIPTION 技术栈', 
   assert.ok(doc.stack.technologies.some(t => t.name === 'ggplot2' && t.source === 'DESCRIPTION'))
 
   const main = doc.files.find(f => f.path === 'R/main.R')
-  assert.ok(main.symbols.some(s => s.name === 'main' && s.kind === 'function'))
+  const symbol = name => main.symbols.find(s => s.name === name)
+  assert.equal(symbol('main').exported, true, 'NAMESPACE export() 决定导出')
+  assert.equal(symbol('internal').exported, false, '未在 NAMESPACE 导出的函数')
+  assert.equal(symbol('.hidden').exported, false, '. 前缀保持私有')
+  assert.equal(symbol('print.person').exported, true, 'S3method 导出 generic.class')
+  assert.equal(symbol('Counter').exported, true, 'exportClasses 导出 R6/S4 类')
+  const util = doc.files.find(f => f.path === 'R/util.R')
+  assert.equal(util.symbols.find(s => s.name === 'util_fun').exported, false, '其他 R 文件同样按 NAMESPACE 收紧')
+})
+
+test('R：NAMESPACE exportPattern 时保持约定推断', async () => {
+  const dir = makeProject({
+    'NAMESPACE': 'exportPattern("^[^\\\\.]")\n',
+    'R/main.R': 'internal <- function() 1\n.hidden <- function() 2\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const main = doc.files.find(f => f.path === 'R/main.R')
+  assert.equal(main.symbols.find(s => s.name === 'internal').exported, true, '动态导出无法展开时回退默认')
+  assert.equal(main.symbols.find(s => s.name === '.hidden').exported, false)
 })
 
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
