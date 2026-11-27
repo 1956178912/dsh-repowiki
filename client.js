@@ -335,6 +335,7 @@ const LANGUAGE_LABELS = {
   ruby: 'Ruby',
   swift: 'Swift',
   scala: 'Scala',
+  dart: 'Dart',
   c: 'C',
   cpp: 'C++',
 }

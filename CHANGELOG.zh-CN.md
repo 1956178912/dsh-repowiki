@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.166.0] - 2026-11-27
+
+- **Dart 支持（第 15 种语言）**：`.dart` 提取 class/mixin/enum/extension
+  （含 extension type）/typedef/构造器（命名构造器为 `Type.name`）/方法/
+  getter/setter/顶层函数与变量；`_` 前缀按私有记录。相对
+  `import`/`export`/`part` 建立本地依赖边（含同目录裸 `.dart` 与 `show`
+  符号），`dart:`/`package:` 保持外部。`pubspec.yaml` 提供项目名与 pub
+  依赖计数，Flutter/Provider/Riverpod/Bloc/Dio 等映射为展示名；面板语言
+  筛选显示 `Dart`。
+- **测试**：535 例在 LANG=en 与 LANG=zh 下全通过；符号、依赖与索引用例
+  覆盖构造器/getter/私有成员、相对 `part`/`import` 边、外部包排除与
+  pub 技术栈。
+
 ## [0.165.0] - 2026-11-27
 
 - **修复大快照导入**：快照校验此前在 500 个文件处停止并判为未通过，

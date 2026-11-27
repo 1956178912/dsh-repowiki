@@ -332,6 +332,65 @@ test('Ruby/Swift/Scala：符号、本地依赖边与三生态技术栈', async (
   assert.deepEqual(doc.stack.dependencyCounts, { bundler: 1, sbt: 1, swiftpm: 1 })
 })
 
+test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
+  const dir = makeProject({
+    'pubspec.yaml': [
+      'name: demo_app',
+      'environment:',
+      '  sdk: ">=3.0.0 <4.0.0"',
+      'dependencies:',
+      '  flutter:',
+      '    sdk: flutter',
+      '  provider: ^6.1.0',
+      'dev_dependencies:',
+      '  flutter_test:',
+      '    sdk: flutter',
+    ].join('\n'),
+    'lib/app.dart': [
+      "import 'package:flutter/material.dart';",
+      "import 'src/screen.dart' show Screen;",
+      "part 'app.g.dart';",
+      'class App extends StatelessWidget {',
+      '  const App({super.key});',
+      '  @override',
+      '  Widget build(BuildContext context) => Screen();',
+      '}',
+    ].join('\n'),
+    'lib/src/screen.dart': [
+      'class Screen extends StatelessWidget {',
+      '  const Screen({super.key});',
+      '  @override',
+      '  Widget build(BuildContext context) => const Placeholder();',
+      '}',
+    ].join('\n'),
+    'lib/app.g.dart': "part of 'app.dart';\nclass Generated {}\n",
+    'test/app_test.dart': [
+      "import 'package:flutter_test/flutter_test.dart';",
+      "import '../lib/app.dart';",
+      'void main() {}',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+
+  assert.deepEqual(doc.stats.languages, { dart: 4 })
+  assert.ok(!doc.files.some(f => f.path === 'pubspec.yaml'), 'pubspec 只作清单')
+  const appSymbols = doc.files.find(f => f.path === 'lib/app.dart').symbols
+  assert.ok(appSymbols.some(s => s.name === 'App' && s.kind === 'class'))
+  assert.ok(appSymbols.some(s => s.name === 'build' && s.parent === 'App'))
+  assert.ok(doc.files.find(f => f.path === 'test/app_test.dart').symbols.some(s => s.name === 'main'))
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('lib/app.dart', 'lib/src/screen.dart')?.line, 2, '相对 import 行号')
+  assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.line, 3, 'part 指令建本地边')
+  assert.equal(edge('test/app_test.dart', 'lib/app.dart')?.line, 2, '../lib 相对路径解析')
+  assert.ok(!doc.edges.some(e => e.from === 'lib/app.dart' && e.to.includes('flutter')), 'package: 外部依赖不建边')
+
+  assert.equal(doc.stack.projectName, 'demo_app')
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Flutter' && t.ecosystem === 'pub'))
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Provider' && t.ecosystem === 'pub'))
+  assert.equal(doc.stack.dependencyCounts.pub, 3)
+})
+
 test('Swift：本地 target 导入解析到 Sources/<Target> 代表文件', async () => {
   const dir = makeProject({
     'Package.swift': '// swift-tools-version:5.9\nimport PackageDescription\n',

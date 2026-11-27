@@ -119,6 +119,7 @@ export const MANIFEST_FILES = {
   'Gemfile': 'bundler',
   'Package.swift': 'swiftpm',
   'build.sbt': 'sbt',
+  'pubspec.yaml': 'pub',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -149,6 +150,7 @@ export const EXTENSION_LANGS = {
   rake: 'ruby',
   swift: 'swift',
   scala: 'scala',
+  dart: 'dart',
   c: 'c',
   h: 'c',
   cc: 'cpp',

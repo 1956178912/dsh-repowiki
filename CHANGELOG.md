@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.166.0] - 2026-11-27
+
+### Added
+
+- **Dart indexing (15th language)**: `.dart` files now produce symbols for
+  classes, mixins, enums, extensions (including extension types), typedefs,
+  constructors (named constructors as `Type.name`), methods, getters/setters,
+  top-level functions and variables. `_`-prefixed names are recorded as
+  private. Relative `import`/`export`/`part` directives create local
+  dependency edges (including bare same-directory `.dart` URIs and `show`
+  symbols); `dart:`/`package:` remain external. `pubspec.yaml` contributes
+  `projectName` and `pub` dependency counts, with Flutter/Provider/Riverpod/
+  Bloc/Dio and other common packages mapped to display names. The panel's
+  language filter shows `Dart`.
+
+### Tests
+
+- 535 cases pass (LANG=en and LANG=zh); new symbol, dependency and indexer
+  cases cover constructors/getters/private members, relative `part`/`import`
+  edges, external package exclusion and the pub tech stack.
+
 ## [0.165.0] - 2026-11-27
 
 ### Fixed

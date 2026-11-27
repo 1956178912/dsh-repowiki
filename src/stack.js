@@ -143,6 +143,20 @@ const SWIFT_TECH = {
   'firebase-ios-sdk': 'Firebase', kingfisher: 'Kingfisher', 'lottie-ios': 'Lottie',
 }
 
+/** pubspec.yaml 的包名 → 技术展示名。 */
+const PUB_TECH = {
+  flutter: 'Flutter', flutter_test: 'Flutter Test', cupertino_icons: 'Cupertino Icons',
+  provider: 'Provider', riverpod: 'Riverpod', flutter_riverpod: 'Riverpod', hooks_riverpod: 'Riverpod',
+  bloc: 'Bloc', flutter_bloc: 'Bloc', get: 'GetX', get_it: 'GetIt',
+  dio: 'Dio', http: 'http', retrofit: 'Retrofit', chopper: 'Chopper',
+  go_router: 'go_router', auto_route: 'AutoRoute',
+  sqflite: 'sqflite', drift: 'Drift', isar: 'Isar', hive: 'Hive', shared_preferences: 'SharedPreferences',
+  firebase_core: 'Firebase', cloud_firestore: 'Firebase', firebase_auth: 'Firebase',
+  google_fonts: 'Google Fonts', cached_network_image: 'Cached Network Image',
+  freezed: 'Freezed', json_serializable: 'json_serializable', build_runner: 'build_runner',
+  mockito: 'Mockito',
+}
+
 /** sbt 的 artifact 名 → 技术展示名。 */
 const SBT_TECH = {
   'spark-core': 'Apache Spark', 'spark-sql': 'Apache Spark',
@@ -424,6 +438,38 @@ function swiftPackageDeps(text) {
 }
 
 /**
+ * 从 pubspec.yaml 提取依赖名（dependencies + dev_dependencies 的顶层键）。
+ * @param {string} text - pubspec.yaml 内容。
+ * @returns {string[]} 依赖名（去重、保持出现顺序）。
+ */
+function pubspecDependencies(text) {
+  const deps = []
+  let inDeps = false
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+#.*$/, '')
+    if (!line.trim() || line.trim().startsWith('#')) continue
+    // 顶层键（无缩进）切换依赖段；其它段（environment/assets/...）关闭
+    if (/^[A-Za-z_][\w-]*\s*:/.test(line)) {
+      inDeps = /^(?:dev_)?dependencies\s*:/.test(line)
+      continue
+    }
+    if (!inDeps) continue
+    const m = /^\s{2}([A-Za-z_][\w-]*)\s*:/.exec(line)
+    if (m && !deps.includes(m[1])) deps.push(m[1])
+  }
+  return deps
+}
+
+/**
+ * 从 pubspec.yaml 读取项目名。
+ * @param {string} text - pubspec.yaml 内容。
+ * @returns {string|undefined} 项目名。
+ */
+function pubspecName(text) {
+  return /^name:\s*([^\s#]+)/m.exec(text)?.[1]
+}
+
+/**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
  * @returns {{group:string, artifact:string, version?:string}[]} 依赖列表。
@@ -569,6 +615,14 @@ export function detectStack(manifests) {
       for (const dep of deps) {
         const name = sbtTechName(dep)
         if (name) info.technologies.push({ name, ecosystem: 'sbt', source: path, version: dep.version })
+      }
+    } else if (path === 'pubspec.yaml' || path.endsWith('/pubspec.yaml')) {
+      const deps = pubspecDependencies(text)
+      info.dependencyCounts.pub = (info.dependencyCounts.pub ?? 0) + deps.length
+      if (path === 'pubspec.yaml' && !info.projectName) info.projectName = pubspecName(text)
+      for (const dep of deps) {
+        const name = PUB_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'pub', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

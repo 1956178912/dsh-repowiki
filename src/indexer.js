@@ -83,6 +83,7 @@ function isJsConfigName(name) {
  */
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
+    || name === 'pubspec.yaml'
 }
 
 /**
@@ -815,6 +816,19 @@ function resolveRelativeFile(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 Dart 的本地 import/export/part（`./x.dart`、`../x.dart` 与同目录 `x.dart`）。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - Dart URI（已排除 dart:/package:）。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveDartSpecifier(fromRel, specifier, indexed) {
+  if (!specifier.endsWith('.dart')) return null
+  const candidate = path.posix.normalize(path.posix.join(path.posix.dirname(fromRel), specifier))
+  return indexed.has(candidate) ? candidate : null
+}
+
+/**
  * 建立 Ruby 裸 `require` 的加载路径根：任意层级的 `lib` 目录（gem 布局
  * 的标准 `$LOAD_PATH`），最后回退项目根。按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -1239,6 +1253,9 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   }
   if (lang === 'scala') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.scala)
   if (lang === 'swift') return resolveSwiftSpecifier(imp.specifier, ctx.swiftTargets)
+  if (lang === 'dart') {
+    return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
+  }
   if (lang === 'c' || lang === 'cpp') {
     return resolveCppInclude(fromRel, imp.specifier, ctx.indexed, ctx.cppRoots, imp.relative)
   }

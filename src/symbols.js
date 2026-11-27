@@ -24,6 +24,194 @@ import { scriptBlockText } from './sfc.js'
  * @property {string} [parent] - 所属类名（仅 method）。
  */
 
+/** Dart 顶层/成员声明关键字（禁止被误识别为函数名）。 */
+const DART_KEYWORDS = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'new', 'assert', 'throw',
+  'await', 'yield', 'super', 'this', 'import', 'export', 'library', 'part',
+  'class', 'mixin', 'enum', 'extension', 'typedef', 'const', 'final', 'var',
+  'late', 'static', 'external', 'factory', 'operator', 'get', 'set',
+])
+
+/**
+ * 计算一行 Dart 的花括号增量（字符串/行注释感知；多行块注释不展开）。
+ * @param {string} line - 源码行。
+ * @returns {number} `{` 为正、`}` 为负的净值。
+ */
+function dartBraceDelta(line) {
+  let depth = 0
+  let quote = null
+  let escape = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (escape) escape = false
+      else if (ch === '\\') escape = true
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '/' && line[i + 1] === '/') break
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === '{') depth++
+    else if (ch === '}') depth--
+  }
+  return depth
+}
+
+/**
+ * 判断一行 Dart 是否是可调用的声明（函数/方法/构造器），排除字段初始化。
+ * @param {string} line - 源码行。
+ * @param {RegExp} re - 声明正则（第 1 个分组为名称）。
+ * @returns {RegExpExecArray|null} 匹配结果。
+ */
+function matchDartCallable(line, re) {
+  const paren = line.indexOf('(')
+  if (paren < 0) return null
+  const prefix = line.slice(0, paren)
+  // 字段初始化 `final x = foo(` 不是声明；箭头函数/表达式体也在此排除
+  if (prefix.includes('=')) return null
+  const match = re.exec(line)
+  if (!match) return null
+  return DART_KEYWORDS.has(match[1]) ? null : match
+}
+
+/**
+ * 提取 Dart 符号（class/mixin/enum/extension/typedef、顶层函数/变量、成员方法）。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表（按行序）。
+ */
+function extractDart(lines) {
+  const symbols = []
+  const typeRe = /^(?:(?:abstract|base|final|sealed|interface|mixin|augment)\s+)*class\s+([A-Za-z_$][\w$]*)/
+  const mixinRe = /^(?:(?:base|abstract)\s+)?mixin\s+(?!class\b)([A-Za-z_$][\w$]*)/
+  const enumRe = /^(?:(?:base|final|interface)\s+)?enum\s+([A-Za-z_$][\w$]*)/
+  const extensionRe = /^extension\s+(?!type\b|on\b)([A-Za-z_$][\w$]*)/
+  const extensionTypeRe = /^extension\s+type\s+([A-Za-z_$][\w$]*)/
+  const typedefRe = /^typedef\s+([A-Za-z_$][\w$]*)/
+  // 成员必须有返回类型（构造器另行匹配），避免把枚举常量调用 red(1) 误判为方法
+  const memberRe = /^(?:(?:static|external|abstract|covariant)\s+)*(?:[A-Za-z_$][\w$<>?,[\].]*\s+)+(?:get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\(/
+  const memberGetterRe = /^(?:(?:static|external|abstract|covariant)\s+)*(?:[A-Za-z_$][\w$<>?,[\].]*\s+)+get\s+([A-Za-z_$][\w$]*)\b/
+  // 顶层函数允许省略返回类型（Dart 允许 main() {}），但仍排除字段初始化
+  const topFnRe = /^(?:(?:external|static)\s+)*(?:[A-Za-z_$][\w$<>?,[\].]*\s+)?([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\(/
+  const topGetterRe = /^(?:external\s+)?(?:[A-Za-z_$][\w$<>?,[\].]*\s+)+get\s+([A-Za-z_$][\w$]*)\b/
+  const varRe = /^(?:late\s+)?(?:final|const|var)\s+(?:[A-Za-z_$][\w$<>?,[\].]*\s+)?([A-Za-z_$][\w$]*)\s*(?:=|;)/
+  const typedVarRe = /^(?:[A-Za-z_$][\w$<>?,[\].]*\s+)+([A-Za-z_$][\w$]*)\s*(?:=|;)/
+
+  let depth = 0
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]
+    const line = raw.trim()
+    if (!line || line.startsWith('//') || line.startsWith('/*') || line.startsWith('*')) {
+      depth += dartBraceDelta(raw)
+      continue
+    }
+    const atTop = depth === 0
+    if (atTop) {
+      const typeMatch = typeRe.exec(line) ?? mixinRe.exec(line)
+        ?? enumRe.exec(line) ?? extensionRe.exec(line) ?? extensionTypeRe.exec(line)
+      if (typeMatch) {
+        const name = typeMatch[1]
+        const endLine = findBlockEnd(lines, i)
+        symbols.push({
+          name,
+          kind: 'class',
+          line: i + 1,
+          endLine,
+          exported: !name.startsWith('_'),
+        })
+        // 类体成员：只看直接位于类型体内的一层（方法体内部不扫描）
+        let memberDepth = 0
+        for (let j = i + 1; j < Math.min(endLine, lines.length); j++) {
+          const memberLine = lines[j].trim()
+          if (memberDepth === 0 && memberLine && !memberLine.startsWith('//')
+            && !memberLine.startsWith('*')) {
+            const ctorRe = new RegExp(`^(?:const\\s+|factory\\s+)*(${name})(?:\\.([A-Za-z_$][\\w$]*))?\\s*\\(`)
+            const ctor = matchDartCallable(memberLine, ctorRe)
+            if (ctor) {
+              const ctorName = ctor[2] ? `${name}.${ctor[2]}` : name
+              symbols.push({
+                name: ctorName,
+                kind: 'method',
+                line: j + 1,
+                endLine: memberLine.includes('{') ? findBlockEnd(lines, j) : j + 1,
+                exported: !ctorName.includes('._'),
+                parent: name,
+              })
+            } else {
+              const method = matchDartCallable(memberLine, memberRe)
+              const getter = method ? null : memberGetterRe.exec(memberLine)
+              if (method || getter) {
+                const name = method ? method[1] : getter[1]
+                symbols.push({
+                  name,
+                  kind: 'method',
+                  line: j + 1,
+                  endLine: memberLine.includes('{') ? findBlockEnd(lines, j) : j + 1,
+                  exported: !name.startsWith('_'),
+                  parent: typeMatch[1],
+                })
+              }
+            }
+          }
+          memberDepth += dartBraceDelta(lines[j])
+          if (memberDepth < 0) break
+        }
+        depth += dartBraceDelta(raw)
+        continue
+      }
+      const typeDef = typedefRe.exec(line)
+      if (typeDef) {
+        symbols.push({
+          name: typeDef[1],
+          kind: 'type',
+          line: i + 1,
+          endLine: i + 1,
+          exported: !typeDef[1].startsWith('_'),
+        })
+        depth += dartBraceDelta(raw)
+        continue
+      }
+      const fn = matchDartCallable(line, topFnRe)
+      if (fn) {
+        symbols.push({
+          name: fn[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: line.includes('{') ? findBlockEnd(lines, i) : i + 1,
+          exported: !fn[1].startsWith('_'),
+        })
+        depth += dartBraceDelta(raw)
+        continue
+      }
+      const getter = topGetterRe.exec(line)
+      if (getter) {
+        symbols.push({
+          name: getter[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: line.includes('{') ? findBlockEnd(lines, i) : i + 1,
+          exported: !getter[1].startsWith('_'),
+        })
+        depth += dartBraceDelta(raw)
+        continue
+      }
+      const variable = varRe.exec(line) ?? typedVarRe.exec(line)
+      if (variable && !DART_KEYWORDS.has(variable[1])) {
+        symbols.push({
+          name: variable[1],
+          kind: 'variable',
+          line: i + 1,
+          endLine: i + 1,
+          exported: !variable[1].startsWith('_'),
+        })
+        depth += dartBraceDelta(raw)
+        continue
+      }
+    }
+    depth += dartBraceDelta(raw)
+  }
+  return symbols
+}
+
 /** JS/TS 中的保留/控制流关键字——禁止被误识别为方法名。 */
 const JS_METHOD_BLACKLIST = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'return', 'do', 'else', 'try',
@@ -1430,6 +1618,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'ruby') return extractRuby(lines)
   if (lang === 'swift') return extractSwift(lines)
   if (lang === 'scala') return extractScala(lines)
+  if (lang === 'dart') return extractDart(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

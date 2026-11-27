@@ -606,6 +606,39 @@ function extractCppImports(lines) {
 }
 
 /**
+ * 提取 Dart 的 import/export/part 引用。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractDartImports(lines) {
+  const result = []
+  const re = /^\s*(import|export|part)\s+['"]([^'"]+)['"](?<tail>[^;]*)/
+  for (let i = 0; i < lines.length; i++) {
+    const m = re.exec(lines[i])
+    if (!m) continue
+    const specifier = m[2]
+    // dart:/package: 是外部或 SDK 引用；相对/裸 .dart 才尝试本地解析
+    const relative = !/^[a-z][a-z0-9+.-]*:/i.test(specifier) && specifier.endsWith('.dart')
+    const imported = []
+    const show = /\bshow\s+([^;]+)/.exec(m.groups?.tail ?? '')
+    if (show) {
+      for (const part of show[1].split(',')) {
+        const name = part.trim().replace(/\s+.*$/, '')
+        if (name) imported.push(name)
+      }
+    }
+    result.push({
+      specifier,
+      line: i + 1,
+      kind: m[1] === 'export' ? 'export-from' : 'import',
+      relative,
+      imported,
+    })
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -628,6 +661,7 @@ export function extractImports(code, lang) {
   if (lang === 'ruby') return extractRubyImports(lines)
   if (lang === 'swift') return extractSwiftImports(lines)
   if (lang === 'scala') return extractScalaImports(lines)
+  if (lang === 'dart') return extractDartImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -329,6 +329,29 @@ test('Svelte：模块/实例脚本内的 import 均提取，行号对齐', () =>
   ])
 })
 
+test('Dart：import/export/part 提取相对语义与 show 符号', () => {
+  const code = [
+    "import 'dart:async';",
+    "import 'package:flutter/material.dart';",
+    "import 'src/b.dart' show B, C;",
+    "export 'src/api.dart' show Api;",
+    "part 'app.g.dart';",
+    "part of 'main.dart';",
+    '// import "commented.dart";',
+  ].join('\n')
+  const imports = extractImports(code, 'dart')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative, i.kind]), [
+    ['dart:async', 1, false, 'import'],
+    ['package:flutter/material.dart', 2, false, 'import'],
+    ['src/b.dart', 3, true, 'import'],
+    ['src/api.dart', 4, true, 'export-from'],
+    ['app.g.dart', 5, true, 'import'],
+  ])
+  assert.deepEqual(imports[2].imported, ['B', 'C'])
+  assert.deepEqual(imports[3].imported, ['Api'])
+  assert.ok(!imports.some(i => i.specifier === 'commented.dart'), '注释不提取')
+})
+
 test('C/C++：#include 引号与尖括号都提取，仅引号为相对语义', () => {
   const code = [
     '#include "core/util.h"',

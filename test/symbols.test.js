@@ -717,6 +717,66 @@ test('Vue SFC：只提取 script 块内符号，行号保持源文件位置', ()
   assert.ok(!symbols.some(s => s.name === 'a'), '.a 样式选择器不产符号')
 })
 
+test('Dart：类型/顶层函数/变量、构造器/方法/getter 与私有可见性', () => {
+  const code = [
+    "typedef Callback = void Function(int);",
+    "const appName = 'demo';",
+    'final int counter = 0;',
+    'int get answer => 42;',
+    'void main() {',
+    '  runApp(App());',
+    '}',
+    'class App extends StatelessWidget {',
+    '  const App({super.key});',
+    '  const App.named();',
+    "  final String title = 'x';",
+    '  @override',
+    '  Widget build(BuildContext context) {',
+    '    if (true) { return Container(); }',
+    "    return Text('x');",
+    '  }',
+    '  int get value => 1;',
+    "  String _secret() => 's';",
+    '  static App create() => App();',
+    '}',
+    'enum Color { red, green }',
+    'mixin Logging {',
+    '  void log(String msg) {}',
+    '}',
+    'extension StringExt on String {',
+    '  int get wordCount => 1;',
+    '}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'dart')
+  const byName = Object.fromEntries(symbols.map(s => [`${s.name}:${s.line}`, s]))
+
+  assert.equal(byName['Callback:1'].kind, 'type')
+  assert.equal(byName['appName:2'].kind, 'variable')
+  assert.equal(byName['counter:3'].kind, 'variable')
+  assert.equal(byName['answer:4'].kind, 'function')
+  assert.equal(byName['main:5'].kind, 'function')
+  assert.equal(byName['main:5'].endLine, 7)
+
+  const app = byName['App:8']
+  assert.equal(app.kind, 'class')
+  assert.ok(app.endLine >= 20, '类结束行')
+  assert.equal(byName['App:9'].kind, 'method')
+  assert.equal(byName['App:9'].parent, 'App', '默认构造器')
+  assert.equal(byName['App.named:10'].parent, 'App', '命名构造器')
+  assert.equal(byName['build:13'].kind, 'method')
+  assert.equal(byName['build:13'].parent, 'App')
+  assert.equal(byName['value:17'].kind, 'method', 'getter 作为方法')
+  assert.equal(byName['_secret:18'].exported, false)
+  assert.equal(byName['create:19'].exported, true)
+
+  assert.equal(byName['Color:21'].kind, 'class')
+  assert.equal(byName['Logging:22'].kind, 'class')
+  assert.ok(symbols.some(s => s.name === 'log' && s.parent === 'Logging'))
+  assert.equal(byName['StringExt:25'].kind, 'class')
+  assert.ok(symbols.some(s => s.name === 'wordCount' && s.parent === 'StringExt'))
+  assert.ok(!symbols.some(s => s.name === 'red'), '枚举常量不产符号')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',
