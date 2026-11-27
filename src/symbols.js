@@ -2358,40 +2358,68 @@ function extractR(lines) {
   const symbols = []
   const fnRe = /^([A-Za-z_.][\w.]*)\s*(?:<<-|<-|=)\s*function\s*\(/
   const classRe = /(?:setClass|R6Class)\s*\(\s*["']([A-Za-z_.][\w.]*)["']/
+  const methodRe = /^([A-Za-z_.][\w.]*)\s*=\s*function\s*\(/
+  /** @type {Array<{name:string, end:number}>} 类调用范围 */
+  const classRanges = []
+  /** @type {number[]} 已登记方法的结束行（跳过方法体内部的赋值） */
+  const methodEnds = []
   let depth = 0
-  let skipUntil = 0
   for (let i = 0; i < codeLines.length; i++) {
-    if (i >= skipUntil) {
-      const line = codeLines[i].trim()
-      if (depth === 0 && line !== '') {
-        const fn = fnRe.exec(line)
-        if (fn) {
-          symbols.push({
-            name: fn[1],
-            kind: 'function',
-            line: i + 1,
-            endLine: rFunctionEnd(codeLines, i),
-            exported: !fn[1].startsWith('.'),
-          })
-          depth += rBraceDelta(codeLines[i])
-          continue
-        }
-        // 类名在字符串字面量里：codeLines 已清空字符串内容，这里读原始行
-        // （注释行 codeLines 为空，不会进入本分支）
-        const cls = classRe.exec(lines[i])
-        if (cls) {
-          symbols.push({
-            name: cls[1],
-            kind: 'class',
-            line: i + 1,
-            endLine: rParenEnd(codeLines, i),
-            exported: !cls[1].startsWith('.'),
-          })
-          // 类调用内部的方法（R6 `initialize = function...`）不作为顶层符号
-          skipUntil = rParenEnd(codeLines, i)
-          depth += rBraceDelta(codeLines[i])
-          continue
-        }
+    while (classRanges.length > 0 && classRanges[classRanges.length - 1].end <= i + 1) {
+      classRanges.pop()
+    }
+    while (methodEnds.length > 0 && methodEnds[methodEnds.length - 1] <= i + 1) {
+      methodEnds.pop()
+    }
+    const line = codeLines[i].trim()
+    const inClass = classRanges.length > 0
+    if (line !== '' && inClass && methodEnds.length === 0) {
+      // R6/S4 类调用体内的方法（`initialize = function...`）：归属类名，
+      // 不当作顶层函数；`public = list(` 等非函数赋值不匹配
+      const method = methodRe.exec(line)
+      if (method) {
+        const end = rFunctionEnd(codeLines, i)
+        symbols.push({
+          name: method[1],
+          kind: 'method',
+          line: i + 1,
+          endLine: end,
+          exported: false,
+          parent: classRanges[classRanges.length - 1].name,
+        })
+        if (end > i + 1) methodEnds.push(end)
+        depth += rBraceDelta(codeLines[i])
+        continue
+      }
+    }
+    if (!inClass && depth === 0 && line !== '') {
+      const fn = fnRe.exec(line)
+      if (fn) {
+        symbols.push({
+          name: fn[1],
+          kind: 'function',
+          line: i + 1,
+          endLine: rFunctionEnd(codeLines, i),
+          exported: !fn[1].startsWith('.'),
+        })
+        depth += rBraceDelta(codeLines[i])
+        continue
+      }
+      // 类名在字符串字面量里：codeLines 已清空字符串内容，这里读原始行
+      // （注释行 codeLines 为空，不会进入本分支）
+      const cls = classRe.exec(lines[i])
+      if (cls) {
+        const end = rParenEnd(codeLines, i)
+        symbols.push({
+          name: cls[1],
+          kind: 'class',
+          line: i + 1,
+          endLine: end,
+          exported: !cls[1].startsWith('.'),
+        })
+        classRanges.push({ name: cls[1], end })
+        depth += rBraceDelta(codeLines[i])
+        continue
       }
     }
     depth += rBraceDelta(codeLines[i])

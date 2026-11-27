@@ -1116,7 +1116,8 @@ test('R：函数/类声明、无块体函数与注释/字符串屏蔽', () => {
     '  public = list(',
     '    initialize = function(value = 0) {',
     '      private$value <- value',
-    '    }',
+    '    },',
+    '    get = function() private$value',
     '  )',
     ')',
     '',
@@ -1137,8 +1138,14 @@ test('R：函数/类声明、无块体函数与注释/字符串屏蔽', () => {
   assert.equal(byName.get('block').endLine, 19, '块体 { 写在下一行')
   assert.equal(byName.get('Person').kind, 'class')
   assert.equal(byName.get('Counter').kind, 'class')
-  assert.equal(byName.get('Counter').endLine, 29)
-  assert.ok(!byName.has('initialize'), 'R6 类方法不登记为顶层函数')
+  assert.equal(byName.get('Counter').endLine, 30)
+  assert.equal(byName.get('initialize').kind, 'method', 'R6 方法归属类')
+  assert.equal(byName.get('initialize').parent, 'Counter')
+  assert.equal(byName.get('initialize').exported, false)
+  assert.equal(byName.get('initialize').endLine, 27)
+  assert.equal(byName.get('get').kind, 'method')
+  assert.equal(byName.get('get').parent, 'Counter')
+  assert.equal(byName.get('get').endLine, 28, '单行表达式体方法')
   assert.ok(!byName.has('inner'), '函数体内嵌套函数不登记')
   assert.ok(!byName.has('f'), '注释不产符号')
   assert.ok(!byName.has('msg'), '普通赋值不登记')

@@ -46,7 +46,7 @@
 | Zig | `const Foo = struct/enum/union/opaque`（含 `pub`/`extern`/`packed`/`union(enum)`）、顶层 `fn` / `extern fn` / `export fn`、具名 `test "…"` 块、顶层常量与变量、`pub const x = @import("x.zig")` 再导出；容器成员带 `parent`，`pub` 决定导出；私有 `@import`/`@cImport`/`@This` 别名不登记 | `@import("x.zig")` 相对引用文件所在目录归一解析并限制在项目内；`std`/`builtin`/`root` 与构建注入的模块名不建边；`@cImport`/`@cInclude` 不提取；`build.zig.zon` 提供项目名/版本/依赖计数，嵌套 monorepo 清单（上限 20）只累加依赖计数、项目名只取根 |
 | Gleam | `type` / `opaque type` / `external type` 容器、`type Name = …` 别名（kind type）、`fn` / `external fn`（跨行签名与单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记 | `import package/module`（含 `as` 别名与 `.{type Foo, Foo as F}` 未限定导入，跨行列表拼接到闭合 `}`）经每个 `src/`/`test/` 源根与项目根解析 `<module>.gleam`；`gleam/io` 等外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数，根与嵌套 monorepo 清单聚合依赖（嵌套上限 20，项目名只取根） |
 | Shell | `function foo` / `function foo()` / `foo() {`（含 `{` 写在下一行）与单行函数体；`export`/`readonly`/`declare`/`typeset` 带赋值的显式变量；普通赋值与 `local` 不登记 | `source path` / `. path` 先按脚本目录、再按项目根解析，尝试原路径与 `.sh`/`.bash`；变量/命令替换/通配符参数不建边；`#` 注释、引号（含跨行）与 heredoc 内容在配平前屏蔽 |
-| R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass("Name", …)` / `R6Class("Name", …)` 类；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
+| R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass("Name", …)` / `R6Class("Name", …)` 类及类内方法（method + parent）；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -99,7 +99,8 @@ Dart 约定标记私有。Lua 为轻量行级解析：块范围按 `function/if/
 `<<`/`<<-` 与简单分隔符（含引号），`eval`/动态拼接的 `source` 与函数体内
 单边 `}` 不解析；`bin/` 属构建产物目录默认排除，脚本放在 `scripts/` 等
 目录才会进入索引；`${…}` 参数扩展不参与块配平。R 为轻量行级解析：
-R6/setClass 只登记类名、不登记类方法；函数签名定位上限 50 行，无块体的
+R6/setClass 类内 `name = function(...)` 登记为方法（parent 为类名），
+类调用体内其他赋值不登记；函数签名定位上限 50 行，无块体的
 表达式体按 `)` 所在行结束；`assign()`/`do.call()` 等动态定义不登记；
 普通赋值不登记（只登记函数与类）；`DESCRIPTION` 只读根清单，不聚嵌套包；
 `NAMESPACE` 只解析单行导出调用，`exportPattern` 等动态导出回退 `.` 前缀

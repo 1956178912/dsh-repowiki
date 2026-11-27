@@ -47,8 +47,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v2：v1 之后的解析规则演进批量失效（Elixir/Lua/Zig/Gleam 等新增语言的
  *      符号与依赖提取、Zig 公开再导出、Gleam 跨行未限定导入、Dart/PHP/
  *      Ruby/Swift/Scala 等既有规则的修复）。升级后首轮索引会重解析全部
- *      文件，统计表现为 changed=文件数、reused=0。 */
-export const INDEX_PARSER_VERSION = 2
+ *      文件，统计表现为 changed=文件数、reused=0。
+ *  v3：R6/S4 类内方法登记为 method + parent（R 符号提取规则变化）。 */
+export const INDEX_PARSER_VERSION = 3
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

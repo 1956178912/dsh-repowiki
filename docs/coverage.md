@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.194.0）；测试 586/586（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.10%、分支 86.96%、函数 95.50%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.195.0）；测试 586/586（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 86.82%、函数 95.50%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -224,7 +224,7 @@
 | CI 自证 job | `.github/workflows/tests.yml` 的 `verify-wiki` job 生成 fixture，先断言 `--strict --require` 通过，再改卡片指纹断言退出码 1；文档配方在每次推送被执行，而不是只写在 README | v0.145.0 |
 | 生成失败持久化 | `repowiki-generate` 在清单写 `failed`（最多 10 条 slug/reason）与 `failedTotal`；`verify:wiki` 以 `wiki/generation-failed` 报告（默认警告、`--strict` 失败，locale 输出 `failedPages`）；`repowiki-status` 输出 `wiki.failed`/`wiki.failedPages` 并在文本 `Wiki:` 行显示 | v0.143.0 |
 | CI Wiki 门禁 | `scripts/verify-wiki.mjs` 复用 `wiki-references`/`citation-drift`：断链（索引 + 200 探测）、越界（索引 v6）、漂移（清单 v3）、陈旧 Wiki（卡片/已采信记忆指纹变化）、清单页缺失、页面路径非法与内部死链默认失败；上次生成失败页默认警告、`--strict` 失败；空清单默认告警、`--strict`/`--require` 失败；未覆盖/未验证/探测截断/旧索引默认警告、`--strict` 失败；`--require` 要求存在非空清单；卡片/记忆/页面按 8 路有界并发读取，链接/存在性探测保持上限与串行；支持 `--root`/`--locale`/`--json`（含 `problems[].code`），退出码 0/1/2 | v0.137.0 / v0.151.0 |
-| 多行 JS/TS 导入与解析缓存版本 | 跨行 import/export-from 保留起始行与完整具名符号；`parserVersion` 在解析规则升级时使旧 symbols/imports 缓存失效，保留正确增量统计，同版本后续恢复复用；v2 批量失效 v1 之后的 15+ 语言与解析修复（升级首轮 changed=文件数、reused=0）；`repowiki-status` 输出 `index.parserVersion` 并在版本不一致时告警 | v0.117.0 / v0.190.0 / v0.193.0 |
+| 多行 JS/TS 导入与解析缓存版本 | 跨行 import/export-from 保留起始行与完整具名符号；`parserVersion` 在解析规则升级时使旧 symbols/imports 缓存失效，保留正确增量统计，同版本后续恢复复用；v2 批量失效 v1 之后的 15+ 语言与解析修复（升级首轮 changed=文件数、reused=0）；v3 失效 R6 方法符号之前的 R 解析缓存；`repowiki-status` 输出 `index.parserVersion` 并在版本不一致时告警 | v0.117.0 / v0.190.0 / v0.193.0 / v0.195.0 |
 
 **剩余未覆盖项全部集中在浏览器侧**（无浏览器控制，见 `docs/checkpoints/phase-15-convergence.md`）。
 | 文档版本一致性 | `docs/compatibility.md` 的资产版本与 `src/schema.js` 常量绑定；新增 `KNOWLEDGE_INDEX_SCHEMA_VERSION`/`WIKI_MANIFEST_SCHEMA_VERSION`，抽取/生成不再写内联数字 | v0.159.0 |
@@ -239,5 +239,5 @@
 | 不可信索引状态 | `readIndex` 净化被篡改索引（绝对/越界文件路径与指向它们的边）时，`repowiki-status` 结构化返回 `index.untrusted.files`/`edges` 并在 `Index:` 行展示，JSON/CI 无需解析告警文案；原始路径不回显，原告警保留 | v0.170.0 / v0.184.0 |
 | Gleam 支持 | 19 语言：`type`/`opaque type`/`external type` 容器、`type` 别名（kind type）、`fn`/`external fn`（跨行签名、单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记；注释与字符串（含跨行）屏蔽后配平；`import package/module`（`as` 与 `.{type Foo, Foo as F}`，跨行列表拼接到闭合 `}`）经 `src/`/`test/` 源根与项目根解析 `<module>.gleam`，外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数与技术映射，嵌套 monorepo 清单（上限 20）合并依赖且项目名只取根 | v0.185.0 / v0.187.0 |
 | Shell 支持 | 20 语言：`function foo`/`function foo()`/`foo() {`（含分行 `{`）与单行函数体、`export`/`readonly`/`declare`/`typeset` 显式变量；普通赋值/`local` 不登记；`#` 注释、引号（含跨行）与 heredoc 屏蔽，`${…}` 不参与配平；`source`/`.` 先脚本目录再项目根，尝试 `.sh`/`.bash`，动态参数不建边 | v0.191.0 |
-| R 支持 | 21 语言：`name <- function(...)`/`name = function(...)`（含 `<<-`）跨行签名、分行 `{`、单行表达式体；`setClass`/`R6Class` 类（R6 内部跳过、`.` 前缀私有）；注释/字符串屏蔽；`source`/`sys.source` 先文件目录再项目根（`.R`/`.r`），动态参数不建边；`DESCRIPTION`（DCF）提供包名/版本/依赖计数与技术映射；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定）；`.bats` 并入 Shell | v0.192.0 / v0.194.0 |
+| R 支持 | 21 语言：`name <- function(...)`/`name = function(...)`（含 `<<-`）跨行签名、分行 `{`、单行表达式体；`setClass`/`R6Class` 类与方法（method + parent）；注释/字符串屏蔽；`source`/`sys.source` 先文件目录再项目根（`.R`/`.r`），动态参数不建边；`DESCRIPTION`（DCF）提供包名/版本/依赖计数与技术映射；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定）；`.bats` 并入 Shell | v0.192.0 / v0.194.0 / v0.195.0 |
 | Wiki 陈旧原因 | `repowiki-status` 输出 `wiki.staleReasons`（`cards`/`graph`/`memory`，值域与顺序同 `verify:wiki`）并在 `Wiki:` 行展示；页面级 stale 计数为 0 时也能区分依赖图/已采信记忆导致的陈旧 | v0.186.0 |

@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.195.0] - 2026-11-28
+
+### Added
+
+- **R6/S4 method symbols**: methods declared inside `R6Class(...)` /
+  `setClass(...)` calls (`initialize = function(...)`, single-line
+  expression bodies included) are now indexed as `method` symbols with the
+  owning class as `parent` instead of being skipped. Method bodies stay out
+  of the top-level scan, so local assignments are never misread as
+  functions, and methods carry `exported: false` because they are reached
+  through the class. Symbol search can finally find R6 methods by name.
+  `INDEX_PARSER_VERSION` moves to 3 so existing indexes re-parse R files
+  instead of reusing caches without method symbols.
+
+### Tests
+
+- 586 cases pass (LANG=en and LANG=zh); the R symbol fixture now pins
+  method ownership, single-line method ranges, `exported: false` and the
+  extended class range after adding a second method.
+
 ## [0.194.0] - 2026-11-28
 
 ### Added
