@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.181.0] - 2026-11-28
+
+### Performance
+
+- **Bounded concurrent manifest reads**: configuration manifests
+  (`package.json`, `tsconfig*`, `go.mod`, `CMakeLists.txt`, `composer.json`,
+  `mix.exs`, …) are selected in traversal order with the existing per-kind
+  caps, then read with up to 8 concurrent requests and assembled back in
+  selection order. Remote `ctx.fs` backends stop paying one round trip per
+  manifest, while the cap decisions, `manifestTexts` key order and every
+  derived result stay identical to the serial version.
+
+### Docs
+
+- Corrected the compatibility notes (Hatch `packages` roots were reported as
+  unsupported after v0.84.0) and documented Elixir's lightweight-parser
+  boundaries (`do`/`end` ranges, dynamic module names, `defimpl`/
+  `defprotocol` structure symbols).
+
+### Tests
+
+- 562 cases pass (LANG=en and LANG=zh); a delayed-read fixture with 12 nested
+  `tsconfig.json` files proves manifest reads overlap (peak > 1, peak <= 8)
+  and that files, edges and the stack object match a serial build.
+
 ## [0.180.0] - 2026-11-28
 
 ### Fixed

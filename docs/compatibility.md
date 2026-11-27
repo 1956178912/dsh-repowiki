@@ -59,8 +59,8 @@ given 以类型名登记）。宏展开与条件编译仍不解析；Scala 声�
 按 `exports`/`main` 等入口与源码目录解析，不读取 `node_modules`，入口
 指向未索引构建产物时回退 `src/index`/`index`。Python 绝对导入只识别
 项目根与 `src`/`lib` 布局根，不读取 `site-packages`；`pyproject.toml` 的
-setuptools/PDM `package-dir`、`packages.find where` 与 poetry `from` 也会
-并入导入根（Hatch 的 `packages` 列表未解析）；带点的模块路径未命中任何
+setuptools/PDM `package-dir`、`packages.find where`、poetry `from` 与
+Hatch 的 `packages`（取其父目录）也会并入导入根；带点的模块路径未命中任何
 索引文件时视为外部包，不建边。Swift 的 target 解析读取 `Package.swift`
 的 `name:`/`path:` 字段，不解析 `sources:` 白名单、`exclude:` 列表与
 条件编译表达式；代表文件取目录下字典序最小的 `.swift`。Ruby 裸 require
@@ -68,7 +68,11 @@ setuptools/PDM `package-dir`、`packages.find where` 与 poetry `from` 也会
 `require_paths` 或运行时 `$LOAD_PATH` 修改。Dart 为轻量行级解析：不解析
 跨行声明头、泛型约束与条件导入；`part of` 不建边（`part` 指令已建），
 `package:` 只解析仓库内 pubspec 声明的包（不读 `.dart_tool/package_config.json`），`dart:` 与外部包不建边；getter/setter 归为方法，`_` 前缀按
-Dart 约定标记私有。C/C++ 为轻量行级解析：不展开
+Dart 约定标记私有。Elixir 为轻量行级解析：块范围按 `do`/`fn`/`end`
+配平，heredoc/字符串中的关键字可能影响 `endLine`（不影响符号名）；
+模块名以 `defmodule` 声明为准（嵌套记录完整名），`alias __MODULE__.X`、
+`unquote(...)` 等动态模块名不解析；`defimpl`/`defprotocol` 体不产出
+结构符号（内部 def 仍会登记）；外部模块不建边。C/C++ 为轻量行级解析：不展开
 宏与条件编译，不解析多行模板参数、函数指针声明与运算符重载；类内方法
 归属依赖类型块的括号配平，`#define` 生成的声明不会产出符号；`#include`
 的尖括号形式只按仓库内 `include`/`src`/`inc` 根推断 `-I`，仓库外或

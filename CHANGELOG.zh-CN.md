@@ -3,6 +3,20 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.181.0] - 2026-11-28
+
+- **清单文件有界并发读取**：配置清单（`package.json`、`tsconfig*`、
+  `go.mod`、`CMakeLists.txt`、`composer.json`、`mix.exs` 等）先按遍历
+  顺序与既有分类上限选定，再以最多 8 路并发读取并按选择顺序装配。
+  远程 `ctx.fs` 不再为每个清单逐个支付往返，而截断判定、`manifestTexts`
+  键顺序与全部派生结果与串行版本完全一致。
+- **文档**：修正兼容矩阵中“Hatch `packages` 未解析”的过期说明（v0.84.0
+  起已支持），并补充 Elixir 轻量解析边界（do/end 范围、动态模块名、
+  `defimpl`/`defprotocol` 结构符号）。
+- **测试**：562 例在 LANG=en 与 LANG=zh 下全通过；12 个嵌套
+  `tsconfig.json` 的延迟读取夹具证明清单读取并发发生（峰值 > 1 且 ≤ 8），
+  且 files/edges/技术栈与串行构建完全一致。
+
 ## [0.180.0] - 2026-11-28
 
 - **深层 Markdown 标题可渲染**：面板渲染器现在识别 `####` 至 `######`

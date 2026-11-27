@@ -740,6 +740,41 @@ test('索引并发：读取并发有界，装配顺序与串行一致', async ()
   assert.equal(fast.stats.files, 24)
 })
 
+test('索引并发：清单文件有界并发读取，结果与串行一致', async () => {
+  const files = { 'package.json': JSON.stringify({ name: 'demo', dependencies: { react: '^18' } }) }
+  for (let i = 0; i < 12; i++) {
+    files[`packages/p${String(i).padStart(2, '0')}/tsconfig.json`] = JSON.stringify({
+      compilerOptions: { baseUrl: '.', paths: { [`@p${i}/*`]: [`src/${i}/*`] } },
+    })
+    files[`packages/p${String(i).padStart(2, '0')}/src/main.ts`] = 'export const x = 1\n'
+  }
+  const dir = makeProject(files)
+  const base = makeFakeFs(dir)
+  let active = 0
+  let peak = 0
+  const delayed = {
+    ...base,
+    async readText(target) {
+      if (!String(target.displayPath).endsWith('json')) return base.readText(target)
+      active++
+      peak = Math.max(peak, active)
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5))
+        return await base.readText(target)
+      } finally {
+        active--
+      }
+    },
+  }
+  const fast = await buildIndex(delayed, dir)
+  assert.ok(peak > 1, '清单读取应并发发生')
+  assert.ok(peak <= 8, '清单读取并发不超过上限')
+  const serial = await buildIndex(base, dir)
+  assert.deepEqual(fast.files, serial.files, '清单并发不影响文件条目')
+  assert.deepEqual(fast.edges, serial.edges)
+  assert.deepEqual(fast.stack, serial.stack, '技术栈与清单键顺序一致')
+})
+
 test('Python 自定义布局：pyproject package-dir / poetry from 作为导入根', async () => {
   const dir = makeProject({
     'pyproject.toml': [

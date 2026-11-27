@@ -58,6 +58,13 @@ const INDEX_READ_CONCURRENCY_MAX = 16
 const WALK_PREFETCH_LIMIT = 8
 
 /**
+ * 清单文件（package.json / tsconfig / go.mod / CMake / composer / mix 等）
+ * 的读取并发上限。清单数量通常远小于源码，但远程 `ctx.fs` 下仍是每文件
+ * 一次 RTT；先按遍历顺序选定清单，再有界并发读取并顺序装配。
+ */
+const MANIFEST_READ_CONCURRENCY = 8
+
+/**
  * 单次索引最多读取的嵌套 `CMakeLists.txt` 数（monorepo 子项目）。
  * 根清单不受此上限影响；配置只用于技术栈聚合。
  */
@@ -1684,6 +1691,8 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let goModsRead = 0
   let composerManifestsRead = 0
   let mixManifestsRead = 0
+  /** @type {Array<{abs:string, rel:string}>} */
+  const selectedManifests = []
   for (const { abs, rel } of manifests) {
     const baseName = path.posix.basename(rel)
     const nestedConfig = !MANIFEST_FILES[rel] && isJsConfigName(baseName)
@@ -1711,12 +1720,30 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       if (mixManifestsRead >= MAX_MIX_MANIFESTS) continue
       mixManifestsRead++
     }
-    try {
-      const target = await fs.resolve(abs)
-      manifestTexts[rel] = await fs.readText(target)
-    } catch {
-      // 清单缺失（如 package.json 超限）只影响技术栈段落，不阻断索引
+    selectedManifests.push({ abs, rel })
+  }
+  // 有界并发读取（远程 fs 每文件一次 RTT）：先按遍历顺序选好清单（上限
+  // 判定与串行一致），再并发读取，最后按选择顺序写入 manifestTexts，
+  // 保证键顺序与结果完全可复现。
+  const manifestTextsByIndex = new Array(selectedManifests.length)
+  let manifestCursor = 0
+  const manifestWorkers = Math.min(MANIFEST_READ_CONCURRENCY, selectedManifests.length)
+  await Promise.all(Array.from({ length: manifestWorkers }, async () => {
+    while (true) {
+      const index = manifestCursor++
+      if (index >= selectedManifests.length) return
+      try {
+        const target = await fs.resolve(selectedManifests[index].abs)
+        manifestTextsByIndex[index] = await fs.readText(target)
+      } catch {
+        // 清单缺失（如 package.json 超限）只影响技术栈段落，不阻断索引
+        manifestTextsByIndex[index] = null
+      }
     }
+  }))
+  for (let index = 0; index < selectedManifests.length; index++) {
+    const text = manifestTextsByIndex[index]
+    if (typeof text === 'string') manifestTexts[selectedManifests[index].rel] = text
   }
   const stack = detectStack(manifestTexts)
   const modules = buildModules(files)
