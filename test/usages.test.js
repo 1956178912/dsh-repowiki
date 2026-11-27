@@ -296,6 +296,29 @@ test('usages：Rust/Go 通配导入不触达私有项与方法', () => {
     '方法不是可通配导入项')
 })
 
+test('usages：Dart 通配导入不触达私有与类体成员', () => {
+  const edges = [{ from: 'lib/app.dart', to: 'lib/widgets.dart', line: 1, symbols: ['*'] }]
+  const files = [
+    { path: 'lib/app.dart', lang: 'dart', symbols: [] },
+    {
+      path: 'lib/widgets.dart',
+      lang: 'dart',
+      symbols: [
+        { name: 'Widget', kind: 'class', exported: true },
+        { name: '_Private', kind: 'class', exported: false },
+        { name: 'build', kind: 'method', exported: true, parent: 'Widget' },
+      ],
+    },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'lib/widgets.dart', name: 'Widget' }, files), [
+    { path: 'lib/app.dart', importLines: [1] },
+  ])
+  assert.deepEqual(usageImporters(edges, { path: 'lib/widgets.dart', name: '_Private' }, files), [],
+    '私有声明没有潜在导入方')
+  assert.deepEqual(usageImporters(edges, { path: 'lib/widgets.dart', name: 'build' }, files), [],
+    '类体成员不是可导入符号')
+})
+
 test('usages：Dart part 分组只由 part 边构建', () => {
   const siblings = dartLibrarySiblings([
     { from: 'lib/a.dart', to: 'lib/a.g.dart', kind: 'part' },

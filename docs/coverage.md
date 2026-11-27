@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.272.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.273.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.272.0）；测试 829/829（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.14%、分支 87.97%、函数 95.49%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.273.0）；测试 832/832（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.14%、分支 87.84%、函数 95.49%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| Dart 通配可见性 | `wildcardImportedNamesByFile` 增加 Dart：可导入名 = 非 `parent` 的 `exported !== false` 符号（类体成员与 `_` 私有声明不进入作用域）；`buildReferenceIndex` 对裸 import 星号边按该集合展开，`hide` 边先在可导入集合上剔除隐藏名（无符号表回退 `exportedNamesByFile`）；`usageImporters` 与 `computeSymbolImpact` 同步收窄 | v0.273.0 |
 | Rust/Go 通配可见性 | `src/reexports.js` 新增 `wildcardImportedNamesByFile`：Rust/Go 文件的可见名 = 非 `method` 且 `exported !== false` 的符号；`src/references.js` 对 `symbols: ['*']` 边按目标可见名展开（`hidden` 边与 barrel 目标除外，后者由再导出链处理；无符号表保留 `*`）；`src/usages.js` 的 `usageImporters` 与 `src/impact.js` 的 `computeSymbolImpact` 同步收窄，私有项/方法不再获得潜在引用与直接影响 | v0.272.0 |
 | Dart 同库使用点 | `src/reexports.js` 新增 `dartLibrarySiblings`：从 `kind: 'part'` 边构建无向并查集分组，返回每个文件的主库/同级 part（排序）；`src/usages.js` 的 `collectSymbolUsages` 与 `src/tool-impact.js` 在使用点扫描时把同库文件作为额外目标（`MAX_LIBRARY_FILES = 10`，路径排序，不计入 20 个导入方名额），`part` 边本身不产生 importer 输出；超出上限的符号标记 `truncated`；cards/context/impact 共用同一收集器 | v0.271.0 |
 | Dart part 库合并 | `extractDartImports` 把 `part 'x.dart'` 记为 `kind: 'part'` 且 `imported: []`（不声称符号引用），`part of` 不提取（不建反向边、不制造伪循环）；`src/reexports.js` 把 `part` 边登记为主库文件的星号再导出，具名导入经主库归到 part 文件、通配导入把 `*` 潜在引用传到 part 文件；references/usages/影响面共用该 barrel 链；解析器 v26 | v0.270.0 |

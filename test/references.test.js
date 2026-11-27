@@ -205,6 +205,29 @@ test('buildReferenceIndex：Python __all__ 收窄星号再导出的潜在引用'
   assert.equal(refs.get('pkg/core.py').get('hidden'), undefined, '__all__ 排除名不被星号引用')
 })
 
+test('buildReferenceIndex：Dart 通配导入只触达公开顶层声明', () => {
+  const edges = [{ from: 'lib/app.dart', to: 'lib/widgets.dart', line: 1, symbols: ['*'] }]
+  const files = [
+    { path: 'lib/app.dart', lang: 'dart', symbols: [] },
+    {
+      path: 'lib/widgets.dart',
+      lang: 'dart',
+      symbols: [
+        { name: 'Widget', kind: 'class', exported: true },
+        { name: '_Private', kind: 'class', exported: false },
+        { name: 'build', kind: 'method', exported: true, parent: 'Widget' },
+        { name: 'helper', kind: 'function', exported: true },
+      ],
+    },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('lib/widgets.dart').get('Widget'), [{ path: 'lib/app.dart', line: 1 }])
+  assert.deepEqual(refs.get('lib/widgets.dart').get('helper'), [{ path: 'lib/app.dart', line: 1 }])
+  assert.equal(refs.get('lib/widgets.dart').get('_Private'), undefined, '下划线私有声明不导出')
+  assert.equal(refs.get('lib/widgets.dart').get('build'), undefined, '类体成员不是可导入符号')
+  assert.equal(refs.get('lib/widgets.dart').get('*'), undefined, '已按可导入名展开')
+})
+
 test('buildReferenceIndex：Rust/Go 通配导入只触达公开模块级符号', () => {
   const edges = [
     { from: 'src/app.rs', to: 'src/lib.rs', line: 1, symbols: ['*'] },
@@ -288,11 +311,12 @@ test('buildReferenceIndex：Dart hide 的星号导入排除指定符号', () => 
   const refs = buildReferenceIndex(edges, files)
   assert.deepEqual(refs.get('lib/src/a.dart').get('Shown'), [
     { path: 'lib/app.dart', line: 1 },
-  ], 'hide 边展开为未排除名的具名潜在引用')
-  assert.deepEqual(refs.get('lib/src/a.dart').get('*'), [
     { path: 'lib/plain.dart', line: 2 },
-  ], '未声明 hide 的星号边保留通配键')
-  assert.equal(refs.get('lib/src/a.dart').get('Hidden'), undefined, 'hide 排除名无具名引用')
+  ], 'hide 边排除指定名，普通星号边按可导入名展开')
+  assert.equal(refs.get('lib/src/a.dart').get('*'), undefined, 'Dart 星号边按可导入名展开')
+  assert.deepEqual(refs.get('lib/src/a.dart').get('Hidden'), [
+    { path: 'lib/plain.dart', line: 2 },
+  ], 'hide 只排除自身导入方，其他星号导入仍覆盖')
 
   const merged = referencesFor(refs, [{
     path: 'lib/src/a.dart',

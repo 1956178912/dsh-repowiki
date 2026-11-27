@@ -61,7 +61,7 @@ export function buildReferenceIndex(edges = [], files = []) {
     files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
   )
   const pythonStarVisibility = starExportedNamesByFile(files)
-  // Rust/Go 通配导入只触达公开模块级项（私有项与方法不是可导入符号）
+  // Rust/Go/Dart 通配导入只触达公开可导入项（私有项/方法/类体成员不是导入项）
   const wildcardImports = wildcardImportedNamesByFile(files)
   // barrel 目标不能按目标自身符号表展开：它还要转发下游再导出符号
   const maps = files.length > 0 ? buildReexportMaps(edges, files) : null
@@ -81,15 +81,17 @@ export function buildReferenceIndex(edges = [], files = []) {
       names = [...pythonStarVisibility.get(edge.to)]
       if (names.length === 0) continue
     }
-    // Dart `hide`：星号导入排除指定名，按目标导出名展开为具名潜在引用
+    // Dart `hide`：星号导入排除指定名，按目标可导入名展开为具名潜在引用
     if (names.includes('*') && Array.isArray(edge.hidden) && edge.hidden.length > 0) {
-      starDefinitions ??= exportedNamesByFile(files)
+      const visible = wildcardImports.get(edge.to)
+        ?? (starDefinitions ??= exportedNamesByFile(files)).get(edge.to)
+        ?? new Set()
       const hiddenSet = new Set(edge.hidden)
-      names = [...(starDefinitions.get(edge.to) ?? [])].filter(name => !hiddenSet.has(name))
+      names = [...visible].filter(name => !hiddenSet.has(name))
       if (names.length === 0) continue
     }
-    // Rust/Go 通配导入：私有项与方法不是可导入符号，按目标可见名展开；
-    // 无目标符号信息或目标是 barrel 时保留 `*`（后者由下方再导出链处理）。
+    // Rust/Go/Dart 通配导入：私有项、方法与类体成员不是可导入符号，按
+    // 目标可见名展开；无符号信息或目标是 barrel 时保留 `*`（后者由再导出链处理）。
     if (names.length === 1 && names[0] === '*' && !barrels.has(edge.to)
       && !(Array.isArray(edge.hidden) && edge.hidden.length > 0)) {
       const visible = wildcardImports.get(edge.to)

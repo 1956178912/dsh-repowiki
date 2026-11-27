@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.273.0] - 2026-11-28
+
+### Fixed
+
+- **Dart wildcard visibility**: a bare `import 'lib.dart';` used to attribute
+  every symbol of the library, including `_`-prefixed private declarations and
+  class members that are never imported. References, lexical usage importers
+  and symbol impact now expand the wildcard to the library's public top-level
+  declarations only; `hide` edges use the same importable set before removing
+  hidden names. Rust/Go behavior from v0.272.0 is unchanged.
+
+### Tests
+
+- 832 cases pass (LANG=en); new Dart wildcard reference/usage/impact
+  assertions and updated `hide` expectations.
+
 ## [0.272.0] - 2026-11-28
 
 ### Fixed

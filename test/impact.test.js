@@ -136,6 +136,32 @@ test('impact：命名空间导入按通配符纳入符号级影响', () => {
   assert.deepEqual(result.references, [{ path: 'ns.ts', line: 1, symbols: ['a1'] }])
 })
 
+test('impact：Dart 通配导入只计入公开顶层声明', () => {
+  const files = [
+    {
+      path: 'lib/widgets.dart',
+      lang: 'dart',
+      symbols: [
+        { name: 'Widget', kind: 'class', exported: true },
+        { name: '_Private', kind: 'class', exported: false },
+        { name: 'build', kind: 'method', exported: true, parent: 'Widget' },
+      ],
+    },
+  ]
+  const result = computeSymbolImpact(
+    [{ from: 'lib/app.dart', to: 'lib/widgets.dart', line: 1, symbols: ['*'] }],
+    [
+      { path: 'lib/widgets.dart', name: 'Widget' },
+      { path: 'lib/widgets.dart', name: '_Private' },
+      { path: 'lib/widgets.dart', name: 'build' },
+    ],
+    1, 10, files,
+  )
+  assert.equal(result.direct, 1)
+  assert.deepEqual(result.impacted, [{ path: 'lib/app.dart', depth: 1, symbols: ['Widget'] }])
+  assert.deepEqual(result.references, [{ path: 'lib/app.dart', line: 1, symbols: ['Widget'] }])
+})
+
 test('impact：Rust/Go 通配导入只计入公开模块级符号', () => {
   const files = [
     {

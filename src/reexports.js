@@ -80,12 +80,13 @@ export function starExportedNamesByFile(files = []) {
  *
  * - Rust `use a::*` 只导入 `pub` 项；
  * - Go `import . "pkg"` 只导入首字母大写的包级标识符；
+ * - Dart 无组合子 import 只导入库的公开顶层声明（类体成员与 `_` 私有
+ *   符号不进入导入方作用域）。
  *
- * 两类语言都不导入 impl/接收者方法（方法不是可导入项），因此 kind 为
- * `method` 的符号即使标记导出也不进入集合。其他语言的通配规则各不相同
- * （JS 命名空间、Python `__all__`、Dart 组合子），不在此表登记。
+ * impl/接收者方法与类体成员不是可导入项，即使标记导出也不进入集合。
+ * JS 命名空间导入与 Python `__all__` 规则不同，不在此表登记。
  * @param {Array<{path?:string, lang?:string,
- *   symbols?:Array<{name?:string, kind?:string, exported?:boolean}>}>} [files]
+ *   symbols?:Array<{name?:string, kind?:string, exported?:boolean, parent?:string}>}>} [files]
  *   索引文件。
  * @returns {Map<string, Set<string>>} 文件 → 可被通配导入的名字（含空集）。
  */
@@ -94,11 +95,13 @@ export function wildcardImportedNamesByFile(files = []) {
   const out = new Map()
   for (const file of files) {
     if (!file || typeof file.path !== 'string') continue
-    if (file.lang !== 'rust' && file.lang !== 'go') continue
+    if (file.lang !== 'rust' && file.lang !== 'go' && file.lang !== 'dart') continue
     const names = new Set()
     for (const symbol of Array.isArray(file.symbols) ? file.symbols : []) {
       if (!symbol || typeof symbol.name !== 'string' || symbol.name === '') continue
-      if (symbol.kind === 'method' || symbol.exported === false) continue
+      if (symbol.exported === false) continue
+      // Dart 的类体成员带 parent；Rust/Go 的方法记 kind=method
+      if (file.lang === 'dart' ? symbol.parent : symbol.kind === 'method') continue
       names.add(symbol.name)
     }
     out.set(file.path, names)
