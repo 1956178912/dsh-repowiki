@@ -147,6 +147,9 @@ const DICTS = {
     wikiSearch: '搜索 Wiki 页面 …',
     wikiGeneral: '页面',
     wikiOrphan: '未入清单',
+    wikiRangeBadge: '越界 {n}',
+    wikiRangeHint: '{n} 处引用超出索引记录的文件行数',
+    wikiIssueSummary: '引用问题：{outOfRange} 处行号越界 · {unchecked} 处未检查',
     copyPath: '复制路径',
     copied: '已复制',
     copyFailed: '复制失败（剪贴板不可用）',
@@ -248,6 +251,9 @@ const DICTS = {
     wikiSearch: 'Search wiki pages …',
     wikiGeneral: 'Pages',
     wikiOrphan: 'Not in manifest',
+    wikiRangeBadge: 'Out of range {n}',
+    wikiRangeHint: '{n} citation(s) exceed the indexed line count',
+    wikiIssueSummary: 'Citation issues: {outOfRange} out-of-range · {unchecked} unchecked',
     copyPath: 'Copy path',
     copied: 'Copied',
     copyFailed: 'Copy failed (clipboard unavailable)',
@@ -1199,21 +1205,81 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 读取 Wiki 清单并把 order/module 附加到页面对象；缺失时按标题排序。
+     * 解析 Wiki 引用里的文件与可选行号范围（与 src/wiki-references.js 同形）。
+     * @param {unknown} value - 引用值。
+     * @returns {{path:string, start?:number, end?:number}|null} 解析结果。
+     */
+    function parseCitation(value) {
+      if (typeof value !== 'string') return null
+      const raw = value.trim()
+      if (!raw) return null
+      const hash = raw.indexOf('#')
+      const path = (hash >= 0 ? raw.slice(0, hash) : raw).trim()
+      if (!path) return null
+      if (hash < 0) return { path }
+      const match = /^L(\d+)(?:\s*-\s*L?(\d+))?$/i.exec(raw.slice(hash + 1).trim())
+      if (!match) return { path }
+      const start = Number(match[1])
+      const end = match[2] ? Number(match[2]) : start
+      return { path, start, end }
+    }
+
+    /**
+     * 统计页面清单里的引用问题：索引有行数时可判越界，否则计入未检查。
+     * 面板不做文件系统存在性检查（缺失文件由 repowiki-status 负责）。
+     * @param {object|null} meta - 清单页面条目。
+     * @param {Map<string, number>} lineCounts - 索引内相对路径 → 行数。
+     * @returns {{outOfRange:number, unchecked:number}} 计数。
+     */
+    function citationIssuesFor(meta, lineCounts) {
+      const sources = []
+      for (const source of Array.isArray(meta?.sources) ? meta.sources : []) sources.push(source)
+      for (const section of Array.isArray(meta?.sections) ? meta.sections : []) {
+        for (const source of Array.isArray(section?.sources) ? section.sources : []) sources.push(source)
+      }
+      let outOfRange = 0
+      let unchecked = 0
+      for (const source of sources) {
+        const parsed = parseCitation(source)
+        if (!parsed || !Number.isInteger(parsed.start)) continue
+        const lines = lineCounts.get(parsed.path)
+        if (!Number.isInteger(lines)) {
+          unchecked++
+          continue
+        }
+        const end = Number.isInteger(parsed.end) ? parsed.end : parsed.start
+        if (parsed.start < 1 || end < parsed.start || parsed.start > lines || end > lines) outOfRange++
+      }
+      return { outOfRange, unchecked }
+    }
+
+    /**
+     * 读取 Wiki 清单并把 order/module/引用问题附加到页面对象；缺失时按标题排序。
      * @param {object[]} entries - loadWikiEntries 的页面。
      * @param {object|null} manifest - wiki/<locale>/_index.json。
+     * @param {object|null} [index] - 工作区 index.json（v6 起文件带 lines）。
      * @returns {object[]} 排序后的页面。
      */
-    function applyWikiManifest(entries, manifest) {
+    function applyWikiManifest(entries, manifest, index = null) {
       const byPath = new Map((manifest?.pages ?? []).map(page => [page.path, page]))
+      /** @type {Map<string, number>} */
+      const lineCounts = new Map()
+      for (const file of Array.isArray(index?.files) ? index.files : []) {
+        if (file && typeof file.path === 'string'
+          && Number.isInteger(file.lines) && file.lines >= 0) {
+          lineCounts.set(file.path, file.lines)
+        }
+      }
       return entries
         .map((entry) => {
           const meta = byPath.get(entry.file)
           if (!meta) {
             return {
-              ...entry, order: Number.MAX_SAFE_INTEGER, module: '', sources: [], sections: [], orphan: Boolean(manifest),
+              ...entry, order: Number.MAX_SAFE_INTEGER, module: '', sources: [], sections: [],
+              orphan: Boolean(manifest), outOfRange: 0, unchecked: 0,
             }
           }
+          const issues = citationIssuesFor(meta, lineCounts)
           return {
             ...entry,
             order: typeof meta.order === 'number' ? meta.order : Number.MAX_SAFE_INTEGER,
@@ -1223,6 +1289,7 @@ window.__ModuleLoader__.load({
             sources: Array.isArray(meta.sources) ? meta.sources : [],
             sections: Array.isArray(meta.sections) ? meta.sections : [],
             orphan: false,
+            ...issues,
           }
         })
         .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title))
@@ -1427,7 +1494,7 @@ window.__ModuleLoader__.load({
           const { cards: loaded, locale: cardLocale } = await loadCards(wf, sessionId, localeName(t), signal)
           const wikiResult = await loadWikiEntries(wf, sessionId, localeName(t), signal)
           const manifest = await readWikiManifest(wf, sessionId, wikiResult.locale, signal)
-          const wikiPages = applyWikiManifest(wikiResult.entries, manifest)
+          const wikiPages = applyWikiManifest(wikiResult.entries, manifest, parsedIndex)
           // 知识清单与卡片同目录：用卡片实际落地的 locale 读，避免面板 locale
           // 与产物 locale 不一致时漏读快照
           const knowledgeManifest = await readKnowledgeManifest(wf, sessionId, cardLocale, signal)
@@ -2701,7 +2768,7 @@ window.__ModuleLoader__.load({
     }
 
     /** Wiki 面板：页面列表与单页原文浏览；打开页面时聚焦返回按钮。 */
-    function WikiPanel({ entries, selected, query, targetSection = '', onQuery, onSelect, onClose, t }) {
+    function WikiPanel({ entries, selected, query, targetSection = '', onQuery, onSelect, onClose, t, tt }) {
       const backRef = useRef(null)
       useEffect(() => { if (selected) backRef.current?.focus?.() }, [selected])
       // 深链：页面渲染后滚动到目标章节（锚点 id 与 renderMarkdown 的标题锚一致）
@@ -2745,6 +2812,8 @@ window.__ModuleLoader__.load({
         groups.get(key).push(entry)
       }
       const showModule = entries.some(entry => entry.module)
+      const outOfRange = entries.reduce((sum, entry) => sum + (entry.outOfRange ?? 0), 0)
+      const unchecked = entries.reduce((sum, entry) => sum + (entry.unchecked ?? 0), 0)
       return h('div', null,
         h('input', {
           type: 'search',
@@ -2760,6 +2829,11 @@ window.__ModuleLoader__.load({
             color: 'var(--dsw-alias-label-primary, #111827)',
           },
         }),
+        // 引用完整性摘要：行号越界（索引有行数时可判）与未检查计数
+        (outOfRange > 0 || unchecked > 0) && h('p', {
+          role: 'status',
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px' },
+        }, tt('wikiIssueSummary', { outOfRange, unchecked })),
         filtered.length === 0
           ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiEmpty'))
           : [...groups.entries()].map(([module, list]) => h('div', { key: module, style: { marginBottom: 12 } },
@@ -2785,6 +2859,11 @@ window.__ModuleLoader__.load({
                   textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   color: 'var(--dsw-alias-label-primary, #111827)' },
               }, entry.title),
+              entry.outOfRange > 0 && h('span', {
+                style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
+                title: tt('wikiRangeHint', { n: entry.outOfRange }),
+                'aria-label': tt('wikiRangeHint', { n: entry.outOfRange }),
+              }, `⚠ ${entry.outOfRange}`),
               entry.orphan && h('span', {
                 style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
               }, t('wikiOrphan')),

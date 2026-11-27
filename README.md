@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links and core-file ranking, locale-aware asset fallback, documentation health with wiki citation integrity and line-range validation, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.126.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity and line-range validation, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.127.0)
 
 | Capability | Description |
 |---|---|
@@ -123,6 +123,7 @@ Roadmap:
 - Conservative unused-export audit (v0.124.0): `repowiki-status` lists exports without named-import evidence, assesses only files whose inbound edges all carry named symbols, and reports every skipped file instead of guessing
 - Module coupling metrics (v0.125.0): `repowiki-status` reports Ca/Ce and instability `Ce/(Ca+Ce)` for cross-module imports, ordered by instability
 - Citation line-range validation (v0.126.0): index schema v6 records source line counts; `repowiki-status` flags zero/reversed/out-of-EOF `#Lx-Ly` citations and counts unverifiable ranges as unchecked instead of guessing
+- Panel citation issues (v0.127.0): the Wiki tab shows an aggregate out-of-range/unchecked summary and per-page `⚠ N` badges derived from the manifest and index line counts
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights

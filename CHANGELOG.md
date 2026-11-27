@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.127.0] - 2026-11-27
+
+### Added
+
+- **Panel citation issues**: the Wiki tab now derives citation problems
+  client-side from the manifest and the index. When the index records line
+  counts (v6), `#Lx-Ly` citations past EOF are counted per page and shown as
+  an `⚠ N` badge with an accessible title; the list header shows an aggregate
+  `out-of-range / unchecked` summary. Ranged citations whose file has no line
+  count (non-indexed file or an older index) are counted as unchecked, never
+  as broken; filesystem existence checks stay in `repowiki-status`.
+
+### Tests
+
+- 471 cases pass (LANG=en and LANG=zh); the client fixture now carries
+  `lines` and asserts the summary plus the `⚠ 1` badge for an `#L11`
+  citation on a 10-line file.
+
 ## [0.126.0] - 2026-11-27
 
 ### Added

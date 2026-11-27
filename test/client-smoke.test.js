@@ -40,11 +40,11 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     stats: { files: 5, symbols: 3, edges: 5, durationMs: 1, capped: false, reused: 0 },
     stack: { technologies: [], projectName: 'demo', projectVersion: '1.0.0' },
     files: [
-      { path: 'a.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-a', symbols: [{ name: 'x' }, { name: 'y' }], imports: [] },
-      { path: 'b.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-b', symbols: [], imports: [] },
-      { path: 'c.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-c', symbols: [{ name: 'z' }], imports: [] },
-      { path: 'd.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-d', symbols: [], imports: [] },
-      { path: 'e.js', lang: 'javascript', sizeBytes: 10, digest: 'dig-e', symbols: [], imports: [] },
+      { path: 'a.js', lang: 'javascript', sizeBytes: 10, lines: 10, digest: 'dig-a', symbols: [{ name: 'x' }, { name: 'y' }], imports: [] },
+      { path: 'b.js', lang: 'javascript', sizeBytes: 10, lines: 3, digest: 'dig-b', symbols: [], imports: [] },
+      { path: 'c.js', lang: 'javascript', sizeBytes: 10, lines: 5, digest: 'dig-c', symbols: [{ name: 'z' }], imports: [] },
+      { path: 'd.js', lang: 'javascript', sizeBytes: 10, lines: 2, digest: 'dig-d', symbols: [], imports: [] },
+      { path: 'e.js', lang: 'javascript', sizeBytes: 10, lines: 4, digest: 'dig-e', symbols: [], imports: [] },
     ],
     // v5 边：详情应显示行号级反向引用与出边（a.js ↔ c.js 构成双向依赖；
     // c.js → d.js 提供正向 2 跳链；e.js → c.js 提供反向 2 跳影响面）
@@ -991,6 +991,8 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   const listTexts = collectTexts(hooks.root)
   assert.ok(listTexts.some(s => s.includes('概览')), 'Wiki 列表应含页面标题')
   assert.ok(listTexts.some(s => s.includes('核心模块')), 'Wiki 列表应含第二个页面标题')
+  assert.ok(listTexts.includes('wikiIssueSummary'), '展示引用问题摘要（概览页 #L11 超出 a.js 的 10 行）')
+  assert.ok(listTexts.includes('⚠ 1'), '概览页带行号越界徽章')
 
   // 打开第一个页面，查看原文
   const entry = findNode(hooks.root, (n) => n.type === 'button'
