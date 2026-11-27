@@ -115,8 +115,9 @@ function normalizeRel(baseDir, rel) {
  * @param {number} depth - 当前深度。
  * @param {Array<{abs:string, rel:string}>} sourceFiles - 累积的源码文件。
  * @param {Array<{abs:string, rel:string}>} manifests - 累积的清单文件。
- * @param {Array<object>} ignoreRules - .gitignore/.repowikiignore 规则。
- * @param {{count:number, stopped?:boolean, aborted?:boolean, ignored?:number}} budget - 文件计数预算（引用传递，
+ * @param {Array<object>} ignoreRules - 根目录的 .gitignore/.repowikiignore 规则。
+ * @param {{count:number, stopped?:boolean, aborted?:boolean, ignored?:number,
+ *   ignoreWarnings?:string[]}} budget - 文件计数预算（引用传递，
  *   超限即停；stopped 置真表示遍历确因预算提前终止；aborted 表示调用方取消）。
  * @param {AbortSignal} [signal] - 协作式取消信号。
  * @returns {Promise<void>}
@@ -132,6 +133,20 @@ async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles,
   } catch {
     return // 不可读目录安静跳过（权限/IO 问题不阻断整体索引）
   }
+  // 嵌套忽略：只在该目录确实包含规则文件时读取（不额外 stat），
+  // 更深目录的规则后置，天然获得更高优先级。
+  let rules = ignoreRules
+  if (depth > 0) {
+    const names = new Set(entries.filter(entry => entry.type === 'file').map(entry => entry.name))
+    if (names.has('.gitignore') || names.has('.repowikiignore')) {
+      const dirRel = toRelative(dirPath, rootAbs)
+      if (dirRel) {
+        const local = await loadIgnoreRules(fs, dirPath, dirRel)
+        if (local.rules.length > 0) rules = [...ignoreRules, ...local.rules]
+        if (local.warnings.length > 0) budget.ignoreWarnings?.push(...local.warnings.map(w => `${dirRel}/${w}`))
+      }
+    }
+  }
   for (const entry of entries) {
     if (signal?.aborted) { budget.aborted = true; return }
     if (budget.count >= maxFiles) { budget.stopped = true; return }
@@ -139,13 +154,13 @@ async function walk(fs, rootAbs, dirPath, exclude, maxFiles, depth, sourceFiles,
     if (rel === null) continue
     const isDir = entry.type === 'directory'
     // .gitignore 子集：忽略项不消耗文件预算
-    if (isIgnored(rel, isDir, ignoreRules)) {
+    if (isIgnored(rel, isDir, rules)) {
       budget.ignored = (budget.ignored ?? 0) + 1
       continue
     }
     if (isDir) {
       if (exclude.has(entry.name)) continue
-      await walk(fs, rootAbs, path.posix.join(dirPath, entry.name), exclude, maxFiles, depth + 1, sourceFiles, manifests, ignoreRules, budget, signal)
+      await walk(fs, rootAbs, path.posix.join(dirPath, entry.name), exclude, maxFiles, depth + 1, sourceFiles, manifests, rules, budget, signal)
     } else if (entry.type === 'file') {
       budget.count++
       if (MANIFEST_FILES[rel] || isConfigManifest(rel, entry.name)) {
@@ -1304,7 +1319,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
 
   const sourceFiles = []
   const manifests = []
-  const budget = { count: 0, stopped: false, aborted: false, ignored: 0 }
+  const budget = { count: 0, stopped: false, aborted: false, ignored: 0, ignoreWarnings: [] }
   const ignore = await loadIgnoreRules(fs, rootAbs)
   await walk(fs, rootAbs, rootAbs, exclude, maxFiles, 0, sourceFiles, manifests, ignore.rules, budget, opts.signal)
 
@@ -1495,10 +1510,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     files,
     edges,
     ...(git ? { git } : {}),
-    ...(ignore.warnings.length > 0 || skipped > 0 || internalWarnings.length > 0
+    ...(ignore.warnings.length > 0 || budget.ignoreWarnings.length > 0 || skipped > 0 || internalWarnings.length > 0
       ? {
         warnings: [
           ...ignore.warnings,
+          ...budget.ignoreWarnings,
           ...(skipped > 0
             ? [`${skipped} source file(s) skipped (unreadable or above the per-file size limit); they are absent from the index.`]
             : []),

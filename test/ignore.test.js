@@ -21,12 +21,27 @@ dist/
 docs/**/*.tmp
 `)
   assert.deepEqual(rules, [
-    { pattern: 'dist', negated: false, dirOnly: true, anchored: false },
-    { pattern: 'dist/keep.js', negated: true, dirOnly: false, anchored: false },
-    { pattern: 'build', negated: false, dirOnly: false, anchored: true },
-    { pattern: '*.log', negated: false, dirOnly: false, anchored: false },
-    { pattern: 'docs/**/*.tmp', negated: false, dirOnly: false, anchored: false },
+    { pattern: 'dist', negated: false, dirOnly: true, anchored: false, base: '' },
+    { pattern: 'dist/keep.js', negated: true, dirOnly: false, anchored: false, base: '' },
+    { pattern: 'build', negated: false, dirOnly: false, anchored: true, base: '' },
+    { pattern: '*.log', negated: false, dirOnly: false, anchored: false, base: '' },
+    { pattern: 'docs/**/*.tmp', negated: false, dirOnly: false, anchored: false, base: '' },
   ])
+})
+
+test('parseIgnore/isIgnored：嵌套规则只作用于所在目录子树', () => {
+  const rules = [
+    ...parseIgnore('*.log\n', ''),
+    ...parseIgnore('/build\ngenerated/\n!keep.log\n', 'packages/app'),
+  ]
+  assert.equal(isIgnored('a.log', false, rules), true)
+  assert.equal(isIgnored('packages/app/a.log', false, rules), true, '父规则仍覆盖子树')
+  assert.equal(isIgnored('packages/app/build', true, rules), true, '嵌套锚定相对所在目录')
+  assert.equal(isIgnored('build', true, rules), false, '嵌套锚定不作用于根')
+  assert.equal(isIgnored('packages/app/generated/x.ts', false, rules), true, '嵌套目录规则覆盖子文件')
+  assert.equal(isIgnored('packages/other/generated/x.ts', false, rules), false, '不越出规则目录')
+  assert.equal(isIgnored('packages/app/keep.log', false, rules), false, '嵌套否定后置生效')
+  assert.equal(isIgnored('packages/other/keep.log', false, rules), true, '否定只在嵌套目录内生效')
 })
 
 test('isIgnored：目录剪枝、通配、锚定与 last-match-wins', () => {
@@ -53,4 +68,26 @@ test('buildIndex：读取 .gitignore 并统计 ignored', async () => {
   const doc = await buildIndex(makeFakeFs(dir), dir)
   assert.deepEqual(doc.files.map(f => f.path), ['keep.ts'])
   assert.ok(doc.stats.ignored >= 2, '目录与文件都应计数')
+})
+
+test('buildIndex：嵌套 .gitignore 按目录作用域生效', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ignore-nested-'))
+  nodefs.mkdirSync(path.join(dir, 'packages/app'), { recursive: true })
+  nodefs.mkdirSync(path.join(dir, 'packages/other'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.gitignore'), '*.skip.ts\n')
+  nodefs.writeFileSync(path.join(dir, 'packages/app/.gitignore'), 'generated/\n!keep.skip.ts\n')
+  nodefs.writeFileSync(path.join(dir, 'packages/app/drop.ts'), 'export const drop = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'packages/app/keep.skip.ts'), 'export const keep = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'packages/app/other.skip.ts'), 'export const skip = 1\n')
+  nodefs.mkdirSync(path.join(dir, 'packages/app/generated'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'packages/app/generated/a.ts'), 'export const a = 1\n')
+  nodefs.writeFileSync(path.join(dir, 'packages/other/drop.ts'), 'export const drop = 1\n')
+
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const paths = doc.files.map(f => f.path)
+  assert.ok(paths.includes('packages/app/drop.ts'), '嵌套规则不影响未命中文件')
+  assert.ok(paths.includes('packages/app/keep.skip.ts'), '嵌套否定可恢复父规则忽略的文件')
+  assert.ok(!paths.includes('packages/app/other.skip.ts'), '父规则在子树内仍生效')
+  assert.ok(!paths.includes('packages/app/generated/a.ts'), '嵌套目录规则生效')
+  assert.ok(paths.includes('packages/other/drop.ts'), '嵌套规则不越出所在目录')
 })

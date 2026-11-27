@@ -5,19 +5,22 @@
  * 支持：
  * - 注释 `#` 与空行；
  * - `!` 否定（按顺序 last-match-wins）；
- * - `/` 锚定（相对仓库根）；
+ * - `/` 锚定（相对所在 .gitignore 目录）；
  * - 目录尾 `/`（只匹配目录，遍历时直接剪枝）；
- * - `*`、`?`、`**` 通配。
+ * - `*`、`?`、`**` 通配；
+ * - 嵌套 `.gitignore` / `.repowikiignore`：规则只作用于其所在目录子树，
+ *   更深目录的规则后置生效（与 Git 的层级优先级一致）。
  *
- * 不支持（有意，文档化）：全局 excludes、嵌套 .gitignore、反斜杠转义、
- * 字符类 `[a-z]`（按字面处理）。需要更复杂规则时用 plan 的 exclude。
+ * 不支持（有意，文档化）：全局 excludes、反斜杠转义、字符类 `[a-z]`
+ * （按字面处理）。需要更复杂规则时用 plan 的 exclude。
  */
 
 /** 正则元字符转义（保留我们自行展开的通配符）。 */
 const RE_META = /[.+^${}()|[\]\\]/g
 
 /**
- * @typedef {{pattern:string, negated:boolean, dirOnly:boolean, anchored:boolean}} IgnoreRule
+ * @typedef {{pattern:string, negated:boolean, dirOnly:boolean, anchored:boolean,
+ *   base:string}} IgnoreRule 规则（base 为规则所在目录，根为空串）。
  */
 
 /**
@@ -54,9 +57,11 @@ function globToRegex(glob) {
 /**
  * 把一行文本解析为忽略规则。
  * @param {string} text - .gitignore 文本。
+ * @param {string} [base] - 规则所在目录（相对项目根的 POSIX 路径；根为空）。
  * @returns {IgnoreRule[]} 规则。
  */
-export function parseIgnore(text) {
+export function parseIgnore(text, base = '') {
+  const scope = String(base).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
   const rules = []
   for (const raw of String(text).split(/\r?\n/)) {
     const line = raw.trim()
@@ -70,7 +75,7 @@ export function parseIgnore(text) {
     const anchored = pattern.startsWith('/')
     if (anchored) pattern = pattern.slice(1)
     if (!pattern) continue
-    rules.push({ pattern, negated, dirOnly, anchored })
+    rules.push({ pattern, negated, dirOnly, anchored, base: scope })
   }
   return rules
 }
@@ -83,23 +88,31 @@ export function parseIgnore(text) {
  * @returns {boolean} 命中。
  */
 function ruleMatches(rule, relPath, isDir) {
+  // 嵌套规则只作用于所在目录的内容（不含该目录自身），模式相对该目录。
+  let target = relPath
+  if (rule.base) {
+    const prefix = `${rule.base}/`
+    if (!relPath.startsWith(prefix)) return false
+    target = relPath.slice(prefix.length)
+  }
   if (rule.dirOnly && !isDir) {
     // 目录规则对文件生效的唯一方式：文件的某个祖先目录命中
-    const parts = relPath.split('/')
+    const innerRule = { ...rule, dirOnly: false, base: '' }
+    const parts = target.split('/')
     parts.pop()
     let ancestor = ''
     for (const part of parts) {
       ancestor = ancestor ? `${ancestor}/${part}` : part
-      if (ruleMatches({ ...rule, dirOnly: false }, ancestor, true)) return true
+      if (ruleMatches(innerRule, ancestor, true)) return true
     }
     return false
   }
   const hasSlash = rule.pattern.includes('/')
   if (rule.anchored || hasSlash) {
-    return new RegExp(`^${globToRegex(rule.pattern)}$`).test(relPath)
+    return new RegExp(`^${globToRegex(rule.pattern)}$`).test(target)
   }
   // 无斜杠：匹配任意一段（文件名或目录名）
-  const segments = relPath.split('/')
+  const segments = target.split('/')
   return segments.some(segment => new RegExp(`^${globToRegex(rule.pattern)}$`).test(segment))
 }
 
@@ -126,7 +139,14 @@ export function isIgnored(relPath, isDir, rules) {
  * @param {string} root - 仓库根绝对路径。
  * @returns {Promise<{rules:IgnoreRule[], warnings:string[]}>} 规则与告警。
  */
-export async function loadIgnoreRules(fs, root) {
+/**
+ * 读取某个目录的 .gitignore/.repowikiignore（根与嵌套目录共用）。
+ * @param {any} fs - ctx.fs 服务。
+ * @param {string} root - 规则所在目录（绝对路径或 fs 可解析的路径）。
+ * @param {string} [base] - 目录相对项目根的 POSIX 路径（根为空）。
+ * @returns {Promise<{rules:IgnoreRule[], warnings:string[]}>} 规则与告警。
+ */
+export async function loadIgnoreRules(fs, root, base = '') {
   const rules = []
   const warnings = []
   for (const name of ['.gitignore', '.repowikiignore']) {
@@ -135,7 +155,7 @@ export async function loadIgnoreRules(fs, root) {
       const info = await fs.stat(target)
       if (info?.type !== 'file') continue
       const text = await fs.readText(target)
-      rules.push(...parseIgnore(text))
+      rules.push(...parseIgnore(text, base))
     } catch (err) {
       // 不存在是常态；其它错误记录告警但不阻断
       if (err && err.code && err.code !== 'ENOENT' && !/not found/i.test(err.message ?? '')) {

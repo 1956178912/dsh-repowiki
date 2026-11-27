@@ -8,11 +8,11 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包与分页检索（v0.160.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索与嵌套忽略规则（v0.161.0）
 
 | 能力 | 说明 |
 |---|---|
-| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：JS/TS、Vue 与 Svelte SFC、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、C、C++（含 Scala 3 缩进语法、`extension` 与 `given`）符号表，本地 import 依赖边（含嵌套 `go.mod` 的 Go 多模块仓库），技术栈识别（npm/pip/go/cargo/maven/gradle/composer/bundler/swiftpm/sbt/cmake），语言分布与 Git 溯源（只读 `.git/HEAD` 的 `branch`/`commit`），模块树（按目录归组，深度 ≤2），写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目，并给出新增/变更/删除计数；尊重文档化的 `.gitignore` 子集并统计 `ignored`；不可读或超大源码文件计入 `skipped`（附告警）而非静默消失；Go `internal` 可见性违规以告警报告（边仍保留；上限 50 条，其余折叠为汇总）；取消时不覆盖旧索引 |
+| `repowiki-index` 工具 | 确定性（零 LLM）重建索引：JS/TS、Vue 与 Svelte SFC、Python、Go、Rust、Java、C#、Kotlin、PHP、Ruby、Swift、Scala、C、C++（含 Scala 3 缩进语法、`extension` 与 `given`）符号表，本地 import 依赖边（含嵌套 `go.mod` 的 Go 多模块仓库），技术栈识别（npm/pip/go/cargo/maven/gradle/composer/bundler/swiftpm/sbt/cmake），语言分布与 Git 溯源（只读 `.git/HEAD` 的 `branch`/`commit`），模块树（按目录归组，深度 ≤2），写入 `.dsh-repowiki/index.json`；增量——内容摘要未变的文件直接复用上一版条目，并给出新增/变更/删除计数；尊重文档化的 `.gitignore`/`.repowikiignore` 子集（含按所在目录作用域的嵌套规则）并统计 `ignored`；不可读或超大源码文件计入 `skipped`（附告警）而非静默消失；Go `internal` 可见性违规以告警报告（边仍保留；上限 50 条，其余折叠为汇总）；取消时不覆盖旧索引 |
 | `repowiki-cards` 工具 | 跨会话只读检索：按符号名 / 种类 / 路径 / 模块 / 语言过滤，或只看公开符号（`exportedOnly`）；命中按精确 > 前缀 > 子串排序（同强度内导出优先），文件按最佳命中排序，方法结果带所属类型；返回文件+符号、项目技术栈与模块树；`target=docs/all` 对卡片、Wiki 与已采信记忆做零依赖 BM25 排序检索；`includeMemory` 附带同查询命中的已采信会话记忆；`references=true` 追加带语句行号的 import 级反向引用（`referencedBy: [{path, line}]`，上限 100 条）；`wikiReferences=true` 追加 Wiki 引用（`wikiReferences: [{path, slug, title, sections}]`）；`imports=true` 列出命中文件的出边（`imports: [{path, line, symbols, depth}]`，保留副作用导入、跳过自引用、上限 100 条）；`depth` 2–3 展开传递依赖（最小跳数优先、环保持有界）；`offset` 对文件与文档结果分页，`total` 始终为全集计数；`locale` 省略时自动使用"环境语言 → 实际有资产的另一语言"回退，显式指定则严格读取该语言 |
 | `repowiki-extract` 工具 | 每文件一个 spawn 子代理（继承会话模型）生成知识卡片（职责、关键符号、陷阱、相关模块），写入 `.dsh-repowiki/knowledge/<locale>/`；prompt 携带项目名、技术栈与模块路径，`relatedModules` 复用真实模块名；关键符号附索引行号；同目录写 `_index.json` 模块→卡片清单；源文件摘要变化时卡片自动刷新，但标记为 `manuallyEdited` 的卡片受保护；源文件已消失的卡片报告为孤儿；`locales: ['zh','en']` 按 locale 串行处理并在 `byLocale` 分语言汇报；`concurrency`（1–4，默认取计划）并行派发多个文件抽取，写卡仍串行；`attempts`（1–3，默认 2）对抛错/坏输出做可取消的指数退避重试（模型明确 `skip` 不重试） |
 | `repowiki-generate` 工具 | 只读卡片集合 + 技术栈（+ 已采信的会话记忆作为约定/决策）与最多 15 条跨模块依赖摘要、最多 5 组文件级循环依赖、最多 5 个 fan-in 热点文件，凝练 Wiki 页面写入 `.dsh-repowiki/wiki/<locale>/`；`granularity=theme/module/all`（模块页确定性生成，无模型调用，区分出边/入边模块依赖、标注双向依赖的循环模块并追加高风险入口节）；`locales: ['zh','en']` 时主题页按 locale 各合成一次；自动目录、页级/章节引用为相对路径 + 可选 `#Lx-Ly` 并按索引白名单净化；每轮写 `wiki/<locale>/_index.json`（含 `inputDigest` 供陈旧检测；失败页写入 `failed`（最多 10 条）与 `failedTotal`）；重复 slug 自动改名，单页失败进入 `failed` 清单而非丢弃整轮；清单里的卡片指纹与已采信记忆指纹一致、且记录的引用内容指纹仍可验证时跳过主题合成（不调用模型；引用变化或无法验证时报告 `citationDrift` 并重新合成），`force=true` 可强制重跑；抛错或空页面列表按可取消退避重试（`attempts` 1–3）；每轮输出 `citationCoverage` 及原因（不可读/行号非法/读取上限），未记录指纹的引用不会被当成已验证 |
@@ -491,7 +491,7 @@ src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
 src/types.d.ts         ctx.fs / 工具定义的共享类型声明
-test/                  单元与集成测试（524 用例）
+test/                  单元与集成测试（526 用例）
 ```
 
 ## 许可

@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.161.0] - 2026-11-27
+
+### Added
+
+- **Nested `.gitignore` / `.repowikiignore`**: the indexer now reads ignore
+  files in subdirectories as it walks. Each file's patterns are scoped to its
+  own directory (anchored patterns and `generated/` style rules stay inside
+  that subtree), and deeper files take precedence, so `!keep.skip.ts` in a
+  package can re-include a file ignored by the repository root. Root-only
+  rule behavior is unchanged; unreadable nested rule files surface as index
+  warnings.
+
+### Tests
+
+- 526 cases pass (LANG=en and LANG=zh); new cases cover directory-scoped
+  matching, negation precedence and a real nested `buildIndex` fixture.
+
 ## [0.160.0] - 2026-11-27
 
 ### Added
