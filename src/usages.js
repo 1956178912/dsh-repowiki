@@ -207,7 +207,14 @@ export function usageImporters(edges = [], symbol, files = []) {
     // `*`（命名空间导入/`export *`）可能引用任意符号：作为潜在导入方参与
     // 词法扫描，是否真的使用由扫描结果决定
     if (!names.includes(symbol.name) && !names.includes('*')) continue
-    addImporter(edge.from, edge.line)
+    // 再导出边上的 aliases 是导出名映射，不是导入方本地绑定名
+    const reexportEdge = edge.kind === 'export-from' || edge.kind === 'reexport'
+    const aliases = reexportEdge
+      ? []
+      : (Array.isArray(edge.aliases) ? edge.aliases : [])
+        .filter(alias => alias && alias.from === symbol.name && typeof alias.to === 'string')
+        .map(alias => alias.to)
+    addImporter(edge.from, edge.line, aliases)
   }
   if (files.length > 0) {
     for (const site of reexportImportSites(edges, files, symbol.path, symbol.name)) {

@@ -203,8 +203,11 @@ export function resolveReexportOrigins(barrel, name, maps, definitions) {
     for (const alias of maps.aliases.get(current.path)?.get(current.name) ?? []) {
       push(alias.target, alias.local, current.depth + 1)
     }
-    for (const target of maps.stars.get(current.path) ?? []) {
-      push(target, current.name, current.depth + 1)
+    // ES 的 `export *` 不转发 default（Python 星号导入也无 default 概念）
+    if (current.name !== 'default') {
+      for (const target of maps.stars.get(current.path) ?? []) {
+        push(target, current.name, current.depth + 1)
+      }
     }
   }
   return origins.size === 1 ? [...origins.values()] : []
@@ -288,8 +291,17 @@ export function reexportImportSites(edges, files, targetPath, name, options = {}
         const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
         const key = `${edge.from}\u0000${line ?? 0}`
         const site = sites.get(key) ?? { path: edge.from, ...(line ? { line } : {}), names: new Set() }
-        // 通配导入方按定义名扫描；别名导入方按它实际使用的名字扫描
-        if (!names.includes('*') && exported !== name) site.names.add(exported)
+        // 通配导入方按定义名扫描；别名导入方优先用它实际绑定的本地名
+        if (!names.includes('*')) {
+          const localAliases = (Array.isArray(edge.aliases) ? edge.aliases : [])
+            .filter(alias => alias && alias.from === exported && typeof alias.to === 'string')
+            .map(alias => alias.to)
+          if (localAliases.length > 0) {
+            for (const local of localAliases) site.names.add(local)
+          } else if (exported !== name) {
+            site.names.add(exported)
+          }
+        }
         sites.set(key, site)
       }
     }

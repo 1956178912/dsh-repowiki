@@ -12,6 +12,7 @@ import {
 } from './schema.js'
 import { extractSymbols } from './symbols.js'
 import { extractImports, JS_DEFAULT_PREFIX } from './deps.js'
+import { buildReexportMaps, exportedNamesByFile, resolveReexportOrigins } from './reexports.js'
 import { detectStack } from './stack.js'
 import { moduleOf, buildModules } from './modules.js'
 import { loadIgnoreRules, isIgnored } from './ignore.js'
@@ -2981,11 +2982,14 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
 /**
  * 解析 JS/TS 默认导入的临时符号标记（`default:Local`）。
  *
- * 仅当目标文件存在**同名导出符号**时替换为真实名字，否则丢弃标记（文件级
- * 边保留）。不猜测匿名默认导出、别名导入或"唯一导出"，避免把未经证实的
- * 符号写成反向引用/使用点证据。
- * @param {Array<{to:string, symbols?:string[]}>} edges - 依赖边（就地修改）。
- * @param {Array<{path:string, symbols?:Array<{name:string, exported?:boolean}>}>} files - 索引文件。
+ * 目标文件存在**同名导出**时沿用原名；否则沿具名默认导出/再导出链解析到
+ * 真实符号（经 barrel 时保留导出名 `default` 供归因），并把本地绑定名写入
+ * `aliases` 供词法使用点扫描。解析不到（匿名默认、`export *` 不转发
+ * default、笔误）则丢弃标记（文件级边保留）。
+ * @param {Array<{to:string, symbols?:string[], aliases?:Array<{from:string,to:string}>}>} edges
+ *   依赖边（就地修改）。
+ * @param {Array<{path:string, symbols?:Array<{name:string, exported?:boolean, default?:boolean}>}>} files
+ *   索引文件。
  * @returns {void}
  */
 function resolveDefaultImportSymbols(edges, files) {
@@ -2993,11 +2997,21 @@ function resolveDefaultImportSymbols(edges, files) {
     && edge.symbols.some(name => typeof name === 'string' && name.startsWith(JS_DEFAULT_PREFIX)))
   if (!hasMarker) return
   const byPath = new Map(files.map(file => [file.path, file]))
+  const definitions = exportedNamesByFile(files)
+  const maps = buildReexportMaps(edges, files)
   for (const edge of edges) {
     if (!Array.isArray(edge.symbols)) continue
     const target = byPath.get(edge.to)
     const exported = (target?.symbols ?? []).filter(symbol =>
       typeof symbol?.name === 'string' && symbol.exported !== false)
+    /** @type {Array<{from:string, to:string}>} */
+    const aliases = Array.isArray(edge.aliases)
+      ? edge.aliases.filter(alias => alias && typeof alias.from === 'string' && typeof alias.to === 'string')
+      : []
+    const addAlias = (from, to) => {
+      if (!from || !to || from === to) return
+      if (!aliases.some(alias => alias.from === from && alias.to === to)) aliases.push({ from, to })
+    }
     const resolved = []
     for (const name of edge.symbols) {
       if (typeof name !== 'string') continue
@@ -3006,9 +3020,28 @@ function resolveDefaultImportSymbols(edges, files) {
         continue
       }
       const local = name.slice(JS_DEFAULT_PREFIX.length)
-      if (exported.some(symbol => symbol.name === local)) resolved.push(local)
+      // 目标文件同名导出：沿用既有保守规则
+      if (exported.some(symbol => symbol.name === local)) {
+        resolved.push(local)
+        continue
+      }
+      // 否则解析具名默认导出（含经 barrel 的再导出）；解析不到则丢弃标记
+      const origins = resolveReexportOrigins(edge.to, 'default', maps, definitions)
+      if (origins.length !== 1) continue
+      const origin = origins[0]
+      if (origin.path === edge.to) {
+        resolved.push(origin.name)
+        addAlias(origin.name, local)
+      } else {
+        // 经 barrel：保留 barrel 的导出名 default 供引用/site 归因，
+        // 本地绑定名进入 aliases 供词法扫描
+        resolved.push('default')
+        addAlias('default', local)
+      }
     }
     edge.symbols = [...new Set(resolved)]
+    if (aliases.length > 0) edge.aliases = aliases
+    else delete edge.aliases
   }
 }
 

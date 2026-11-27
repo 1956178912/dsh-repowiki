@@ -243,6 +243,16 @@ test('usages：usageImporters 识别别名再导出', () => {
   ], '别名导入方带实际扫描名')
 })
 
+test('usages：默认导入别名作为本地扫描名', () => {
+  const edges = [
+    { from: 'src/app.ts', to: 'src/a.ts', line: 1, symbols: ['parse'], aliases: [{ from: 'parse', to: 'thing' }] },
+  ]
+  const files = [{ path: 'src/a.ts', symbols: [{ name: 'parse', exported: true, default: true }] }]
+  assert.deepEqual(usageImporters(edges, { path: 'src/a.ts', name: 'parse' }, files), [
+    { path: 'src/app.ts', importLines: [1], names: ['thing'] },
+  ])
+})
+
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {
   const selected = selectUsageFiles([{ path: 'b.ts' }, { path: 'a.ts' }, { path: 'b.ts' }], 1)
   assert.deepEqual(selected, { scanned: ['a.ts'], skipped: 1 })

@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.256.0）；测试 805/805（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.12%、分支 87.84%、函数 95.54%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.257.0）；测试 807/807（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.13%、分支 87.77%、函数 95.43%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| 默认导入 barrel | `resolveDefaultImportSymbols` 对 `default:Local` 标记：同名导出优先；否则 `resolveReexportOrigins(edge.to,'default')` 解析具名默认/再导出链，直连目标写入真实符号并记录本地别名，经 barrel 时保留 `default` 导出名并记录别名；`export *` 不转发 default；解析不到丢弃标记保留文件级边；usageImporters/reexportImportSites 把本地别名传给词法扫描 | v0.257.0 |
 | tsconfig extends | `parseAliasConfig` 读取 `extends`（字符串/数组）、`baseUrl`、`paths`；`resolveAliasConfig` 递归跟随相对 extends（最多 5 跳、循环检测、结果 memo），子 `paths` 替换父条目并绑定有效 baseUrl，继承 patterns 保留各自 `baseDir`，数组后者覆盖前者；被 extends 的基础配置不单独生效（除 `tsconfig.json`/`jsconfig.json`）；包名 extends 与 `node_modules` 不读取 | v0.256.0 |
 | 默认导出再导出 | JS/TS 具名 `export default function/class/interface` 在符号上标 `default: true`；`buildReexportMaps` 汇总 `defaults`（文件 → 默认符号名），`resolveReexportOrigins` 把 `default` 解析到该文件真实具名符号；`export { default as X }` 经别名映射、`export { default }` 经同名映射均可归到定义；匿名默认导出不登记；解析器 v13 | v0.255.0 |
 | 别名再导出 | deps 在 JS `export { x as y } from`、Python `from .x import a as b`、Rust `pub use … as y` 上记录 `aliases: [{from, to}]`，indexer 透传到 `edges[].aliases`；`buildReexportMaps` 把别名放进独立映射，`resolveReexportOrigins` 返回 `{path, name}` 原名位置；引用/影响面归到原名，使用点把导入方实际使用的别名传给 `findSymbolUsages`（`aliasNames`）；目标文件未定义原名时不解析（不伪造符号）；解析器 v12 | v0.254.0 |

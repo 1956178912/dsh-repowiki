@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.257.0] - 2026-11-28
+
+### Added
+
+- **Default imports through barrels**: `import Btn from './index'` resolves
+  through an `export { default }` barrel to the real default symbol, and
+  aliased default imports (`import Btn from './Button'`) store the local
+  binding in edge `aliases` so lexical usage scans search `Btn` instead of
+  the definition name.
+- **ES semantics preserved**: `export *` never forwards a default; markers
+  that cannot be resolved still degrade to file-level edges, and aliases
+  never become invented symbols.
+
+### Tests
+
+- 807 cases pass (LANG=en); new coverage for default import markers,
+  aliased defaults, barrel chains, `export *` rejection and a real-index
+  cards integration.
+
 ## [0.256.0] - 2026-11-28
 
 ### Added

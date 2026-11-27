@@ -2177,15 +2177,22 @@ test('podspec：根与嵌套清单聚合到 cocoapods 技术栈', async () => {
   assert.ok(techs.includes('cocoapods:Alamofire'), 'JSON podspec 依赖也进入技术栈')
 })
 
-test('JS 默认导入：同名导出解析为符号证据，别名/匿名默认不猜', async () => {
+test('JS 默认导入：同名/别名/barrel 解析与 export * 不转发 default', async () => {
   const dir = makeProject({
     'src/a.ts': 'export default function parse() { return 1 }\nexport function other() {}\n',
     'src/b.ts': "import parse from './a'\nexport const value = parse()\n",
     'src/c.ts': "import thing from './a'\nexport const value = thing()\n",
+    'src/star.ts': "export * from './a'\n",
+    'src/d.ts': "import parse from './star'\nexport const value = parse()\n",
+    'src/default.ts': "export { default } from './a'\n",
+    'src/e.ts': "import parse from './default'\nexport const value = parse()\n",
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
-  const edgeB = doc.edges.find(edge => edge.from === 'src/b.ts')
-  assert.deepEqual(edgeB.symbols, ['parse'], '本地名与目标导出同名时解析为真实符号')
-  const edgeC = doc.edges.find(edge => edge.from === 'src/c.ts')
-  assert.deepEqual(edgeC.symbols, [], '别名默认导入不猜测，保留文件级边')
+  const edge = from => doc.edges.find(item => item.from === from)
+  assert.deepEqual(edge('src/b.ts').symbols, ['parse'], '本地名与目标导出同名时解析为真实符号')
+  assert.deepEqual(edge('src/c.ts').symbols, ['parse'], '别名默认导入解析到默认符号')
+  assert.deepEqual(edge('src/c.ts').aliases, [{ from: 'parse', to: 'thing' }], '本地绑定名进入 aliases')
+  assert.deepEqual(edge('src/d.ts').symbols, [], 'export * 不转发 default，标记丢弃')
+  assert.deepEqual(edge('src/e.ts').symbols, ['default'], '具名 default 再导出经 barrel 保留导出名')
+  assert.deepEqual(edge('src/e.ts').aliases, [{ from: 'default', to: 'parse' }], '本地名进入 aliases')
 })

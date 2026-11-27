@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.257.0] - 2026-11-28
+
+- **默认导入穿过 barrel**：`import Btn from './index'` 经
+  `export { default }` 链解析到真实默认符号；`import Btn from './Button'`
+  等别名默认导入把本地绑定名写入边 `aliases`，词法使用点按 `Btn` 扫描。
+- **保持 ES 语义**：`export *` 不转发 default；解析不到的标记仍降级为
+  文件级边，别名不会变成臆造符号。
+- **测试**：807 例通过（LANG=en）；新增默认导入标记、别名默认、barrel
+  链、`export *` 拒绝与真实索引 cards 集成覆盖。
+
 ## [0.256.0] - 2026-11-28
 
 - **tsconfig/jsconfig `extends`**：跟随相对基础配置（字符串或数组，最多
