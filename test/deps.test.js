@@ -572,6 +572,29 @@ test('Dart：import/export/part 提取相对语义与 show 符号', () => {
   assert.ok(!imports.some(i => i.specifier === 'commented.dart'), '注释不提取')
 })
 
+test('GDScript：preload/load/extends 路径与注释/字符串屏蔽', () => {
+  const code = [
+    'class_name Player',
+    'extends "res://scenes/base.gd"',
+    'const Scene = preload("res://scenes/enemy.gd")',
+    "const Extra = load('res://data/extra.gd')",
+    '# preload("res://commented.gd")',
+    'var text = "preload(\\"res://string.gd\\")"',
+    'func _ready():',
+    '\tvar local = preload("res://local.gd")',
+  ].join('\n')
+  const imports = extractImports(code, 'gdscript')
+
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['res://scenes/base.gd', 2, true],
+    ['res://scenes/enemy.gd', 3, true],
+    ['res://data/extra.gd', 4, true],
+    ['res://local.gd', 8, true],
+  ])
+  assert.ok(!imports.some(i => i.specifier.includes('commented')), '注释不提取')
+  assert.ok(!imports.some(i => i.specifier.includes('string.gd')), '字符串内文本不提取')
+})
+
 test('Lua：require 字符串与括号形式，注释不提取', () => {
   const code = [
     'local a = require("my.mod")',

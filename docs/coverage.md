@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.276.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.277.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.276.0）；测试 838/838（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.15%、分支 87.95%、函数 95.5%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.277.0）；测试 841/841（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.1%、分支 87.94%、函数 95.52%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（773/773，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、44 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada/Verilog/SystemVerilog/Objective-C/MATLAB/Astro）、符号级影响证据与词法使用点、barrel 再导出链的引用/使用点解析、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（773/773，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、45 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada/Verilog/SystemVerilog/Objective-C/MATLAB/Astro/GDScript）、符号级影响证据与词法使用点、barrel 再导出链的引用/使用点解析、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| GDScript 支持 | 第 45 种语言：`extractGdscript` 登记 `class_name`/内部 `class`、`func`（类内 method + parent）、`signal`（variable）、`var`（`@export`/`@onready`/`static var`）、`const`、`enum`（type），缩进推导范围与归属，函数体内局部变量跳过，`_` 前缀非导出；`extractGdscriptImports` 提取 `preload`/`load`/`extends` 的 `res://` 路径；`resolveGodotPath` 根相对解析并拒绝 `user://`/绝对路径；`project.godot` 提供项目名与 Godot 技术/引擎版本 | v0.277.0 |
 | Astro 支持 | 第 44 种语言：`src/sfc.js` 新增 `astroBlockText`（顶部 `--- … ---` frontmatter + `<script>` 块，行号与源文件对齐；未闭合 frontmatter 保守延伸到文件尾）；`extractSymbols`/`extractImports` 复用 JS/TS 规则，模板/注释/样式不产符号与边；`package.json` 的 `astro` 计入 Astro 技术；`prompts.js` 围栏与面板标签通过语言接入守卫 | v0.276.0 |
 | Swift `@_exported` / Rust `include!` / Lua 跨行 | `extractSwiftImports` 识别 `@testable`/`@_exported` 属性（后者记 `kind: 'reexport'`，含子模块形态）；`extractRustImports` 识别行首 `include!("字面量")`（kind `require`，动态 `concat!`/`env!` 跳过），`resolveRustModPath` 统一解析显式相对路径；`extractLuaImports` 改为整文件扫描，长括号可跨行并按位置回算行号，`stripLuaComments` 支持任意等号数 `--[=*[ … ]=*]` 块注释；解析器 v28 | v0.275.0 |
 | Rust `#[path]` / Lua 长括号 | `extractRustImports` 维护待定 `#[path = "…"]` 属性（同行或独立属性行、其他代码行打断即过期），`mod` 声明记为 `kind: 'mod-path'`；`src/indexer.js` 的 `resolveRustModPath` 按声明文件目录归一解析并拒绝越出项目根；`extractLuaImports` 的 require 正则增加 `[[…]]`/`[=[…]=]` 单行长括号形态；解析器 v27 | v0.274.0 |

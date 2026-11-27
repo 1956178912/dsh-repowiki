@@ -1910,6 +1910,92 @@ function extractObjcImports(lines) {
 }
 
 /**
+ * 去除 GDScript 行注释（字符串感知，含三引号），保留字符串内容。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 去注释后的行。
+ */
+function stripGdscriptComments(lines) {
+  const out = []
+  /** @type {string|null} 当前字符串定界符。 */
+  let quote = null
+  for (const raw of lines) {
+    let line = ''
+    let i = 0
+    while (i < raw.length) {
+      if (quote) {
+        if (raw.startsWith(quote, i)) {
+          line += quote
+          i += quote.length
+          quote = null
+          continue
+        }
+        if (quote.length === 1 && raw[i] === '\\') {
+          line += raw.slice(i, i + 2)
+          i += 2
+          continue
+        }
+        line += raw[i]
+        i++
+        continue
+      }
+      if (raw.startsWith('"""', i) || raw.startsWith("'''", i)) {
+        quote = raw.slice(i, i + 3)
+        line += quote
+        i += 3
+        continue
+      }
+      const ch = raw[i]
+      if (ch === '#') break
+      if (ch === '"' || ch === "'") {
+        quote = ch
+        line += ch
+        i++
+        continue
+      }
+      line += ch
+      i++
+    }
+    out.push(line)
+  }
+  return out
+}
+
+/**
+ * 提取 GDScript 的 `preload("…")` / `load("…")` 与 `extends "…"` 路径引用。
+ * `res://` 由索引器解析为项目根相对路径；`user://` 与绝对路径不建边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractGdscriptImports(lines) {
+  const result = []
+  const codeLines = stripGdscriptComments(lines)
+  for (let i = 0; i < codeLines.length; i++) {
+    const re = /\b(?:preload|load)\s*\(\s*(['"])(?<path>[^'"]+)\1\s*\)/g
+    let match
+    while ((match = re.exec(codeLines[i])) !== null) {
+      result.push({
+        specifier: match.groups.path,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [],
+      })
+    }
+    const ext = /\bextends\s+(['"])(?<path>[^'"]+)\1/.exec(codeLines[i])
+    if (ext) {
+      result.push({
+        specifier: ext.groups.path,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 从源码提取模块引用（纯函数入口）。
  * @param {string} code - 源码文本。
  * @param {string} lang - 语言标识。
@@ -1936,6 +2022,7 @@ export function extractImports(code, lang) {
   if (lang === 'swift') return extractSwiftImports(lines)
   if (lang === 'scala') return extractScalaImports(lines)
   if (lang === 'dart') return extractDartImports(lines)
+  if (lang === 'gdscript') return extractGdscriptImports(lines)
   if (lang === 'elixir') return extractElixirImports(lines)
   if (lang === 'lua') return extractLuaImports(lines)
   if (lang === 'zig') return extractZigImports(lines)

@@ -168,6 +168,7 @@ export const MANIFEST_FILES = {
   'project.clj': 'clojure',
   '.terraform.lock.hcl': 'terraform',
   'CMakeLists.txt': 'cmake',
+  'project.godot': 'godot',
 }
 
 /**
@@ -186,6 +187,7 @@ export const EXTENSION_LANGS = {
   vue: 'vue',
   svelte: 'svelte',
   astro: 'astro',
+  gd: 'gdscript',
   py: 'python',
   pyi: 'python',
   go: 'go',

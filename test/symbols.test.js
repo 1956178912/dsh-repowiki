@@ -793,6 +793,48 @@ test('Vue SFC：只提取 script 块内符号，行号保持源文件位置', ()
   assert.ok(!symbols.some(s => s.name === 'a'), '.a 样式选择器不产符号')
 })
 
+test('GDScript：class_name/func/signal/var/const/enum 与内部类归属', () => {
+  const code = [
+    'class_name Player',
+    'extends CharacterBody2D',
+    '',
+    'signal died',
+    '@export var speed: int = 100',
+    'const MAX_JUMPS = 2',
+    'var _health = 3',
+    'enum State { IDLE, RUN }',
+    '',
+    'func _ready():',
+    '\tvar local_only = 1',
+    '\tprint("func fake()")',
+    '',
+    'func take_damage(amount: int) -> void:',
+    '\t_health -= amount',
+    '',
+    'class Inventory:',
+    '\tvar items: Array = []',
+    '\tfunc add_item(item) -> void:',
+    '\t\titems.append(item)',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'gdscript')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Player')?.kind, 'class', 'class_name 注册为类')
+  assert.equal(byName.get('died')?.kind, 'variable', 'signal 记为变量类符号')
+  assert.equal(byName.get('speed')?.line, 5, '@export 注解后的 var 仍登记')
+  assert.equal(byName.get('MAX_JUMPS')?.kind, 'variable')
+  assert.equal(byName.get('_health')?.exported, false, '下划线前缀非导出')
+  assert.equal(byName.get('State')?.kind, 'type')
+  assert.equal(byName.get('_ready')?.exported, false)
+  assert.equal(byName.get('take_damage')?.line, 14)
+  assert.ok(!byName.has('local_only'), '函数体内局部变量不登记')
+  assert.ok(!byName.has('fake'), '字符串内 func 文本不登记')
+  assert.equal(byName.get('Inventory')?.kind, 'class', '内部类')
+  assert.equal(byName.get('items')?.parent, 'Inventory')
+  assert.equal(byName.get('add_item')?.kind, 'method')
+  assert.equal(byName.get('add_item')?.parent, 'Inventory')
+})
+
 test('Dart：类型/顶层函数/变量、构造器/方法/getter 与私有可见性', () => {
   const code = [
     "typedef Callback = void Function(int);",

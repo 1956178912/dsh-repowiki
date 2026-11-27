@@ -2196,6 +2196,29 @@ function resolveRelativeFile(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 GDScript 的 `preload`/`load`/`extends` 路径。
+ * `res://` 是项目根相对路径；`user://` 与绝对路径是运行时/外部资源，
+ * 不建边；裸相对路径按引用文件目录解析。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 资源路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveGodotPath(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string' || !specifier.endsWith('.gd')) return null
+  const raw = specifier.replace(/\\/g, '/')
+  if (raw.startsWith('res://')) {
+    const candidate = path.posix.normalize(raw.slice(6))
+    if (candidate === '..' || candidate.startsWith('../')) return null
+    return indexed.has(candidate) ? candidate : null
+  }
+  if (raw.startsWith('user://') || path.posix.isAbsolute(raw)) return null
+  const candidate = path.posix.normalize(path.posix.join(path.posix.dirname(fromRel), raw))
+  if (candidate === '..' || candidate.startsWith('../')) return null
+  return indexed.has(candidate) ? candidate : null
+}
+
+/**
  * 解析 Dart 的本地 import/export/part（`./x.dart`、`../x.dart` 与同目录 `x.dart`）。
  * @param {string} fromRel - 引用方文件相对路径。
  * @param {string} specifier - Dart URI（已排除 dart:/package:）。
@@ -2961,6 +2984,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     }
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
+  if (lang === 'gdscript') return resolveGodotPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)

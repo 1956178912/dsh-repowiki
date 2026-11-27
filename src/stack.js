@@ -1408,6 +1408,17 @@ export function detectStack(manifests) {
         const name = PUB_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'pub', source: path })
       }
+    } else if (path === 'project.godot') {
+      // Godot 项目：INI 风格的 config/name；引擎版本在 config/features 首项
+      const name = /^config\/name\s*=\s*"([^"]*)"/m.exec(text)?.[1]
+      const engine = /^config\/features=PackedStringArray\("([^"]+)"/m.exec(text)?.[1]
+      if (name && !info.projectName) info.projectName = name
+      info.technologies.push({
+        name: 'Godot',
+        ecosystem: 'godot',
+        source: path,
+        ...(engine ? { version: engine } : {}),
+      })
     } else if (path === 'mix.exs' || path.endsWith('/mix.exs')) {
       const deps = mixDependencies(text)
       // umbrella：根清单通常只管 app，依赖分布在各 app 的 mix.exs

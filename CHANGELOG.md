@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.277.0] - 2026-11-28
+
+### Added
+
+- **GDScript support** (45th symbol language): `.gd` scripts register
+  `class_name`/inner `class`, `func` (methods inside classes), `signal`,
+  `var` (including `@export`/`@onready` annotations), `const` and `enum`
+  declarations with indentation-derived ranges; `_`-prefixed names are
+  non-exported and function-local variables are ignored.
+- `preload("res://…")`, `load("res://…")` and `extends "res://…"` resolve to
+  indexed `.gd` files relative to the project root (bare relative paths use
+  the declaring file's directory); `user://` and absolute paths build no edge.
+- `project.godot` contributes the project name and the Godot technology with
+  the engine version from `config/features`.
+
+### Tests
+
+- 841 cases pass (LANG=en); new GDScript symbol/import/index assertions.
+
 ## [0.276.0] - 2026-11-28
 
 ### Added

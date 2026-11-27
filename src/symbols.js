@@ -6420,10 +6420,230 @@ function extractMatlab(lines) {
  * @param {string} lang - 语言标识（见 schema.js 的 EXTENSION_LANGS）。
  * @returns {SymbolInfo[]} 符号列表；不支持的语言返回空数组。
  */
+/**
+ * 屏蔽 GDScript 注释与字符串内容（保留行结构与引号位置）。
+ *
+ * `#` 行注释从注释符起截断；单/双引号与三引号字符串内容替换为空格，
+ * 字符串内的 `func`/`var` 文本不会参与声明匹配。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 屏蔽后的行。
+ */
+function gdscriptScan(lines) {
+  const out = []
+  /** @type {string|null} 当前字符串定界符（`"`/`'`/`"""`/`'''`）。 */
+  let quote = null
+  for (const raw of lines) {
+    let line = ''
+    let i = 0
+    while (i < raw.length) {
+      if (quote) {
+        if (raw.startsWith(quote, i)) {
+          line += quote
+          i += quote.length
+          quote = null
+          continue
+        }
+        if (quote.length === 1 && raw[i] === '\\') {
+          line += '  '
+          i += 2
+          continue
+        }
+        line += ' '
+        i++
+        continue
+      }
+      if (raw.startsWith('"""', i) || raw.startsWith("'''", i)) {
+        quote = raw.slice(i, i + 3)
+        line += quote
+        i += 3
+        continue
+      }
+      const ch = raw[i]
+      if (ch === '#') break
+      if (ch === '"' || ch === "'") {
+        quote = ch
+        line += ch
+        i++
+        continue
+      }
+      line += ch
+      i++
+    }
+    out.push(line)
+  }
+  return out
+}
+
+/**
+ * 计算 GDScript 行的缩进宽度（Tab 按 4 计）。
+ * @param {string} raw - 源码行。
+ * @returns {number} 缩进宽度。
+ */
+function gdscriptIndent(raw) {
+  let n = 0
+  for (const ch of raw) {
+    if (ch === ' ') n++
+    else if (ch === '\t') n += 4
+    else break
+  }
+  return n
+}
+
+/**
+ * 由缩进推导块结束行（1-based）。
+ * @param {string[]} lines - 屏蔽后的行。
+ * @param {number} startIndex - 块声明行索引。
+ * @param {number} indent - 声明行缩进。
+ * @returns {number} 结束行（下一个同级或更浅语句之前；否则文件尾）。
+ */
+function gdscriptBlockEnd(lines, startIndex, indent) {
+  for (let i = startIndex + 1; i < lines.length; i++) {
+    if (lines[i].trim() === '') continue
+    if (gdscriptIndent(lines[i]) <= indent) return i
+  }
+  return lines.length
+}
+
+/** GDScript 声明前的注解前缀（`@export`、`@export_range(0, 100)`、`@onready` 等）。 */
+const GDSCRIPT_ANNOTATIONS = /^(?:@[A-Za-z_]\w*(?:\([^)]*\))?\s*)*/
+
+/**
+ * 提取 GDScript 符号：class_name / class（内部类）/ func / signal /
+ * var（含 `@export` 等注解）/ const / enum。
+ *
+ * Godot 脚本成员与 `class_name` 同级（缩进 0），内部类成员再缩进一层；
+ * 用缩进推导归属与范围（与 Python 同口径）。函数体内的局部 `var`/`const`
+ * 不登记。`_` 前缀按 Godot 惯例视为非导出（引擎回调/内部实现）。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractGdscript(lines) {
+  const masked = gdscriptScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, indent:number, end:number}>} */
+  const classes = []
+  /** 当前函数体结束行（1-based）：局部声明不登记。 */
+  let funcEnd = 0
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (line === '' || i + 1 <= funcEnd) continue
+    const indent = gdscriptIndent(masked[i])
+    while (classes.length > 0 && classes[classes.length - 1].end <= i + 1) classes.pop()
+    const parent = classes.length > 0 ? classes[classes.length - 1].name : undefined
+
+    // class_name Foo：注册到全局类名，范围取声明行自身
+    const classNamed = /^class_name\s+(?<name>[A-Za-z_]\w*)/.exec(line)
+    if (classNamed && indent === 0) {
+      symbols.push({
+        name: classNamed.groups.name,
+        kind: 'class',
+        line: i + 1,
+        endLine: i + 1,
+        exported: true,
+      })
+      continue
+    }
+
+    // class Inner: / class Inner extends Base:
+    const inner = /^class\s+(?<name>[A-Za-z_]\w*)\s*(?:extends\s+[A-Za-z_][\w.]*\s*)?:/.exec(line)
+    if (inner) {
+      const name = inner.groups.name
+      const end = gdscriptBlockEnd(masked, i, indent)
+      symbols.push({
+        name,
+        kind: 'class',
+        line: i + 1,
+        endLine: end,
+        exported: !name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+      classes.push({ name, indent, end })
+      continue
+    }
+
+    // func name(args)
+    const fn = /^(?:static\s+)?func\s+(?<name>[A-Za-z_]\w*)\s*\(/.exec(line)
+    if (fn) {
+      const name = fn.groups.name
+      const end = gdscriptBlockEnd(masked, i, indent)
+      symbols.push({
+        name,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: end,
+        exported: !name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+      funcEnd = end
+      continue
+    }
+
+    // signal name(args)
+    const sig = /^signal\s+(?<name>[A-Za-z_]\w*)/.exec(line)
+    if (sig) {
+      symbols.push({
+        name: sig.groups.name,
+        kind: 'variable',
+        line: i + 1,
+        endLine: i + 1,
+        exported: !sig.groups.name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+      continue
+    }
+
+    // @export var / @onready var / static var / var
+    const rest = line.replace(GDSCRIPT_ANNOTATIONS, '')
+    const variable = /^(?:static\s+)?var\s+(?<name>[A-Za-z_]\w*)/.exec(rest)
+    if (variable) {
+      symbols.push({
+        name: variable.groups.name,
+        kind: 'variable',
+        line: i + 1,
+        endLine: i + 1,
+        exported: !variable.groups.name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+      continue
+    }
+
+    // const NAME
+    const constant = /^const\s+(?<name>[A-Za-z_]\w*)/.exec(rest)
+    if (constant) {
+      symbols.push({
+        name: constant.groups.name,
+        kind: 'variable',
+        line: i + 1,
+        endLine: i + 1,
+        exported: !constant.groups.name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+      continue
+    }
+
+    // enum Name { … }
+    const enumeration = /^enum\s+(?<name>[A-Za-z_]\w*)/.exec(line)
+    if (enumeration) {
+      const name = enumeration.groups.name
+      const end = line.includes('{') ? gdscriptBlockEnd(masked, i, indent) : i + 1
+      symbols.push({
+        name,
+        kind: 'type',
+        line: i + 1,
+        endLine: end,
+        exported: !name.startsWith('_'),
+        ...(parent ? { parent } : {}),
+      })
+    }
+  }
+  return symbols
+}
+
 export function extractSymbols(code, lang) {
   if (typeof code !== 'string' || code.length === 0) return []
   if (lang === 'vue' || lang === 'svelte') return extractJsLike(toLines(scriptBlockText(code)))
   if (lang === 'astro') return extractJsLike(toLines(astroBlockText(code)))
+  if (lang === 'gdscript') return extractGdscript(toLines(code))
   const lines = toLines(code)
   if (lang === 'python') return extractPython(lines)
   if (lang === 'javascript' || lang === 'typescript') return extractJsLike(lines)

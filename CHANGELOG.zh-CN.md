@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.277.0] - 2026-11-28
+
+- **GDScript 支持**（第 45 种符号语言）：`.gd` 脚本登记 `class_name`/
+  内部 `class`、`func`（类内为方法）、`signal`、`var`（含 `@export`/
+  `@onready` 注解）、`const` 与 `enum`，范围由缩进推导；`_` 前缀非导出，
+  函数体内局部变量不登记。
+- `preload("res://…")`、`load("res://…")` 与 `extends "res://…"` 解析到
+  项目根相对的 `.gd` 文件（裸相对路径按声明文件目录）；`user://` 与绝对
+  路径不建边。
+- `project.godot` 提供项目名与 Godot 技术（引擎版本取 `config/features`）。
+- **测试**：841 例通过（LANG=en）；新增 GDScript 符号/导入/索引断言。
+
 ## [0.276.0] - 2026-11-28
 
 - **Astro 支持**（第 44 种符号语言）：`.astro` 组件按脚本区索引——顶部

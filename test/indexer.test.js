@@ -1101,6 +1101,40 @@ test('Vue SFC：脚本块符号与相对导入进入索引，行号对齐', asyn
   assert.deepEqual(doc.stats.languages, { typescript: 1, vue: 1 })
 })
 
+test('GDScript：res:// 路径解析、语言分布与 Godot 项目元数据', async () => {
+  const dir = makeProject({
+    'project.godot': [
+      '; Engine configuration file.',
+      'config_version=5',
+      '',
+      '[application]',
+      'config/name="Demo Game"',
+      'config/features=PackedStringArray("4.2", "GL Compatibility")',
+    ].join('\n'),
+    'scripts/player.gd': [
+      'extends "res://scripts/base.gd"',
+      'const Scene = preload("res://scenes/enemy.gd")',
+      'func _ready():',
+      '\tpass',
+    ].join('\n'),
+    'scripts/base.gd': 'class_name Base\n',
+    'scenes/enemy.gd': 'class_name Enemy\n',
+    'external.gd': 'const X = preload("user://save.gd")\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+
+  assert.equal(doc.stats.languages.gdscript, 4)
+  const edges = doc.edges.filter(e => e.from === 'scripts/player.gd')
+  assert.deepEqual(edges.map(e => [e.to, e.line]), [
+    ['scripts/base.gd', 1],
+    ['scenes/enemy.gd', 2],
+  ], 'res:// 解析为项目根相对路径')
+  assert.ok(!doc.edges.some(e => e.from === 'external.gd'), 'user:// 不建边')
+  assert.equal(doc.stack.projectName, 'Demo Game')
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Godot'
+    && t.ecosystem === 'godot' && t.version === '4.2'), 'Godot 技术与引擎版本')
+})
+
 test('Astro：frontmatter 符号与相对导入进入索引，行号对齐', async () => {
   const dir = makeProject({
     'package.json': JSON.stringify({ name: 'demo', dependencies: { astro: '^4' } }),

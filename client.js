@@ -342,6 +342,7 @@ const LANGUAGE_LABELS = {
   vue: 'Vue',
   svelte: 'Svelte',
   astro: 'Astro',
+  gdscript: 'GDScript',
   python: 'Python',
   go: 'Go',
   rust: 'Rust',
