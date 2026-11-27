@@ -3,6 +3,28 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.235.0] - 2026-11-28
+
+- **确定性架构 Wiki 页**：每次 `repowiki-generate` 都会在模块/主题页之前写入
+  固定 slug 的 `architecture` 页，汇总声明的分层与精确跨层层对（附示例边）、
+  循环依赖组（含代表性路径）、fan-in 与 PageRank 关键入口、重复代码候选、
+  复杂度热点、未解析相对导入，以及架构基线状态（缺失/不可用/无退化/有
+  新增退化）。该页与 `repowiki-status`、`verify:arch` 共用同一口径且不调用
+  模型，数字不会与工具漂移，并按 locale 输出中英文。
+- **索引路径引用与行号**：架构页可引用全部索引文件（不只限于有卡片的
+  文件），热点与坏导入使用符号行号 `#Lx-Ly`；每条引用都记录内容指纹，
+  因此 `verify:wiki --strict` 与其它页面同等校验。固定 slug 为保留值：
+  主题页若也叫 `architecture` 会被改名并计入 `renamed`。
+- **增量短路要求架构页存在**：清单缺少 `architecture` 时不再短路，升级
+  已有 Wiki 会自动补写该页而不是永久跳过。
+- **修复 `verify:wiki` 漏读依赖边**：`loadIndex` 只返回 `files`，导致
+  `wikiGraphText` 看到空边表，任何有 import 边的仓库都会被误判为
+  `wiki/stale-graph`；现在加载器透传 `edges`，并新增"含边索引应判定新鲜"
+  的回归测试。
+- **测试**：742 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖架构页分节、
+  可复现性、本地化、四种基线状态、保留 slug，以及生成 → `verify:wiki
+  --strict` 的端到端链路。
+
 ## [0.234.0] - 2026-11-28
 
 - **Ada 支持（第 39 种语言）**：`.ads`/`.adb` 进入索引。`package`/

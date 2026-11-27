@@ -172,7 +172,7 @@ test('repowiki-generate execute：消费卡片写 Wiki 页面', async () => {
   const gen = repowikiGenerateTool(ctx)
   const out = await gen.execute({ locale: 'zh' }, fakeExec)
 
-  assert.deepStrictEqual(out.pages, ['overview'], '应写 overview 页')
+  assert.deepStrictEqual(out.pages, ['architecture', 'overview'], '应写架构页与 overview 页')
   assert.strictEqual(out.cardsRead, 2, '应汇总两张卡片')
   assert.strictEqual(out.memoriesRead, 0)
   const wikiPath = path.join(dir, '.dsh-repowiki/wiki/zh/overview.md')
@@ -201,13 +201,13 @@ test('repowiki-generate execute：输入未变时跳过合成，force 强制重�
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const generate = repowikiGenerateTool(ctx)
   const first = await generate.execute({ locale: 'zh' }, fakeExec)
-  assert.deepEqual(first.pages, ['overview'])
+  assert.deepEqual(first.pages, ['architecture', 'overview'])
   const dispatched = activationSpecs.length
 
   // 卡片与记忆都没变：清单指纹一致 → 不派发模型
   const second = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.equal(second.skippedFresh, true, '输入未变应短路')
-  assert.deepEqual(second.pages, ['overview'])
+  assert.deepEqual(second.pages, ['architecture', 'overview'])
   assert.strictEqual(activationSpecs.length, dispatched, '跳过时不派发模型')
   assert.match(generate.output.render({}, second)[0].text, /up to date/)
 
@@ -278,28 +278,28 @@ test('repowiki-generate execute：被引用源码变化会打破 fresh 跳过', 
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const generate = repowikiGenerateTool(ctx)
   const first = await generate.execute({ locale: 'zh' }, fakeExec)
-  assert.deepEqual(first.pages, ['overview'])
-  assert.deepEqual(first.citationCoverage, {
-    total: 1, tracked: 1, untracked: 0, hasDigests: true,
-    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
-  })
+  assert.deepEqual(first.pages, ['architecture', 'overview'])
+  // 架构页会额外引用 fan-in/核心文件，精确条数不再是 1；断言口径不变
+  assert.equal(first.citationCoverage.untracked, 0)
+  assert.equal(first.citationCoverage.hasDigests, true)
+  assert.ok(first.citationCoverage.total >= 1)
+  assert.deepEqual(first.citationCoverage.reasons, { unreadable: 0, range: 0, cap: 0, unknown: 0 })
   const dispatched = activationSpecs.length
 
   // 卡片、记忆与引用源码均未变：短路且指纹可验证
   const second = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.equal(second.skippedFresh, true)
   assert.equal(second.citationDrift, 0)
-  assert.deepEqual(second.citationCoverage, {
-    total: 1, tracked: 1, untracked: 0, hasDigests: true,
-    reasons: { unreadable: 0, range: 0, cap: 0, unknown: 0 },
-  })
+  assert.equal(second.citationCoverage.untracked, 0)
+  assert.equal(second.citationCoverage.hasDigests, true)
+  assert.ok(second.citationCoverage.total >= 1)
   assert.strictEqual(activationSpecs.length, dispatched, '跳过时不派发模型')
 
   // 只改被引用源码，不动卡片：内容指纹变化 → 不再短路
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')
   const third = await generate.execute({ locale: 'zh' }, fakeExec)
   assert.equal(third.skippedFresh, undefined)
-  assert.equal(third.citationDrift, 1)
+  assert.ok(third.citationDrift >= 1, '被改文件在主题页与架构页各有一条引用')
   assert.strictEqual(activationSpecs.length, dispatched + 1, '引用漂移时重新派发模型')
   assert.match(third.hint ?? '', /cited source\(s\) changed/)
   assert.match(generate.output.render({}, third)[0].text, /cited source\(s\) changed/)
@@ -322,14 +322,15 @@ test('repowiki-generate execute：越界引用未覆盖原因为 range', async (
   const generate = repowikiGenerateTool(ctx)
   const out = await generate.execute({ locale: 'zh' }, fakeExec)
 
-  assert.deepEqual(out.citationCoverage, {
-    total: 2, tracked: 1, untracked: 1, hasDigests: true,
-    reasons: { unreadable: 0, range: 1, cap: 0, unknown: 0 },
-  })
+  assert.equal(out.citationCoverage.untracked, 1, '越界引用不计入指纹覆盖')
+  assert.equal(out.citationCoverage.hasDigests, true)
+  assert.equal(out.citationCoverage.reasons.range, 1)
+  assert.ok(out.citationCoverage.tracked >= 1, '架构页引用也应有指纹')
   const manifest = JSON.parse(
     nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'), 'utf8'),
   )
-  assert.equal(manifest.pages[0].citationMisses['b.ts#L99-L100'], 'range')
+  const themeEntry = manifest.pages.find(page => page.slug === 'overview')
+  assert.equal(themeEntry.citationMisses['b.ts#L99-L100'], 'range')
   assert.match(generate.output.render({}, out)[0].text, /1 invalid range/)
 })
 
@@ -447,7 +448,7 @@ test('repowiki-generate execute：子代理无页面输出时记 hint 而非空�
   })
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh', attempts: 1 }, fakeExec)
-  assert.deepStrictEqual(out.pages, [])
+  assert.deepStrictEqual(out.pages, ['architecture'], '主题页为空时仍写出确定性架构页')
   assert.ok(out.hint, '空页面输出应给出诊断提示')
   assert.strictEqual(out.cardsRead, 2, '仍应报告读取的卡片数')
   assert.equal(out.attempts, 1)
@@ -473,7 +474,7 @@ test('repowiki-generate execute：主题合成空输出按退避重试后成功'
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
 
-  assert.deepEqual(out.pages, ['overview'], '第二次尝试写入页面')
+  assert.deepEqual(out.pages, ['architecture', 'overview'], '第二次尝试写入页面')
   assert.equal(out.attempts, 2)
   assert.equal(out.retried, 1)
   assert.equal(out.hint, undefined, '重试成功后不保留失败 hint')
@@ -509,7 +510,7 @@ test('repowiki-extract/generate：LLM 在锁外派发，写盘等待锁（O5 修
   await holder
   const [extractOut, generateOut] = await Promise.all([extracting, generating])
   assert.strictEqual(extractOut.extracted, 2, 'force 重新抽取并等待锁后写卡')
-  assert.deepStrictEqual(generateOut.pages, ['overview'])
+  assert.deepStrictEqual(generateOut.pages, ['architecture', 'overview'])
   assert.ok(nodefs.existsSync(wikiPath), '锁释放后应写 Wiki')
 })
 
@@ -575,9 +576,11 @@ test('repowiki-generate execute：章节引用按白名单净化后渲染', asyn
   })
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
-  assert.deepStrictEqual(out.pages, ['architecture'])
+  // 确定性架构页占据固定 slug，主题页同名被去重改名
+  assert.deepStrictEqual(out.pages, ['architecture', 'architecture-2'])
+  assert.deepStrictEqual(out.renamed, [{ from: 'architecture', to: 'architecture-2' }])
 
-  const md = nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/architecture.md'), 'utf8')
+  const md = nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/architecture-2.md'), 'utf8')
   assert.ok(md.includes('本文引用的文件'), '应渲染页级引用块')
   assert.ok(md.includes('- `a.ts`'), '白名单路径保留')
   assert.ok(md.includes('`a.ts#L1-L4`'), '合法行号范围保留')
@@ -585,6 +588,11 @@ test('repowiki-generate execute：章节引用按白名单净化后渲染', asyn
   assert.ok(!md.includes('../evil.ts'), '穿越路径被丢弃')
   assert.ok(md.includes('## 目录'), '多节页面应生成目录')
   assert.ok(md.includes('章节来源'), '每节应渲染章节来源')
+
+  // 固定 slug 的架构页仍由确定性生成逻辑产出
+  const deterministic = nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/architecture.md'), 'utf8')
+  assert.match(deterministic, /确定性生成/)
+  assert.match(deterministic, /## 总览/)
 })
 
 test('repowiki-extract execute：写 knowledge/<locale>/_index.json 模块→卡片清单', async () => {
@@ -617,7 +625,7 @@ test('repowiki-generate execute：重复 slug 自动去重并报告 renamed', as
   await repowikiExtractTool(ctx).execute({ locale: 'zh' }, fakeExec)
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
 
-  assert.deepStrictEqual(out.pages, ['overview', 'overview-2'])
+  assert.deepStrictEqual(out.pages, ['architecture', 'overview', 'overview-2'])
   assert.deepStrictEqual(out.renamed, [{ from: 'overview', to: 'overview-2' }])
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/overview.md')))
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/overview-2.md')))
@@ -640,7 +648,7 @@ test('repowiki-generate execute：单页写失败不阻断其它页（failed 上
   }
 
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
-  assert.deepStrictEqual(out.pages, ['good'])
+  assert.deepStrictEqual(out.pages, ['architecture', 'good'])
   assert.strictEqual(out.failed.length, 1)
   assert.strictEqual(out.failed[0].slug, 'bad')
   assert.match(out.failed[0].reason, /disk full/)
@@ -659,7 +667,7 @@ test('repowiki-generate execute：孤儿页只报告不删除', async () => {
   await writeWikiPage(ctx.fs, dir, 'legacy', 'zh', '# Legacy\n\nold page\n')
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
 
-  assert.deepStrictEqual(out.pages, ['overview'])
+  assert.deepStrictEqual(out.pages, ['architecture', 'overview'])
   assert.deepStrictEqual(out.orphaned, ['legacy'])
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/legacy.md')), '孤儿页保留')
 })
@@ -696,7 +704,7 @@ test('repowiki-generate execute：granularity=module 确定性生成模块页与
 
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh', granularity: 'module' }, fakeExec)
   assert.strictEqual(activationSpecs.length, dispatched, 'module 模式不得派发子代理')
-  assert.deepStrictEqual(out.pages, ['modules/root'])
+  assert.deepStrictEqual(out.pages, ['architecture', 'modules/root'])
   assert.strictEqual(out.cardsRead, 2)
   assert.strictEqual(out.memoriesRead, 0)
 
@@ -710,12 +718,17 @@ test('repowiki-generate execute：granularity=module 确定性生成模块页与
   const manifest = JSON.parse(nodefs.readFileSync(manifestPath, 'utf8'))
   assert.strictEqual(manifest.schemaVersion, 3, '清单 v3 记录章节级引用与内容指纹')
   assert.match(manifest.inputDigest, /^[0-9a-f]{16}$/)
-  assert.strictEqual(manifest.pages.length, 1)
-  assert.strictEqual(manifest.pages[0].slug, 'modules/root')
-  assert.strictEqual(manifest.pages[0].path, 'wiki/zh/modules/root.md')
-  assert.ok(Array.isArray(manifest.pages[0].sections), '清单应含 sections 数组')
-  assert.ok(manifest.pages[0].sections.every(s => typeof s.heading === 'string' && Array.isArray(s.sources)))
-  const citationDigests = manifest.pages[0].citationDigests
+  assert.strictEqual(manifest.pages.length, 2, '架构页 + 模块页')
+  const moduleEntry = manifest.pages.find(page => page.slug === 'modules/root')
+  assert.ok(moduleEntry, '清单应登记模块页')
+  assert.strictEqual(moduleEntry.path, 'wiki/zh/modules/root.md')
+  assert.ok(Array.isArray(moduleEntry.sections), '清单应含 sections 数组')
+  assert.ok(moduleEntry.sections.every(s => typeof s.heading === 'string' && Array.isArray(s.sources)))
+  const architectureEntry = manifest.pages.find(page => page.slug === 'architecture')
+  assert.ok(architectureEntry, '清单应登记确定性架构页')
+  assert.strictEqual(architectureEntry.path, 'wiki/zh/architecture.md')
+  assert.ok(architectureEntry.sections.some(section => section.heading === '总览'), '架构页含总览节')
+  const citationDigests = moduleEntry.citationDigests
   assert.ok(citationDigests && typeof citationDigests === 'object', '清单记录引用内容指纹')
   assert.ok('a.ts' in citationDigests && 'b.ts' in citationDigests, '模块页源文件均有指纹')
   for (const value of Object.values(citationDigests)) assert.match(value, /^[0-9a-f]{12}$/)
@@ -830,8 +843,8 @@ test('repowiki-generate execute：locales 每语言一次主题页合成并写�
   const out = await repowikiGenerateTool(ctx).execute({ locales: ['zh', 'en'] }, fakeExec)
   assert.deepStrictEqual(out.locales, ['zh', 'en'])
   assert.strictEqual(out.byLocale.length, 2)
-  assert.deepStrictEqual(out.pages, ['overview'], '顶层页面镜像首个 locale')
-  assert.deepStrictEqual(out.byLocale[1].pages, ['overview'])
+  assert.deepStrictEqual(out.pages, ['architecture', 'overview'], '顶层页面镜像首个 locale')
+  assert.deepStrictEqual(out.byLocale[1].pages, ['architecture', 'overview'])
   assert.strictEqual(activationSpecs.length - before, 2, '每个 locale 一次主题页合成')
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/zh/overview.md')))
   assert.ok(nodefs.existsSync(path.join(dir, '.dsh-repowiki/wiki/en/overview.md')))
@@ -935,7 +948,7 @@ test('repowiki-generate execute：某 locale 无卡片时其它 locale 仍生成
   assert.deepStrictEqual(out.byLocale[0].pages, [])
   assert.match(out.byLocale[0].hint, /No knowledge cards/)
   assert.strictEqual(out.byLocale[1].locale, 'zh')
-  assert.deepStrictEqual(out.byLocale[1].pages, ['overview'])
+  assert.deepStrictEqual(out.byLocale[1].pages, ['architecture', 'overview'])
 })
 
 test('repowiki-generate prompt：注入跨模块依赖摘要与循环依赖组（来自索引边）', async () => {

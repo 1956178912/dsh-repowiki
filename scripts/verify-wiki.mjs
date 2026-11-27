@@ -221,12 +221,13 @@ async function pathExists(target) {
  */
 async function loadIndex(root) {
   const loaded = await readJson(path.join(root, ASSET_DIR, INDEX_FILE))
-  if (!loaded.exists) return { exists: false, compatible: false, files: [], error: '' }
+  if (!loaded.exists) return { exists: false, compatible: false, files: [], edges: [], error: '' }
   if (!loaded.value || !Array.isArray(loaded.value.files)) {
     return {
       exists: true,
       compatible: false,
       files: [],
+      edges: [],
       error: loaded.error || 'index.json is not a valid index',
     }
   }
@@ -235,6 +236,8 @@ async function loadIndex(root) {
     compatible: true,
     ...(typeof loaded.value.schemaVersion === 'number' ? { schemaVersion: loaded.value.schemaVersion } : {}),
     files: loaded.value.files,
+    // 依赖边参与 graphDigest：漏读会让任何有边的仓库被误判为结构陈旧
+    edges: Array.isArray(loaded.value.edges) ? loaded.value.edges : [],
     error: '',
   }
 }

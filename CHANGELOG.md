@@ -5,6 +5,43 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.235.0] - 2026-11-28
+
+### Added
+
+- **Deterministic architecture Wiki page**: every `repowiki-generate` run
+  now writes a fixed `architecture` page before the module/theme pages. It
+  summarizes declared layers with exact cross-layer pairs and example
+  edges, import cycle groups (with a representative route), fan-in and
+  PageRank entry points, duplicate-code candidates, complexity hotspots,
+  unresolved relative imports and the architecture baseline status
+  (missing / unusable / clean / regressions). The page is built without a
+  model from the same facts `repowiki-status` and `verify:arch` use, so its
+  numbers cannot drift from those tools, and it is localized (zh/en).
+- **Indexed-path citations with line ranges**: the architecture page cites
+  files from the index (not only carded files) and uses symbol-derived
+  `#Lx-Ly` ranges for hotspots and unresolved imports; every citation gets
+  a content digest, so `verify:wiki --strict` covers the page like any
+  other. The fixed slug is reserved: a theme page that also chooses
+  `architecture` is renamed and reported in `renamed`.
+- **Freshness requires the architecture page**: the incremental short
+  circuit now checks that the manifest lists `architecture`, so upgrading
+  an existing wiki backfills the page instead of skipping forever.
+
+### Fixed
+
+- **`verify:wiki` ignored dependency edges in the structure digest**:
+  `loadIndex` returned only `files`, so `wikiGraphText` saw an empty edge
+  list and every repository with import edges was reported as
+  `wiki/stale-graph`. The loader now passes `edges` through; a regression
+  test covers an index with edges that must verify as fresh.
+
+### Tests
+
+- 742 cases pass (LANG=en and LANG=zh); new coverage for the architecture
+  page sections, determinism, localization, four baseline states, the
+  reserved slug, and an end-to-end generate → `verify:wiki --strict` run.
+
 ## [0.234.0] - 2026-11-28
 
 ### Added

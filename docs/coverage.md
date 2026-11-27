@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.234.0）；测试 734/734（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.04%、分支约 87.9%、函数 95.88%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.235.0）；测试 742/742（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.01%、分支约 87.9%、函数 95.91%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（734/734，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、39 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（742/742，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、架构分层违规检查、重复代码检测、圈复杂度估算、坏相对导入、可配置分析阈值、含新信号的健康分、39 语言提取（含 Elixir/Lua/Zig/Gleam/Shell/R/Julia/Nim/OCaml/Haskell/Erlang/Solidity/Clojure/HCL/Groovy/PowerShell/Fortran/Perl/Pascal/Nix/VB.NET/Tcl/F#/Ada）、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），架构侧的循环/分层/坏导入/重复/复杂度/架构分由 `verify:arch` 基线棘轮独立拦截（`verify-arch` job 自证通过→新增循环失败），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -268,3 +268,4 @@
 | 架构基线棘轮 | `scripts/verify-arch.mjs` 复用 `snapshotArchitecture`（循环组、按层对计数的分层违规、坏相对导入、重复块/高复杂度/最大复杂度、健康分架构分量）生成 `.dsh-repowiki/arch-baseline.json`：身份型信号按签名只拦新增，上限型与分值型按数值只拦上升/下降；`--update` 写入、`--require` 无基线失败、`--json` 输出 `index/*`/`plan/*`/`baseline/*` 问题码与结构化 `regressions`/`improvements`，退出码 0/1/2；基线无时间戳、列表排序去重，可逐字节复现；CI `verify-arch` job 自证"无基线失败 → 写基线通过 → 新增循环失败" | v0.232.0 |
 | 基线感知状态 | `repowiki-status` 用 `architectureFactsSnapshot`（与 `verify:arch` 同一函数）把已算事实压成快照并读取 `.dsh-repowiki/arch-baseline.json`：输出 `archBaseline`（`exists`/`schemaVersion`/`ok`/`regressionTotal`/有界 `regressions`（cycle/layer/unresolved/ceiling/score）/`improvements`）与 `Arch baseline:` 行，新增退化附告警且不计入卫生分量；坏 JSON/不支持版本报告为不可用；`computeComplexity.highTotal` 与 `evaluateLayers.pairs` 提供不受展示上限影响的精确计数 | v0.233.0 |
 | Ada 支持 | 39 语言：`package`/`package body`（class；嵌套包与点分子单元带 `parent`）、`procedure`/`function`（声明到声明头、body 到 `end [Name];`；表达式函数/`is separate`/`renames` 不展开）、`type`/`subtype`/`task type`/`protected type`（record 覆盖到 `end record;`）与包级对象（variable）；`private` 段非导出；`--` 注释与双引号字符串（`""` 转义）屏蔽；`end if/loop/case/record/select/block` 不关闭单元，`declare … begin … end;` 单独记账；`with`/`limited with`/`private with` 单元名大小写不敏感，GNAT 连字符文件名与任意源根目录形式都映射为点分单元名（spec 优先、body 兜底），`use`/generic 形式子程序/外部标准库不建边 | v0.234.0 |
+| 确定性架构页 | `src/architecture-page.js`：`repowiki-generate` 在模块/主题页之前写入固定 slug `architecture`（无模型）：总览（文件/符号/边/模块/语言/架构分）、声明分层与精确层对+示例边、循环组与代表性路径、fan-in/PageRank 入口、重复代码候选、复杂度热点（`#Lx-Ly`）、未解析相对导入（`#Lx`）与架构基线四态；引用白名单放宽到全部索引文件（`deterministic` 标记），条目数与引用数有界，同一输入生成逐字节相同页面；slug 保留、同名主题页改名；`verify:wiki --strict` 全绿。另修复 `verify:wiki` 的 `loadIndex` 漏读 `edges` 导致有边仓库误报 `wiki/stale-graph` | v0.235.0 |

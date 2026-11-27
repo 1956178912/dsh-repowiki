@@ -138,7 +138,7 @@ test('repowiki-generate：all 模式主题页失败时仍保留模块页并给 h
     sourceDigest: '', title: 'A', tags: [], manuallyEdited: true, generatedAt: 'now',
   })}\n# A\n`)
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh', granularity: 'all' }, fakeExec)
-  assert.deepEqual(out.pages, ['modules/root'])
+  assert.deepEqual(out.pages, ['architecture', 'modules/root'])
   assert.match(out.hint, /without pages/)
 })
 
@@ -162,7 +162,7 @@ test('repowiki-generate：清单写失败记入 failed', async () => {
   }
   const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.ok(out.failed.some(f => f.slug === '_index.json' && /denied/.test(f.reason)))
-  assert.deepEqual(out.pages, ['t'])
+  assert.deepEqual(out.pages, ['architecture', 't'])
 })
 
 test('repowiki-status：Wiki 陈旧/孤儿与卡片陈旧计数', async () => {
@@ -205,4 +205,46 @@ test('repowiki-cards：未知 target 回退 symbols', async () => {
   await repowikiIndexTool(ctx).execute({}, fakeExec)
   const out = await repowikiCardsTool(ctx).execute({ target: 'unknown' }, fakeExec)
   assert.equal(out.target, 'symbols')
+})
+
+test('repowiki-generate：确定性架构页通过 verify:wiki 严格门禁', async () => {
+  const dir = makeProject({
+    'src/a.ts': [
+      "import { b } from './b'",
+      'export function a() {',
+      '  if (b) { return 1 }',
+      '  if (!b) { return 2 }',
+      '  return b',
+      '}',
+    ].join('\n') + '\n',
+    'src/b.ts': 'export function b() { return 1 }\n',
+  })
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const index = JSON.parse(nodefs.readFileSync(path.join(dir, '.dsh-repowiki/index.json'), 'utf8'))
+  const digestOf = p => index.files.find(file => file.path === p).digest
+  for (const file of ['src/a.ts', 'src/b.ts']) {
+    await writeCard(ctx.fs, dir, file, 'zh', `${encodeFrontmatter({
+      schemaVersion: 1, path: file, lang: 'typescript', locale: 'zh',
+      sourceDigest: digestOf(file), title: file, tags: [], manuallyEdited: false, generatedAt: 'now',
+    })}\n# ${file}\n`)
+  }
+  const out = await repowikiGenerateTool(ctx).execute({ locale: 'zh', granularity: 'module' }, fakeExec)
+  assert.ok(out.pages.includes('architecture'))
+
+  const manifest = JSON.parse(
+    nodefs.readFileSync(path.join(dir, '.dsh-repowiki/wiki/zh/_index.json'), 'utf8'),
+  )
+  const architecture = manifest.pages.find(page => page.slug === 'architecture')
+  assert.ok(architecture, '清单应登记架构页')
+  assert.ok(architecture.sources.length > 0, '架构页应引用索引文件')
+  assert.equal(architecture.citationMisses, undefined, '确定性引用都应记录指纹')
+
+  const { verifyWiki } = await import('../scripts/verify-wiki.mjs')
+  const verified = await verifyWiki({ root: dir, strict: true, requireAssets: true })
+  assert.equal(verified.ok, true, verified.issues.join('; '))
+  assert.equal(verified.totals.broken, 0)
+  assert.equal(verified.totals.outOfRange, 0)
+  assert.equal(verified.totals.drift, 0)
+  assert.equal(verified.totals.untracked, 0, '架构页引用全部带指纹')
 })

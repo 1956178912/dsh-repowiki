@@ -642,3 +642,31 @@ test('verify-wiki：CLI 进程退出码契约', () => {
   assert.equal(fail.status, 1)
   assert.match(fail.stdout, /Result: FAIL/)
 })
+
+test('verify-wiki：结构指纹包含依赖边（含边的仓库不误报陈旧）', async () => {
+  const root = makeRoot()
+  const text = 'one\ntwo\n'
+  writeText(path.join(root, 'a.ts'), text)
+  writeText(path.join(root, 'b.ts'), 'three\n')
+  writeIndex(
+    root,
+    [{ path: 'a.ts', lines: 2 }, { path: 'b.ts', lines: 1 }],
+    6,
+    [{ from: 'a.ts', to: 'b.ts' }],
+  )
+  const edges = [{ from: 'a.ts', to: 'b.ts' }]
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    graphDigest: digestText(wikiGraphText({
+      files: [{ path: 'a.ts' }, { path: 'b.ts' }],
+      edges,
+    }), 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))],
+  })
+
+  const fresh = await verifyWiki({ root })
+  assert.equal(fresh.ok, true, '边参与指纹计算时不应误报结构陈旧')
+  assert.equal(fresh.locales[0].stale, false)
+})
