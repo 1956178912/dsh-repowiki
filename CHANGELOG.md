@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.193.0] - 2026-11-28
+
+### Added
+
+- **Parser version visibility in status**: `repowiki-status` returns
+  `index.parserVersion`, prints it in the `Index:` line and warns when the
+  cached index was produced by a different extractor version. Users see
+  that the next rebuild will re-parse every file (and why new language
+  support may not be visible yet) before running it, instead of inferring
+  it from a changed file count.
+
+### Tests
+
+- 585 cases pass (LANG=en and LANG=zh); a fixture with `parserVersion: 1`
+  pins the structured field, the warning and the rendered `parser v1` text.
+
 ## [0.192.0] - 2026-11-28
 
 ### Added

@@ -82,6 +82,23 @@ test('repowiki-status：索引中的越界路径被忽略并进入告警', async
   assert.match(rendered[0].text, /1 untrusted path\(s\), 1 edge\(s\) dropped/)
 })
 
+test('repowiki-status：旧解析器索引告警且版本结构化输出', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-parser-'))
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki', 'index.json'), JSON.stringify({
+    schemaVersion: 6,
+    parserVersion: 1,
+    files: [{ path: 'a.ts', lang: 'typescript', symbols: [], lines: 1 }],
+    edges: [],
+    stats: { files: 1, symbols: 0, edges: 0 },
+  }))
+  const out = await repowikiStatusTool(makeCtx(dir)).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.index.parserVersion, 1)
+  assert.ok(out.warnings.some(w => /parser v1/.test(w)), '旧解析器应提示重建')
+  const rendered = repowikiStatusTool(makeCtx(dir)).output.render({}, out)
+  assert.match(rendered[0].text, /parser v1/)
+})
+
 test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Git）', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function main() {}\n')

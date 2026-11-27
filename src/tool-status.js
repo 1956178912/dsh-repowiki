@@ -14,7 +14,7 @@ import { listMemory } from './memory.js'
 import { readPlan, selectCandidates } from './config.js'
 import { documentationCoverage, assessHealth } from './health.js'
 import { pendingLocks } from './lock.js'
-import { INDEX_REL_PATH, SUPPORTED_LOCALES, ASSET_DIR } from './schema.js'
+import { INDEX_REL_PATH, SUPPORTED_LOCALES, ASSET_DIR, INDEX_PARSER_VERSION } from './schema.js'
 import { resolveContentLocale } from './locale.js'
 import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
@@ -186,6 +186,7 @@ export function repowikiStatusTool(ctx) {
             properties: {
               exists: { type: 'boolean' },
               schemaVersion: { type: 'integer' },
+              parserVersion: { type: 'integer', description: 'Extractor rule version that produced the cached symbols/imports. A mismatch with the running version means the next rebuild re-parses every file.' },
               compatible: { type: 'boolean' },
               files: { type: 'integer' },
               symbols: { type: 'integer' },
@@ -650,7 +651,7 @@ export function repowikiStatusTool(ctx) {
         type: 'text',
         text: [
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
-          `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}${value.index.untrusted ? ` / ${value.index.untrusted.files} untrusted path(s), ${value.index.untrusted.edges} edge(s) dropped` : ''}` : 'missing'}`,
+          `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.parserVersion !== undefined ? ` / parser v${value.index.parserVersion}` : ''}${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}${value.index.untrusted ? ` / ${value.index.untrusted.files} untrusted path(s), ${value.index.untrusted.edges} edge(s) dropped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
           `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}${value.wiki.staleReasons ? ` (${value.wiki.staleReasons.join(', ')})` : ''}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, duplicate ${value.wiki.duplicate}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
@@ -736,6 +737,11 @@ export function repowikiStatusTool(ctx) {
       if (index?.warnings) warnings.push(...index.warnings)
       if (index?.untrusted) {
         warnings.push(`${index.untrusted.files} index file path(s) and ${index.untrusted.edges} edge(s) were invalid or outside the project and were ignored.`)
+      }
+      // 解析规则升级后旧索引的符号/导入缓存会在下次重建时全部失效；
+      // 提前告警，避免用户以为新语言支持未生效
+      if (typeof rawIndex?.parserVersion === 'number' && rawIndex.parserVersion !== INDEX_PARSER_VERSION) {
+        warnings.push(`Index was built with parser v${rawIndex.parserVersion}; the running parser is v${INDEX_PARSER_VERSION}, so the next rebuild re-parses every file.`)
       }
 
       // 卡片：陈旧 = digest 与索引不一致；孤儿 = 源文件已不在索引
@@ -1033,6 +1039,7 @@ export function repowikiStatusTool(ctx) {
         index: {
           exists: rawIndex !== null,
           ...(typeof rawIndex?.schemaVersion === 'number' ? { schemaVersion: rawIndex.schemaVersion } : {}),
+          ...(typeof rawIndex?.parserVersion === 'number' ? { parserVersion: rawIndex.parserVersion } : {}),
           compatible: index !== null,
           files: index?.stats?.files ?? 0,
           symbols: index?.stats?.symbols ?? 0,
