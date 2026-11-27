@@ -767,6 +767,9 @@ test('Groovy：import 与 static import', () => {
   const code = [
     'import com.example.Pipeline',
     'import static com.example.Utils.trim',
+    'import static com.example.Utils.*',
+    'import com.example.*',
+    'import com.example.Other as O',
     '// import hidden.Nope',
     'def s = "import fake.Nope"',
   ].join('\n')
@@ -774,7 +777,15 @@ test('Groovy：import 与 static import', () => {
   assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
     ['com.example.Pipeline', 1],
     ['com.example.Utils', 2],
+    ['com.example.Utils', 3],
+    ['com.example', 4],
+    ['com.example.Other', 5],
   ])
+  assert.deepEqual(imports[0].imported, ['Pipeline'])
+  assert.deepEqual(imports[1].imported, ['trim'], 'static 成员导入记成员名')
+  assert.deepEqual(imports[2].imported, ['*'], '静态通配按潜在通配引用')
+  assert.deepEqual(imports[3].imported, [], '包级通配不声称具体类型')
+  assert.deepEqual(imports[4].aliases, [{ from: 'Other', to: 'O' }], 'as 别名进入 aliases')
 })
 
 test('PowerShell：using module / Import-Module / dot-source 路径', () => {

@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.268.0] - 2026-11-28
+
+- **Groovy 导入语义修复**：`import static a.b.C.*` 与 `import a.b.*`
+  此前会被 `*` 截断成错误的包名/类名；现在静态通配按 `*` 潜在引用，
+  普通包通配保持包级边不臆造类型，`import a.b.C as D` 记录原名与本地
+  绑定。解析器 v24 重新解析缓存导入。
+- **测试**：817 例通过（LANG=en）；更新静态/普通通配与 `as` 别名的
+  提取断言。
+
 ## [0.267.0] - 2026-11-28
 
 - **PHP 分组 function/const 导入修复**：`use App\{function format, const

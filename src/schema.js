@@ -68,8 +68,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v20：JS `export * as ns` 不再记通配符（只导出命名空间对象）。
  *  v21：Rust `use a::b::{self}` 路径去掉 `::self`，导入名取模块名。
  *  v22：Java `import static` 归到成员名/`*`，specifier 指向类文件。
- *  v23：PHP 分组 use 内的 function/const 修饰词剥离后登记。 */
-export const INDEX_PARSER_VERSION = 23
+ *  v23：PHP 分组 use 内的 function/const 修饰词剥离后登记。
+ *  v24：Groovy 静态/普通通配与 `as` 别名（不再把 `*` 截断成包名）。 */
+export const INDEX_PARSER_VERSION = 24
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

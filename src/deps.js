@@ -1331,20 +1331,52 @@ function extractHclImports(lines) {
 function extractGroovyImports(lines) {
   const result = []
   const masked = groovyScan(lines)
-  const push = (specifier, line, imported) => {
+  /**
+   * 登记一条导入。
+   * @param {string} specifier - 点分路径。
+   * @param {number} line - 行号。
+   * @param {string[]} imported - 导入符号（通配为 `*`，包级通配为空）。
+   * @param {Array<{from:string, to:string}>} [aliases] - `as` 别名。
+   * @returns {void}
+   */
+  const push = (specifier, line, imported, aliases = []) => {
     if (!specifier) return
-    result.push({ specifier, line, kind: 'import', relative: false, imported })
+    result.push({
+      specifier,
+      line,
+      kind: 'import',
+      relative: false,
+      imported,
+      ...(aliases.length > 0 ? { aliases } : {}),
+    })
   }
   for (let i = 0; i < masked.length; i++) {
     const code = masked[i].trim()
+    // import static X.Y.*：类的全部静态成员进入作用域 → 潜在通配引用
+    const staticStar = /^import\s+static\s+([\w$]+(?:\.[\w$]+)*)\.\*\s*;?$/.exec(code)
+    if (staticStar) {
+      push(staticStar[1], i + 1, ['*'])
+      continue
+    }
     const staticImport = /^import\s+static\s+([\w$]+(?:\.[\w$]+)+)/.exec(code)
     if (staticImport) {
       const parts = staticImport[1].split('.')
       push(parts.slice(0, -1).join('.'), i + 1, [parts[parts.length - 1]])
       continue
     }
-    const m = /^import\s+([\w$]+(?:\.[\w$]+)+)(?:\s+as\s+\w+)?/.exec(code)
-    if (m) push(m[1], i + 1, [m[1].split('.').pop()])
+    // import a.b.*：包级通配不声称具体类型（保持文件级证据）
+    const starImport = /^import\s+([\w$]+(?:\.[\w$]+)*)\.\*\s*;?$/.exec(code)
+    if (starImport) {
+      push(starImport[1], i + 1, [])
+      continue
+    }
+    const m = /^import\s+(?<path>[\w$]+(?:\.[\w$]+)+)\s*(?:as\s+(?<alias>\w+))?/.exec(code)
+    if (!m) continue
+    const path = m.groups.path
+    const original = path.split('.').pop()
+    const alias = m.groups.alias
+    const aliases = alias && original && alias !== original ? [{ from: original, to: alias }] : []
+    push(path, i + 1, original ? [original] : [], aliases)
   }
   return result
 }

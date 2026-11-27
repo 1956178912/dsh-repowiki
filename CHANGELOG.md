@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.268.0] - 2026-11-28
+
+### Fixed
+
+- **Groovy import semantics**: `import static a.b.C.*` and `import a.b.*`
+  were truncated into bogus specs because `*` stopped the identifier match.
+  Static wildcards now record `*` potential references, plain package
+  wildcards keep a package-level edge without invented types, and
+  `import a.b.C as D` records the original name plus local binding.
+  Parser v24 re-parses cached imports.
+
+### Tests
+
+- 817 cases pass (LANG=en); updated extraction assertions for static/plain
+  wildcards and `as` aliases.
+
 ## [0.267.0] - 2026-11-28
 
 ### Fixed
