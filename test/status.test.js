@@ -42,6 +42,24 @@ test('repowiki-status：空目录降级（不抛错、index missing）', async (
   assert.match(rendered[0].text, /Fan-in hubs: \(none\)/)
 })
 
+test('repowiki-status：索引中的越界路径被忽略并进入告警', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-unsafe-'))
+  nodefs.mkdirSync(path.join(dir, '.dsh-repowiki'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, '.dsh-repowiki', 'index.json'), JSON.stringify({
+    schemaVersion: 6,
+    files: [
+      { path: '../../etc/passwd', lang: 'text', symbols: [] },
+      { path: 'a.ts', lang: 'typescript', symbols: [], lines: 1 },
+    ],
+    edges: [{ from: 'a.ts', to: '../../etc/passwd', kind: 'import', line: 1, symbols: [] }],
+    stats: { files: 2, symbols: 0, edges: 1 },
+  }))
+  const out = await repowikiStatusTool(makeCtx(dir)).execute({ locale: 'zh' }, fakeExec)
+  assert.ok(out.warnings.some(w => /outside the project/.test(w)), '越界路径应产生告警')
+  const rendered = repowikiStatusTool(makeCtx(dir)).output.render({}, out)
+  assert.match(rendered[0].text, /outside the project/)
+})
+
 test('repowiki-status：完整资产统计（陈旧/孤儿/Wiki 清单/记忆/Git）', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function main() {}\n')

@@ -6,7 +6,9 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cwdOf, toAbsPath, encodeFrontmatter, parseFrontmatter, countSourceLines } from '../src/util.js'
+import {
+  cwdOf, toAbsPath, encodeFrontmatter, parseFrontmatter, countSourceLines, projectRelativePath,
+} from '../src/util.js'
 
 test('cwdOf：ctx.workingDirectory.get() 可用时返回其值', () => {
   const ctx = { workingDirectory: { get: () => '/some/session/cwd' } }
@@ -59,6 +61,23 @@ test('parseFrontmatter：无 frontmatter / 非 JSON / 标量 meta 返回 null', 
   assert.equal(parseFrontmatter('---\nnot json\n---\nbody'), null)
   assert.equal(parseFrontmatter('---\n"scalar"\n---\nbody'), null)
   assert.equal(parseFrontmatter('---\nnull\n---\nbody'), null)
+})
+
+test('projectRelativePath：越界/绝对路径拒绝，合法路径归一', () => {
+  assert.equal(projectRelativePath('src/a.ts'), 'src/a.ts')
+  assert.equal(projectRelativePath('./src//a.ts'), 'src/a.ts')
+  assert.equal(projectRelativePath('src\\win\\a.ts'), 'src/win/a.ts')
+  assert.equal(projectRelativePath('  src/a.ts  '), 'src/a.ts')
+  assert.equal(projectRelativePath('../outside.ts'), null)
+  assert.equal(projectRelativePath('src/../../outside.ts'), null)
+  assert.equal(projectRelativePath('/etc/passwd'), null)
+  assert.equal(projectRelativePath('C:\\Windows\\win.ini'), null)
+  assert.equal(projectRelativePath('..'), null)
+  assert.equal(projectRelativePath('.'), null)
+  assert.equal(projectRelativePath(''), null)
+  assert.equal(projectRelativePath('   '), null)
+  assert.equal(projectRelativePath(null), null)
+  assert.equal(projectRelativePath(42), null)
 })
 
 test('countSourceLines：空文本/换行结尾/无结尾换行', () => {

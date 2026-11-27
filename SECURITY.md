@@ -24,6 +24,7 @@
 
 - `wikiSlug` / `wikiSlugPath` 逐段白名单净化，所有 Wiki 写入强制落在 `wiki/<locale>/`。
 - `sanitizeSources` 仅允许卡片/索引白名单内的相对路径与 `#Lx-Ly` 行号。
+- 索引路径按不可信输入处理：`readIndex` 丢弃绝对/越界 `files[].path` 及其关联边，并以 `untrusted` 计数在 `repowiki-status` 告警；快照导入共用`projectRelativePath` 规则。
 - 面板渲染链接协议白名单：仅 `#`、`http(s)`、`mailto`；危险链接降级为文本。
 - 写入回读校验（`writeTextVerified`）：截断/后端异常立即报错，不静默成功。
 - 写工具按资产根串行化（进程内 FIFO），避免读-改-写交错。

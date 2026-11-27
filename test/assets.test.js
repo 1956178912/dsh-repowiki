@@ -64,6 +64,43 @@ test('writeIndex/readIndex：往返一致且版本校验生效', async () => {
   assert.equal(await readIndex(fs2, dir2), null)
 })
 
+test('readIndex：越界/绝对路径文件被丢弃，悬空边清理并计数', async () => {
+  const dir = makeProject(() => {})
+  const fs = makeFakeFs(dir)
+  await writeIndex(fs, dir, {
+    schemaVersion: INDEX_SCHEMA_VERSION,
+    files: [
+      { path: 'src/safe.ts', lang: 'typescript', symbols: [] },
+      { path: '../outside.ts', lang: 'typescript', symbols: [] },
+      { path: '/etc/passwd', lang: 'text', symbols: [] },
+      { path: './src//nested.ts', lang: 'typescript', symbols: [] },
+    ],
+    edges: [
+      { from: 'src/safe.ts', to: 'src/nested.ts', kind: 'import', line: 1, symbols: [] },
+      { from: 'src/safe.ts', to: '/etc/passwd', kind: 'import', line: 2, symbols: [] },
+    ],
+    stats: { files: 4, symbols: 0, edges: 2 },
+  })
+  const doc = await readIndex(fs, dir)
+  assert.deepEqual(doc.files.map(f => f.path), ['src/safe.ts', 'src/nested.ts'], '只保留仓库内相对路径并归一')
+  assert.deepEqual(doc.edges.map(e => [e.from, e.to]), [['src/safe.ts', 'src/nested.ts']], '指向被丢弃文件的边一并清理')
+  assert.equal(doc.untrusted.files, 2)
+  assert.equal(doc.untrusted.edges, 1)
+  assert.deepEqual(doc.untrusted.paths, ['../outside.ts', '/etc/passwd'])
+})
+
+test('readIndex：正常索引不产生 untrusted 字段', async () => {
+  const dir = makeProject(() => {})
+  const fs = makeFakeFs(dir)
+  await writeIndex(fs, dir, {
+    schemaVersion: INDEX_SCHEMA_VERSION,
+    files: [{ path: 'src/a.ts', lang: 'typescript', symbols: [] }],
+    edges: [],
+  })
+  const doc = await readIndex(fs, dir)
+  assert.equal(doc.untrusted, undefined)
+})
+
 test('searchIndex：query/kind/path 过滤与 limit 截断', () => {
   const index = {
     files: [

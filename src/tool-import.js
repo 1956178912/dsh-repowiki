@@ -7,12 +7,11 @@
  * 纯文件操作：无 LLM、无模型调用。
  */
 
-import * as path from 'node:path'
 import { resolveAssetRoot, readIndex } from './assets.js'
 import {
   copyTree, dirHasContent, readSnapshotManifest, verifySnapshot, SNAPSHOT_MANIFEST,
 } from './transfer.js'
-import { cwdOf, toAbsPath } from './util.js'
+import { cwdOf, toAbsPath, projectRelativePath } from './util.js'
 import { withLock } from './lock.js'
 
 /** 工具描述。 */
@@ -37,11 +36,7 @@ const DESCRIPTION = [
  * @returns {string} 可用的相对路径；不可用时为空串。
  */
 function normalizeManifestPath(value) {
-  if (typeof value !== 'string' || !value.trim()) return ''
-  const rel = path.posix.normalize(value.trim().replace(/\\/g, '/'))
-  if (!rel || rel === '.' || rel.startsWith('../') || rel.startsWith('/')) return ''
-  if (/^[A-Za-z]:/.test(rel)) return ''
-  return rel.replace(/^\.\//, '')
+  return projectRelativePath(value) ?? ''
 }
 
 /**

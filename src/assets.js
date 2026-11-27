@@ -16,7 +16,7 @@ import {
   ASSET_DIR, INDEX_REL_PATH, INDEX_SCHEMA_VERSION, INDEX_COMPATIBLE_VERSIONS, DEFAULT_RESULT_LIMIT,
 } from './schema.js'
 import { moduleOf, buildModules } from './modules.js'
-import { writeTextVerified } from './util.js'
+import { writeTextVerified, projectRelativePath } from './util.js'
 
 /**
  * 定位结果。
@@ -75,9 +75,13 @@ export async function resolveAssetRoot(fs, startDir) {
 }
 
 /**
- * 读取索引并做版本校验。
+ * 读取索引并做版本校验与路径净化。
  * v2/v3 索引在内存中补齐 module/modules（模块树）与语言分布，下一次
  * repowiki-index 写 v4；未知版本返回 null（调用方降级提示重建）。
+ *
+ * 索引随 Git 传播，`files[].path` 与 `edges[]` 属于不可信输入：越界/
+ * 绝对路径的文件被丢弃，指向被丢弃文件的边一并丢弃，并在 `untrusted`
+ * 中记录计数（files/edges）与前 5 条原始路径，避免读取仓库外文件。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} root - 资产根目录绝对路径（.dsh-repowiki 的父目录）。
  * @returns {Promise<object|null>} 索引文档；不存在/版本不兼容返回 null。
@@ -91,8 +95,31 @@ export async function readIndex(fs, root) {
     if (typeof doc?.schemaVersion !== 'number' || !INDEX_COMPATIBLE_VERSIONS.has(doc.schemaVersion)) {
       return null
     }
+    const rawFiles = Array.isArray(doc.files) ? doc.files : []
+    const files = []
+    const unsafePaths = []
+    for (const file of rawFiles) {
+      if (!file || typeof file !== 'object') continue
+      const safe = projectRelativePath(file.path)
+      if (!safe) {
+        if (unsafePaths.length < 5) unsafePaths.push(typeof file.path === 'string' ? file.path : '')
+        continue
+      }
+      file.path = safe
+      files.push(file)
+    }
+    const rawEdges = Array.isArray(doc.edges) ? doc.edges : []
+    const knownPaths = new Set(files.map(file => file.path))
+    const edges = rawEdges.filter(edge => edge && typeof edge === 'object'
+      && knownPaths.has(edge.from) && knownPaths.has(edge.to))
+    doc.files = files
+    doc.edges = edges
+    const droppedFiles = rawFiles.length - files.length
+    const droppedEdges = rawEdges.length - edges.length
+    if (droppedFiles > 0 || droppedEdges > 0) {
+      doc.untrusted = { files: droppedFiles, edges: droppedEdges, paths: unsafePaths }
+    }
     // 旧版本 → v4 的内存兼容层：只补派生字段，不改变磁盘内容
-    const files = Array.isArray(doc.files) ? doc.files : []
     if (doc.schemaVersion !== INDEX_SCHEMA_VERSION) {
       for (const file of files) {
         if (typeof file.module !== 'string' || !file.module) file.module = moduleOf(file.path)

@@ -718,6 +718,9 @@ export function repowikiStatusTool(ctx) {
         warnings.push(`index.json schemaVersion ${rawIndex.schemaVersion ?? 'unknown'} is not compatible; run repowiki-index to rebuild.`)
       }
       if (index?.warnings) warnings.push(...index.warnings)
+      if (index?.untrusted) {
+        warnings.push(`${index.untrusted.files} index file path(s) and ${index.untrusted.edges} edge(s) were invalid or outside the project and were ignored.`)
+      }
 
       // 卡片：陈旧 = digest 与索引不一致；孤儿 = 源文件已不在索引
       const cardsMap = await readExistingCards(fs, root, locale)

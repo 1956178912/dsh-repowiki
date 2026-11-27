@@ -5,6 +5,28 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.170.0] - 2026-11-28
+
+### Security
+
+- **Index paths are treated as untrusted input**: `.dsh-repowiki/index.json`
+  travels with Git, so a crafted commit could previously make
+  `repowiki-context`, `repowiki-extract` or `repowiki-impact` read files
+  outside the project (for example `../` or absolute paths) and feed them to
+  the model. `readIndex` now normalizes every `files[].path`, drops entries
+  that are absolute, empty or escape the project root, and drops edges that
+  point at dropped files. Dropped counts and the first five offending paths
+  are exposed as `untrusted`, which `repowiki-status` reports as a warning.
+  Legitimate indexes are unaffected (no extra field), and `projectRelativePath`
+  is shared with snapshot import so both entry points follow one rule.
+
+### Tests
+
+- 544 cases pass (LANG=en and LANG=zh); new coverage asserts the path helper
+  (traversal, absolute, Windows drive, whitespace, non-strings), index
+  sanitization (kept/normalized files, dangling-edge removal, `untrusted`
+  counts and paths) and the status warning rendered in text.
+
 ## [0.169.0] - 2026-11-28
 
 ### Added

@@ -23,6 +23,22 @@ export function digestText(text, chars = DIGEST_CHARS) {
 }
 
 /**
+ * 校验资产中记录的仓库相对路径：统一正斜杠、归一 `.`/`..` 段，并拒绝
+ * 绝对路径、盘符与向上越界。资产（index.json / 清单）随 Git 传播，
+ * 其中的路径必须视为不可信输入，读取文件前一律经过本函数。
+ * @param {*} value - 资产字段中的路径。
+ * @returns {string|null} 归一后的 POSIX 相对路径；非法或为空返回 null。
+ */
+export function projectRelativePath(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const raw = value.trim().replace(/\\/g, '/')
+  if (raw.startsWith('/') || /^[A-Za-z]:/.test(raw)) return null
+  const normalized = path.posix.normalize(raw)
+  if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) return null
+  return normalized
+}
+
+/**
  * 计算源码行数（用于引用行号越界校验）。
  * 空文本为 0 行；以换行结尾的文件不额外计入末尾空行。
  * @param {string} text - 文件文本。

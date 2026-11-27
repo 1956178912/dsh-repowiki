@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.170.0] - 2026-11-28
+
+- **索引路径按不可信输入处理**：`.dsh-repowiki/index.json` 随 Git 传播，
+  精心构造的提交过去可让 `repowiki-context` / `repowiki-extract` /
+  `repowiki-impact` 读取项目外文件（如 `../` 或绝对路径）并送入模型。
+  现在 `readIndex` 会归一每个 `files[].path`，丢弃绝对/空/越界条目，并
+  连带丢弃指向被弃文件的边；丢弃计数与前 5 条原始路径写入 `untrusted`，
+  由 `repowiki-status` 以告警呈现。正常索引不受影响（不新增字段），
+  `projectRelativePath` 与快照导入共用同一规则。
+- **测试**：544 例在 LANG=en 与 LANG=zh 下全通过；新增用例覆盖路径助手
+  （上跳/绝对/盘符/空白/非字符串）、索引净化（保留并归一、悬空边清理、
+  `untrusted` 计数与路径）与文本告警渲染。
+
 ## [0.169.0] - 2026-11-28
 
 - **PHP PSR-4 自动加载解析**：根与嵌套 `composer.json` 的 `autoload` /
