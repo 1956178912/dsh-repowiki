@@ -5,6 +5,26 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.252.0] - 2026-11-28
+
+### Added
+
+- **Python package barrels**: named `from .core import parse` and star
+  `from .core import *` imports in `pkg/__init__.py` now act as re-exports,
+  so `from pkg import parse` resolves to `pkg/core.py` in references,
+  lexical usages and symbol impact. Python module-level symbols are treated
+  as importable despite the language's `exported: false` convention, and
+  methods are excluded.
+- **Python star imports preserved**: `from x import *` now records `*`
+  instead of being dropped, powering both potential references and barrel
+  resolution; `__all__` filtering is not guessed (lexical scans confirm
+  actual uses). Parser v10 re-parses cached imports.
+
+### Tests
+
+- 789 cases pass (LANG=en); new coverage for Python star extraction,
+  package-barrel references/usages and a real-index cards integration.
+
 ## [0.251.0] - 2026-11-28
 
 ### Added

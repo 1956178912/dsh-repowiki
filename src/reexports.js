@@ -1,12 +1,16 @@
 // @ts-check
 /**
- * ES 模块再导出链解析（纯函数）。
+ * 再导出链解析（纯函数）。
  *
- * 只处理能由索引边证明的形态：`export * from './x'` 与同名
- * `export { x } from './x'`。别名再导出在 deps 中记录的是原名，无法
- * 从边数据恢复导出名，因此不猜测（保守漏报）；barrel 自身导出的同名
- * 符号会遮蔽星号来源；多个来源同时导出同名符号按 ES 的歧义星号语义
- * 视为不可导入，返回空。
+ * 支持两类能由索引边证明的形态：
+ * - ES 模块：`export * from './x'` 与同名 `export { x } from './x'`；
+ * - Python 包 barrel：`from .core import parse` 会把 `parse` 绑定进当前
+ *   模块的命名空间，因此 `from pkg import parse` 可沿 `__init__.py` 归到
+ *   `core.py`。
+ *
+ * 别名再导出在 deps 中记录的是原名，无法从边数据恢复导出名，因此不猜测
+ * （保守漏报）；barrel 自身导出的同名符号会遮蔽星号来源；多个来源同时
+ * 导出同名符号按歧义处理，返回空。
  */
 
 /** 再导出链的最大跳数（防止异常图把查询拖成长链）。 */
@@ -18,20 +22,25 @@ export const MAX_BARREL_DEPTH = 4
  */
 
 /**
- * 从索引文件条目建立"导出符号"集合：`exported === false` 的符号不算，
+ * 从索引文件条目建立"可被再导出解析"的符号集合：
+ * - 一般语言要求 `exported !== false`；
+ * - Python 没有 export 关键字（提取器统一记 `exported: false`），模块级
+ *   函数/类均可被具名导入，因此按“非 method”纳入；
  * 缺符号信息的文件不登记（保守，不猜测）。
- * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} files - 索引文件。
- * @returns {Map<string, Set<string>>} 文件 → 导出符号名。
+ * @param {Array<{path?:string, lang?:string, symbols?:Array<{name?:string, kind?:string, exported?:boolean}>}>} files
+ *   索引文件。
+ * @returns {Map<string, Set<string>>} 文件 → 可再导出符号名。
  */
 export function exportedNamesByFile(files = []) {
   /** @type {Map<string, Set<string>>} */
   const definitions = new Map()
   for (const file of files) {
     if (!file || typeof file.path !== 'string' || !Array.isArray(file.symbols)) continue
+    const python = file.lang === 'python'
     const names = new Set()
     for (const symbol of file.symbols) {
       if (!symbol || typeof symbol.name !== 'string' || symbol.name === '') continue
-      if (symbol.exported === false) continue
+      if (python ? symbol.kind === 'method' : symbol.exported === false) continue
       names.add(symbol.name)
     }
     if (names.size > 0) definitions.set(file.path, names)
@@ -40,19 +49,32 @@ export function exportedNamesByFile(files = []) {
 }
 
 /**
- * 汇总 JS/TS 再导出边：`export * from` 与同名 `export { x } from`。
+ * 汇总再导出边：
+ * - JS/TS：`export * from` 与同名 `export { x } from`；
+ * - Python：具名 `from .x import y`（y 进入当前模块命名空间，等价于
+ *   同名再导出）。
  * @param {ReexportEdge[]} edges - 索引边。
+ * @param {Array<{path?:string, lang?:string}>} [files] - 索引文件（用于
+ *   识别 Python barrel；缺省时只处理 JS `export-from`）。
  * @returns {{stars:Map<string, string[]>, named:Map<string, Map<string, Set<string>>>}}
  *   barrel → 星号目标列表；barrel → 符号名 → 具名再导出目标。
  */
-export function buildReexportMaps(edges = []) {
+export function buildReexportMaps(edges = [], files = []) {
   /** @type {Map<string, string[]>} */
   const stars = new Map()
   /** @type {Map<string, Map<string, Set<string>>>} */
   const named = new Map()
+  const pythonFiles = new Set(
+    files
+      .filter(file => file && file.path && file.lang === 'python')
+      .map(file => file.path),
+  )
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
-    if (edge.from === edge.to || edge.kind !== 'export-from') continue
+    if (edge.from === edge.to) continue
+    const esReexport = edge.kind === 'export-from'
+    const pythonBarrel = !esReexport && pythonFiles.has(edge.from)
+    if (!esReexport && !pythonBarrel) continue
     const names = (Array.isArray(edge.symbols) ? edge.symbols : [])
       .filter(name => typeof name === 'string' && name.length > 0)
     if (names.length === 0) continue
@@ -69,6 +91,7 @@ export function buildReexportMaps(edges = []) {
       named.set(edge.from, byName)
     }
     for (const name of names) {
+      if (name === '*') continue
       let targets = byName.get(name)
       if (!targets) {
         targets = new Set()
@@ -165,7 +188,7 @@ export function barrelFiles(maps) {
  * @returns {Array<{path:string, line?:number}>} 导入方位置（按路径、行号排序）。
  */
 export function reexportImportSites(edges, files, targetPath, name, options = {}) {
-  const maps = buildReexportMaps(edges)
+  const maps = buildReexportMaps(edges, files)
   const definitions = exportedNamesByFile(files)
   /** @type {Array<{path:string, line?:number}>} */
   const sites = []

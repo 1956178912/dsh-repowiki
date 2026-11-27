@@ -84,7 +84,7 @@ export function buildReferenceIndex(edges = [], files = []) {
   // barrel 再导出链：把 `import { x } from './barrel'` 的引用归到真实定义文件
   if (files.length > 0) {
     const definitions = exportedNamesByFile(files)
-    const maps = buildReexportMaps(edges)
+    const maps = buildReexportMaps(edges, files)
     const barrels = new Set(barrelFiles(maps))
     if (barrels.size > 0) {
       /** @type {Map<string, IndexEdge[]>} */

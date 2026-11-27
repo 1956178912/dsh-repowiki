@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.252.0] - 2026-11-28
+
+- **Python 包 barrel**：`pkg/__init__.py` 的具名 `from .core import parse`
+  与星号 `from .core import *` 现在作为再导出，`from pkg import parse` 在
+  引用、词法使用点与符号影响面中解析到 `pkg/core.py`；Python 模块级符号
+  按可导入处理（不受 `exported: false` 约定影响），方法排除在外。
+- **保留 Python 星号导入**：`from x import *` 记录 `*` 而不再丢弃，同时
+  支撑潜在引用与 barrel 解析；`__all__` 过滤不做猜测（词法扫描确认实际
+  使用）。解析器 v10 重新解析缓存导入。
+- **测试**：789 例通过（LANG=en）；新增 Python 星号提取、包 barrel
+  引用/使用点与真实索引 cards 集成覆盖。
+
 ## [0.251.0] - 2026-11-28
 
 - **barrel 感知的符号影响面**：`repowiki-impact` 符号作用域把经

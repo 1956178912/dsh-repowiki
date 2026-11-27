@@ -172,7 +172,7 @@ function extractPythonImports(lines) {
       const mod = fm.groups.mod
       const imported = fm.groups.names
         .split(',')
-        .map(s => s.trim().replace(/\s+as\s+\w+$/, '').replace(/^\*/, ''))
+        .map(s => s.trim().replace(/\s+as\s+\w+$/, '').replace(/\s+#.*$/, ''))
         .filter(s => s && !s.startsWith('#'))
       result.push({
         specifier: mod,

@@ -141,6 +141,47 @@ test('buildReferenceIndex：barrel 本地导出遮蔽星号、歧义来源不下
   assert.equal(ambiguous.get('src/b.ts').get('foo'), undefined)
 })
 
+test('buildReferenceIndex：Python 包 __init__ 具名导入作为 barrel', () => {
+  const edges = [
+    { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['parse'] },
+    { from: 'pkg/app.py', to: 'pkg/__init__.py', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'pkg/__init__.py', lang: 'python', symbols: [] },
+    { path: 'pkg/core.py', lang: 'python', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'pkg/app.py', lang: 'python', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('pkg/core.py').get('parse'), [
+    { path: 'pkg/__init__.py', line: 1 },
+    { path: 'pkg/app.py', line: 1 },
+  ], 'from pkg import parse 归到 core.py，__init__ 自身仍是直接引用')
+
+  const withoutLang = buildReferenceIndex(edges, files.map(({ path, symbols }) => ({ path, symbols })))
+  assert.deepEqual(withoutLang.get('pkg/core.py').get('parse'), [
+    { path: 'pkg/__init__.py', line: 1 },
+  ], '缺少语言信息时不猜测 Python barrel')
+})
+
+test('buildReferenceIndex：Python `from x import *` 作为星号再导出', () => {
+  const edges = [
+    { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },
+    { from: 'pkg/app.py', to: 'pkg/__init__.py', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'pkg/__init__.py', lang: 'python', symbols: [] },
+    { path: 'pkg/core.py', lang: 'python', symbols: [{ name: 'parse', kind: 'function', exported: false }] },
+    { path: 'pkg/app.py', lang: 'python', symbols: [] },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('pkg/core.py').get('parse'), [
+    { path: 'pkg/app.py', line: 1 },
+  ], '星号再导出把 app 归到 core.py 的具体符号')
+  assert.deepEqual(refs.get('pkg/core.py').get('*'), [
+    { path: 'pkg/__init__.py', line: 1 },
+  ], '__init__ 自身的星号导入仍是潜在引用')
+})
+
 test('buildReferenceIndex：通配导入沿 barrel 链记为下游潜在引用', () => {
   const edges = [
     { from: 'src/barrel.ts', to: 'src/core.ts', kind: 'export-from', line: 1, symbols: ['*'] },

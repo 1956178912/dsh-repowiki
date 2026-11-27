@@ -186,6 +186,25 @@ test('usages：多级 barrel 与具名再导出链', () => {
   ], '中间 barrel 的再导出边不作为使用点，最终导入方沿链补齐')
 })
 
+test('usages：usageImporters 识别 Python 包 __init__ barrel', () => {
+  const edges = [
+    { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['parse'] },
+    { from: 'pkg/app.py', to: 'pkg/__init__.py', kind: 'import', line: 1, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'pkg/__init__.py', lang: 'python', symbols: [] },
+    { path: 'pkg/core.py', lang: 'python', symbols: [{ name: 'parse', exported: true }] },
+    { path: 'pkg/app.py', lang: 'python', symbols: [] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'pkg/core.py', name: 'parse' }, files), [
+    { path: 'pkg/__init__.py', importLines: [1] },
+    { path: 'pkg/app.py', importLines: [1] },
+  ])
+  assert.deepEqual(usageImporters(edges, { path: 'pkg/core.py', name: 'parse' }, []), [
+    { path: 'pkg/__init__.py', importLines: [1] },
+  ])
+})
+
 test('usages：selectUsageFiles 去重排序并按上限截断', () => {
   const selected = selectUsageFiles([{ path: 'b.ts' }, { path: 'a.ts' }, { path: 'b.ts' }], 1)
   assert.deepEqual(selected, { scanned: ['a.ts'], skipped: 1 })

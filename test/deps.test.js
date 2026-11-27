@@ -92,6 +92,16 @@ test('Python：import / from-import / 相对 import', () => {
   assert.deepEqual(bySpec.get('..pkg').imported, ['mod'], '具名符号')
 })
 
+test('Python：from x import * 保留通配符，别名仍归一为原名', () => {
+  const refs = extractImports([
+    'from .core import *',
+    'from .util import a as b, c  # 行尾注释',
+  ].join('\n'), 'python')
+  const bySpec = new Map(refs.map(r => [r.specifier, r]))
+  assert.deepEqual(bySpec.get('.core').imported, ['*'], '星号导入不再被丢弃')
+  assert.deepEqual(bySpec.get('.util').imported, ['a', 'c'], '行尾注释不进入符号名')
+})
+
 test('Go：单条 import、分组 import、别名与点导入', () => {
   const code = [
     'package main',

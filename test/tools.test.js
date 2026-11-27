@@ -840,6 +840,28 @@ test('repowiki-cards execute：引用与使用点穿过 barrel 再导出链', as
   assert.equal(out.symbolUsages[0].filesScanned, 3)
 })
 
+test('repowiki-cards execute：Python 包 __init__ barrel 的引用与使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-py-barrel-'))
+  nodefs.mkdirSync(path.join(dir, 'pkg'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'pkg/__init__.py'), 'from .core import parse\n')
+  nodefs.writeFileSync(path.join(dir, 'pkg/core.py'), 'def parse():\n    return 1\n')
+  nodefs.writeFileSync(path.join(dir, 'pkg/app.py'), 'from pkg import parse\nvalue = parse()\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', references: true, usages: true }, fakeExec)
+  assert.deepEqual(out.references, [{
+    path: 'pkg/core.py',
+    symbol: 'parse',
+    referencedBy: [{ path: 'pkg/__init__.py', line: 1 }, { path: 'pkg/app.py', line: 1 }],
+  }], 'from pkg import parse 沿 __init__ 归到 core.py')
+  assert.deepEqual(out.symbolUsages[0].usages, [
+    { path: 'pkg/app.py', line: 2, text: 'value = parse()' },
+  ])
+  assert.equal(out.symbolUsages[0].filesScanned, 3)
+})
+
 test('repowiki-cards execute：命名空间导入作为潜在引用与使用点', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ns-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')
