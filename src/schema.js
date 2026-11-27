@@ -136,6 +136,7 @@ export const MANIFEST_FILES = {
   'DESCRIPTION': 'r',
   'NAMESPACE': 'r',
   'Project.toml': 'julia',
+  'dune-project': 'dune',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -181,6 +182,8 @@ export const EXTENSION_LANGS = {
   jl: 'julia',
   nim: 'nim',
   nims: 'nim',
+  ml: 'ocaml',
+  mli: 'ocaml',
   c: 'c',
   h: 'c',
   cc: 'cpp',

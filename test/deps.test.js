@@ -509,6 +509,28 @@ test('Nim：import/from/include、相对路径与字符串内伪引用', () => {
   ])
 })
 
+test('OCaml：open/include/模块别名与注释字符串屏蔽', () => {
+  const code = [
+    'open Base',
+    'open! Util',
+    'include Helpers',
+    'module Alias = Foo.Bar',
+    'module Local = struct end',
+    '(* open Hidden *)',
+    'let s = "open Nope"',
+    'module M = List',
+  ].join('\n')
+  const imports = extractImports(code, 'ocaml')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['Base', 1],
+    ['Util', 2],
+    ['Helpers', 3],
+    ['Foo', 4],
+    ['List', 8],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === false))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

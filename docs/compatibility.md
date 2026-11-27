@@ -48,6 +48,7 @@
 | Shell | `function foo` / `function foo()` / `foo() {`（含 `{` 写在下一行）与单行函数体；`export`/`readonly`/`declare`/`typeset` 带赋值的显式变量；普通赋值与 `local` 不登记 | `source path` / `. path` 先按脚本目录、再按项目根解析，尝试原路径与 `.sh`/`.bash`；变量/命令替换/通配符参数不建边；`#` 注释、引号（含跨行）与 heredoc 内容在配平前屏蔽 |
 | R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass`/`setRefClass`/`R6Class` 类及类内方法（method + parent）、`setGeneric` 泛型与 `setMethod` 方法（签名类为 parent）；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
 | Julia | `module`/`baremodule`、`struct`/`mutable struct`（含 `@kwdef`/模块限定宏前缀）、`abstract type`/`primitive type`、`@enum`（类型 + 非导出枚举值）、`function name(...)`（`Type.method` → method + parent）、短函数 `name(args) = expr`、`macro`、顶层 `const`；函数/结构体/宏体内部不登记；含 `module` 的文件按 `export` 标记可见性 | `include("path")` 相对引用文件解析（缺省补 `.jl`）；动态参数（`$` 插值/`joinpath`）不建边；`Project.toml` 提供包名/版本与 `[deps]`/`[extras]` 依赖计数 |
+| OCaml | 顶层 `let`/`let rec`（含 `let%ppx`、属性；运算符定义除外）、`type` 容器/别名（参数化名称取末尾标识符）、`module`/`module type`、`class`/`class type`、`exception`、`val`/`external`；缩进体内部与嵌套定义不登记；`(* … *)` 可嵌套注释与字符串屏蔽；`struct`/`sig`/`object` 范围按配对 `end` 结束 | `open`/`include`/`open!`/`module M = Foo` 经"文件名→模块名"映射解析（首字母大写，`.ml` 优先于 `.mli`，`Foo.Bar` 归到 `foo.ml`）；外部库不建边；`dune-project` 提供项目名/版本，`*.opam` 提供版本与 `depends` 依赖 |
 | Nim | `proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`、`type Name = …` 容器、`type` 单独成段时的缩进成员（`Name* = object`/`enum`/`ref object`/`tuple`/别名，逐成员独立范围与 `*` 导出）、顶层 `const`/`let`/`var`；`*` 后缀标记导出；缩进体内部与嵌套例程不登记；只识别缩进 0 的声明 | `import`/`from … import`/`include`/`export` 经引用文件目录、每个 `src/` 根与项目根解析 `<module>.nim`/`.nims`；`std/` 与外部包不建边；`*.nimble` 提供项目名（文件名）/版本/`requires` 依赖 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
@@ -115,6 +116,13 @@ R6/setClass 类内 `name = function(...)` 登记为方法（parent 为类名）�
 （多 module 文件不区分作用域）；`Project.toml` 只读根清单。Nim 为轻量
 行级解析：只识别缩进 0 的声明；`when isMainModule` 等缩进块内的定义不
 登记；`requires` 只识别单行；缩进按 Tab=4 列归一；`*` 是唯一导出证据。
+OCaml 为轻量行级解析：只识别缩进 0 的声明，`let … and …`/`type … and …`
+的续接定义不登记；`module`/`class` 的 `endLine` 按 `struct`/`sig`/`object`/
+`begin` 与 `end` 单词配平（字段名恰为 `struct` 等极端情况可能提前结束）；
+`{|…|}` 原始字符串未做屏蔽（其中若含 `*)` 可能误判注释）；`.mli` 的精确
+可见性不跨文件合并，`_` 前缀视为私有；`open`/`module` 别名之外的模块
+调用（`Foo.bar`）不建边；`dune` 构建描述文件不读取（仅 `dune-project` 与
+`*.opam`）。
 
 ## 升级检查清单
 

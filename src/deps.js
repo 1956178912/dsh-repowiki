@@ -8,7 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan, juliaScan, nimScan } from './symbols.js'
+import { shellScan, juliaScan, nimScan, ocamlScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -971,6 +971,40 @@ function stripElixirComment(line) {
 }
 
 /**
+ * 提取 OCaml 的 `open` / `include` 与模块别名（`module M = Foo`）引用。
+ * `open! Foo` 与点分子模块（`open Foo.Bar`）取首段模块名；注释/字符串内
+ * 的伪引用由 `ocamlScan` 屏蔽；`module M = struct` 不是引用。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractOcamlImports(lines) {
+  const result = []
+  const masked = ocamlScan(lines)
+  /**
+   * 登记一条模块引用。
+   * @param {string} specifier - 首段模块名（大写开头）。
+   * @param {number} line - 行号（1-based）。
+   * @returns {void}
+   */
+  const push = (specifier, line) => {
+    result.push({ specifier, line, kind: 'import', relative: false, imported: [specifier] })
+  }
+  for (let i = 0; i < masked.length; i++) {
+    const code = masked[i].trim()
+    if (code === '') continue
+    const open = /^(?:open|include)!?\s+([A-Z][\w']*)/.exec(code)
+    if (open) {
+      push(open[1], i + 1)
+      continue
+    }
+    // module M = Foo / module M = Foo.Bar（右侧首段模块名）
+    const alias = /^module\s+[A-Z][\w']*\s*=\s*([A-Z][\w']*)(?:\.(?:[A-Z][\w']*))*\s*$/.exec(code)
+    if (alias) push(alias[1], i + 1)
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1077,6 +1111,7 @@ export function extractImports(code, lang) {
   if (lang === 'r') return extractRImports(lines)
   if (lang === 'julia') return extractJuliaImports(lines)
   if (lang === 'nim') return extractNimImports(lines)
+  if (lang === 'ocaml') return extractOcamlImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

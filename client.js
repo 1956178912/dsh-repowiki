@@ -344,6 +344,7 @@ const LANGUAGE_LABELS = {
   r: 'R',
   julia: 'Julia',
   nim: 'Nim',
+  ocaml: 'OCaml',
   c: 'C',
   cpp: 'C++',
 }

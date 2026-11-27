@@ -1497,6 +1497,33 @@ test('Nim：src 源根解析、相对路径与 .nimble 技术栈', async () => {
   assert.ok(app.symbols.some(s => s.name === 'run' && s.exported))
 })
 
+test('OCaml：模块名解析、.mli 优先 .ml 与 dune/opam 技术栈', async () => {
+  const dir = makeProject({
+    'dune-project': '(lang dune 3.0)\n(name ocaml_demo)\n(version 0.1.0)\n',
+    'ocaml_demo.opam': 'depends: [ "dune" {>= "3.0"} "lwt" ]\n',
+    'lib/util.ml': 'let helper x = x + 1\n',
+    'lib/util.mli': 'val helper : int -> int\n',
+    'app/main.ml': 'open Util\nopen Core\nmodule U = Util\nlet () = print_int (U.helper 1)\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { ocaml: 3 })
+
+  const edges = doc.edges.filter(e => e.from === 'app/main.ml')
+  assert.deepEqual(edges.map(e => [e.line, e.to]), [
+    [1, 'lib/util.ml'],
+    [3, 'lib/util.ml'],
+  ], 'open 与模块别名都建边，同名实现优先 .ml，外部 Core 不建边')
+
+  assert.equal(doc.stack.projectName, 'ocaml_demo')
+  assert.equal(doc.stack.projectVersion, '0.1.0')
+  assert.equal(doc.stack.dependencyCounts.ocaml, 2)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'Dune' && t.source === 'ocaml_demo.opam'))
+
+  const main = doc.files.find(f => f.path === 'app/main.ml')
+  assert.ok(main.symbols.some(s => s.name === 'U' && s.kind === 'class'))
+  assert.ok(!main.symbols.some(s => s.name === 'print_int'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

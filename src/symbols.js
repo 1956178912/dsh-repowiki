@@ -2942,6 +2942,142 @@ function extractNim(lines) {
 }
 
 /**
+ * 扫描 OCaml 源码行：注释 `(* … *)`（可嵌套）与字符串内容（`"` 转义）
+ * 替换为空格，保留行数与列位；返回掩码后的行数组。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行。
+ */
+export function ocamlScan(lines) {
+  const out = []
+  let commentDepth = 0
+  let inString = false
+  for (const raw of lines) {
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (commentDepth > 0) {
+        if (ch === '(' && next === '*') { commentDepth++; i++; masked += '  ' }
+        else if (ch === '*' && next === ')') { commentDepth--; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (inString) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { inString = false; masked += '"' }
+        else masked += ' '
+        continue
+      }
+      if (ch === '(' && next === '*') { commentDepth = 1; i++; masked += '  ' }
+      else if (ch === '"') { inString = true; masked += '"' }
+      else masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 计算 OCaml `struct`/`sig`/`object`/`begin` 块的结束行（`end` 配平）。
+ * @param {string[]} masked - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number|null} 结束行（1-based）；未打开块或配平失败返回 null。
+ */
+function ocamlEndLine(masked, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < masked.length; i++) {
+    const words = masked[i].match(/\b(?:struct|sig|object|begin|end)\b/g)
+    if (!words) continue
+    for (const word of words) {
+      if (word === 'end') depth--
+      else { depth++; opened = true }
+    }
+    if (opened && depth <= 0) return i + 1
+  }
+  return null
+}
+
+/**
+ * 提取 OCaml 符号：顶层 `let`/`let rec`（含 `let%ppx`、属性）、`type`、
+ * `module`/`module type`、`class`/`class type`、`exception`、
+ * `val`/`external`。只识别缩进 0 的声明，函数/模块/类体内部的嵌套定义
+ * 不登记；`_` 前缀视为私有，其余均视为模块可访问（`.mli` 的精确可见性
+ * 不跨文件判定）。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractOcaml(lines) {
+  const masked = ocamlScan(lines)
+  /** @type {Array<{name:string, kind:string, index:number, opensBlock:boolean}>} */
+  const decls = []
+  for (let i = 0; i < masked.length; i++) {
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    if (rawLine !== line) continue // 只识别缩进 0 的顶层声明
+    const letMatch = /^let(?:\[@[^\]]*\])?(?:%[a-z_]\w*)?(?:\s+rec)?\s+([a-z_][\w']*)\b/.exec(line)
+    if (letMatch) {
+      const name = letMatch[1]
+      if (name === '_' || name === 'module' || name === 'open' || name === 'exception'
+        || name === 'include' || name === 'class' || name === 'external') continue
+      decls.push({ name, kind: 'function', index: i, opensBlock: false })
+      continue
+    }
+    const moduleMatch = /^module(?:\s+type)?\s+([A-Z][\w']*)\b/.exec(line)
+    if (moduleMatch) {
+      decls.push({ name: moduleMatch[1], kind: 'class', index: i, opensBlock: true })
+      continue
+    }
+    const classMatch = /^class(?:\s+type)?\s+(?:virtual\s+)?(?:\[[^\]]*\]\s*)?([a-z_][\w']*)\b/.exec(line)
+    if (classMatch) {
+      decls.push({ name: classMatch[1], kind: 'class', index: i, opensBlock: true })
+      continue
+    }
+    const exceptionMatch = /^exception\s+([A-Z][\w']*)\b/.exec(line)
+    if (exceptionMatch) {
+      decls.push({ name: exceptionMatch[1], kind: 'type', index: i, opensBlock: false })
+      continue
+    }
+    const valMatch = /^(?:val|external)\s+(?:\([^)]*\)\s*)?([a-z_][\w']*)\s*:/.exec(line)
+    if (valMatch) {
+      decls.push({ name: valMatch[1], kind: 'function', index: i, opensBlock: false })
+      continue
+    }
+    // `type [params] name =`：取 `=` 左侧最后一个标识符（跳过类型变量/参数）
+    if (line.startsWith('type ')) {
+      const eq = line.indexOf('=')
+      if (eq > 0) {
+        const head = line.slice(0, eq).replace(/\+$/, '').trim()
+        const tokens = head.split(/\s+/)
+        const name = tokens[tokens.length - 1]
+        if (/^[a-z_][\w']*$/.test(name)) {
+          decls.push({ name, kind: 'class', index: i, opensBlock: false })
+        }
+      }
+    }
+  }
+  const symbols = []
+  for (let k = 0; k < decls.length; k++) {
+    const decl = decls[k]
+    const nextIndex = decls[k + 1]?.index ?? masked.length
+    let last = nextIndex - 1
+    while (last > decl.index && masked[last].trim() === '') last--
+    let endLine = last + 1
+    const balanced = decl.opensBlock ? ocamlEndLine(masked, decl.index) : null
+    if (balanced !== null && balanced < endLine) endLine = balanced
+    symbols.push({
+      name: decl.name,
+      kind: decl.kind,
+      line: decl.index + 1,
+      endLine,
+      exported: !decl.name.startsWith('_'),
+    })
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3076,6 +3212,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'r') return extractR(lines)
   if (lang === 'julia') return extractJulia(lines)
   if (lang === 'nim') return extractNim(lines)
+  if (lang === 'ocaml') return extractOcaml(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

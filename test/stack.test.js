@@ -368,6 +368,27 @@ test('.nimble：项目名/版本与 requires 依赖', () => {
   assert.ok(info.technologies.some(t => t.name === 'Jester' && t.ecosystem === 'nim'))
 })
 
+test('dune-project 与 .opam：项目名/版本与 depends 依赖', () => {
+  const info = detectStack({
+    'dune-project': '(lang dune 3.0)\n(name ocaml-demo)\n(version 1.2.0)\n',
+    'ocaml-demo.opam': [
+      'opam-version: "2.0"',
+      'version: "1.2.0"',
+      'depends: [',
+      '  "dune" {>= "3.0"}',
+      '  "lwt"',
+      '  "yojson" {>= "2.0"}',
+      ']',
+    ].join('\n'),
+  })
+  assert.equal(info.projectName, 'ocaml-demo')
+  assert.equal(info.projectVersion, '1.2.0')
+  assert.equal(info.dependencyCounts.ocaml, 3)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Dune') && names.includes('Lwt') && names.includes('Yojson'))
+  assert.ok(info.technologies.every(t => t.ecosystem === 'opam'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

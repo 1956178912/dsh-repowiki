@@ -3,6 +3,23 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.201.0] - 2026-11-28
+
+- **OCaml 支持（第 24 种语言）**：`.ml`/`.mli` 提取顶层 `let`/`let rec`
+  （含 `let%ppx`、属性，运算符定义除外）函数、`type` 容器与别名
+  （参数化名称取末尾标识符）、`module`/`module type`、`class`/`class type`、
+  `exception` 与 `val`/`external` 签名。可嵌套 `(* … *)` 注释与字符串先
+  屏蔽，缩进体内部不登记，`struct`/`sig`/`object` 范围按配对 `end` 结束。
+  `open`/`include`/`open!`/`module M = Foo` 经"文件名→模块名"映射解析
+  （`.ml` 优先于 `.mli`，`Foo.Bar` 归到 `foo.ml`），外部库不建边。
+  `dune-project` 提供项目名/版本，`*.opam` 提供版本与 `depends` 依赖及
+  OCaml 技术映射（嵌套清单上限 20）。Prompt 围栏与面板语言筛选识别
+  `ocaml`。
+- **测试**：603 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖符号种类与
+  范围（含 `end` 配平的模块/类与 `_` 私有）、注释/字符串屏蔽、
+  `open`/`include`/别名提取、dune/opam 元数据，以及模块映射解析与
+  `.ml` 优先的索引端到端夹具。
+
 ## [0.200.0] - 2026-11-28
 
 - **Nim `type` 块成员**：`type` 单独成段（Nim 模块最常见的多类型写法）时，

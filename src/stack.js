@@ -743,6 +743,68 @@ const NIM_TECH = {
   nimble: 'Nimble',
 }
 
+/** OCaml / opam 依赖名 → 技术展示名的映射（主流框架、库与工具链）。 */
+const OCAML_TECH = {
+  dune: 'Dune',
+  lwt: 'Lwt',
+  'lwt_ppx': 'Lwt',
+  async: 'Async',
+  'core': 'Core',
+  'base': 'Base',
+  yojson: 'Yojson',
+  cohttp: 'Cohttp',
+  'cohttp-lwt-unix': 'Cohttp',
+  dream: 'Dream',
+  cmdliner: 'Cmdliner',
+  'ppx_deriving': 'ppx_deriving',
+  alcotest: 'Alcotest',
+  ounit2: 'OUnit2',
+  utop: 'utop',
+  angstrom: 'Angstrom',
+  faraday: 'Faraday',
+  mirage: 'MirageOS',
+  irmin: 'Irmin',
+  ocamlformat: 'ocamlformat',
+  'sexplib': 'Sexplib',
+  'ppx_sexp_conv': 'Sexplib',
+}
+
+/**
+ * 从 `dune-project` 读取项目名与版本：`(name foo)` / `(version 1.2.3)`。
+ * @param {string} text - dune-project 内容。
+ * @returns {{name?:string, version?:string}} 元数据。
+ */
+function duneProjectInfo(text) {
+  const name = /\(name\s+([A-Za-z0-9_.-]+)\)/.exec(text)?.[1]
+  const version = /\(version\s+([A-Za-z0-9_.+-]+)\)/.exec(text)?.[1]
+  return { ...(name ? { name } : {}), ...(version ? { version } : {}) }
+}
+
+/**
+ * 从 `*.opam` 提取包名（文件名）、`version:` 与 `depends:` 依赖列表。
+ * 依赖段直到 `]` 为止，`{ … }` 版本约束先剔除再取引号字符串。
+ * @param {string} path - 清单相对路径。
+ * @param {string} text - 清单内容。
+ * @returns {{name:string, version?:string, dependencies:string[]}} 元数据。
+ */
+function opamInfo(path, text) {
+  const base = path.slice(path.lastIndexOf('/') + 1)
+  const name = base.replace(/\.opam$/, '')
+  const version = /^\s*version\s*:\s*"([^"]+)"/m.exec(text)?.[1]
+  const dependencies = []
+  const start = text.search(/^\s*depends\s*:\s*\[/m)
+  if (start >= 0) {
+    const body = text.slice(start)
+    const close = body.indexOf(']')
+    const segment = (close >= 0 ? body.slice(0, close) : body).replace(/\{[^}]*\}/g, ' ')
+    for (const m of segment.matchAll(/"([^"]+)"/g)) {
+      const dep = m[1].trim()
+      if (dep && !dependencies.includes(dep)) dependencies.push(dep)
+    }
+  }
+  return { name, version, dependencies }
+}
+
 /**
  * 从 `.nimble` 清单读取项目名（文件名）、版本与 `requires` 依赖。
  * `requires` 行的引号字符串取首个 token 作为包名，剔除 `nim` 自身；
@@ -972,6 +1034,19 @@ export function detectStack(manifests) {
       for (const dep of nimble.dependencies) {
         const name = NIM_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'nim', source: path })
+      }
+    } else if (path === 'dune-project') {
+      const dune = duneProjectInfo(text)
+      if (!info.projectName && dune.name) info.projectName = dune.name
+      if (!info.projectVersion && dune.version) info.projectVersion = dune.version
+    } else if (path.endsWith('.opam')) {
+      const opam = opamInfo(path, text)
+      info.dependencyCounts.ocaml = (info.dependencyCounts.ocaml ?? 0) + opam.dependencies.length
+      if (!info.projectName && opam.name) info.projectName = opam.name
+      if (!info.projectVersion && opam.version) info.projectVersion = opam.version
+      for (const dep of opam.dependencies) {
+        const name = OCAML_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'opam', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)

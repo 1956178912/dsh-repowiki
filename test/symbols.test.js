@@ -1355,6 +1355,64 @@ test('Nim：type 块成员', () => {
   assert.equal(byName.get('run').line, 8)
 })
 
+test('OCaml：顶层 let/type/module/class/val 与注释字符串屏蔽', () => {
+  const code = [
+    '(* let hidden = 1 *)',
+    'let id x = x',
+    '',
+    'let greet name = "let fake = 1"',
+    'type color = Red | Green',
+    "type 'a tree = Leaf",
+    'module Util = struct',
+    '  let helper x = x + 1',
+    'end',
+    'exception Boom of string',
+    'val run : int -> int',
+    'external raw : int -> int = "caml_raw"',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ocaml')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('id').kind, 'function')
+  assert.equal(byName.get('id').endLine, 2)
+  assert.equal(byName.get('greet').line, 4)
+  assert.equal(byName.get('color').kind, 'class')
+  assert.equal(byName.get('tree').kind, 'class')
+  assert.ok(!byName.has('hidden'), '注释内声明不登记')
+  assert.ok(!byName.has('fake'), '字符串内声明不登记')
+  assert.ok(!byName.has('helper'), '模块体内部不登记')
+  assert.equal(byName.get('Util').kind, 'class')
+  assert.equal(byName.get('Util').endLine, 9)
+  assert.equal(byName.get('Boom').kind, 'type')
+  assert.equal(byName.get('run').kind, 'function')
+  assert.equal(byName.get('raw').kind, 'function')
+  assert.equal(byName.get('run').endLine, 11)
+})
+
+test('OCaml：let rec、let%ppx、属性、class 与私有前缀', () => {
+  const code = [
+    'let rec loop n =',
+    '  if n = 0 then 0 else loop (n - 1)',
+    '',
+    'let[@inline] fast x = x',
+    'let%lwt fetch url = return url',
+    'class counter = object',
+    '  val mutable count = 0',
+    'end',
+    'let _private = 1',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'ocaml')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('loop').kind, 'function')
+  assert.equal(byName.get('loop').endLine, 2)
+  assert.equal(byName.get('fast').kind, 'function')
+  assert.equal(byName.get('fetch').kind, 'function')
+  assert.equal(byName.get('counter').kind, 'class')
+  assert.equal(byName.get('counter').endLine, 8)
+  assert.equal(byName.get('_private').exported, false)
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

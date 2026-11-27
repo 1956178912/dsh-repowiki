@@ -110,6 +110,12 @@ const MAX_ZIG_MANIFESTS = 20
 const MAX_NIMBLE_MANIFESTS = 10
 
 /**
+ * 单次索引最多读取的 `*.opam` 清单数（OCaml 多包仓库/monorepo）。
+ * 根包清单不受此上限影响；嵌套清单只用于依赖计数与技术栈聚合。
+ */
+const MAX_OPAM_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -129,8 +135,8 @@ function isJsConfigName(name) {
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
-    || name === 'gleam.toml' || name === 'build.zig.zon'
-    || name.endsWith('.nimble')
+    || name === 'gleam.toml' || name === 'build.zig.zon' || name === 'dune-project'
+    || name.endsWith('.nimble') || name.endsWith('.opam')
 }
 
 /**
@@ -946,6 +952,44 @@ function resolveNimSpecifier(fromRel, specifier, roots, indexed) {
 function resolveElixirSpecifier(specifier, modules) {
   if (typeof specifier !== 'string' || !/^[A-Z][\w.]*$/.test(specifier)) return null
   return modules.get(specifier) ?? null
+}
+
+/**
+ * 建立 OCaml 模块名 → 文件索引：OCaml 模块名由文件名决定（首字母大写），
+ * 同名实现/接口取 `.ml` 优先，其余取字典序最小文件，保证确定性。
+ * @param {Array<{path:string, lang:string}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 模块名 → 文件相对路径。
+ */
+function buildOcamlModules(files) {
+  const modules = new Map()
+  for (const file of files) {
+    if (file.lang !== 'ocaml') continue
+    const base = path.posix.basename(file.path)
+    const stem = base.slice(0, base.lastIndexOf('.'))
+    if (!/^[A-Za-z_][\w']*$/.test(stem) || stem === '') continue
+    const name = stem[0].toUpperCase() + stem.slice(1)
+    const existing = modules.get(name)
+    if (existing === undefined
+      || (existing.endsWith('.mli') && file.path.endsWith('.ml'))
+      || (existing.endsWith('.mli') === file.path.endsWith('.mli') && file.path < existing)) {
+      modules.set(name, file.path)
+    }
+  }
+  return modules
+}
+
+/**
+ * 解析 OCaml `open`/`include`/模块别名：取点分名的首段模块名匹配文件名
+ * 索引（子模块 `Foo.Bar` 归到 `foo.ml`）；外部库返回 null。
+ * @param {string} specifier - 模块名（如 Foo 或 Foo.Bar）。
+ * @param {Map<string,string>} modules - 模块名索引。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveOcamlSpecifier(specifier, modules) {
+  if (typeof specifier !== 'string') return null
+  const head = specifier.split('.')[0]
+  if (!/^[A-Z][\w']*$/.test(head)) return null
+  return modules.get(head) ?? null
 }
 
 /**
@@ -1800,6 +1844,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
  *   elixirModules:Map<string,string>,
+ *   ocamlModules:Map<string,string>,
  *   luaRoots:string[],
  *   gleamRoots:string[],
  *   nimRoots:string[],
@@ -1841,6 +1886,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
+  if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, ctx.ocamlModules)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
@@ -1996,6 +2042,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let gleamManifestsRead = 0
   let zigManifestsRead = 0
   let nimbleManifestsRead = 0
+  let opamManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -2039,6 +2086,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nimble) {
       if (nimbleManifestsRead >= MAX_NIMBLE_MANIFESTS) continue
       nimbleManifestsRead++
+    }
+    const opam = !MANIFEST_FILES[rel] && baseName.endsWith('.opam')
+    if (opam) {
+      if (opamManifestsRead >= MAX_OPAM_MANIFESTS) continue
+      opamManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }
@@ -2091,6 +2143,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     workspacePackages: buildWorkspacePackages(manifestTexts),
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
+    ocamlModules: buildOcamlModules(files),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
     nimRoots: buildNimRoots(indexed),

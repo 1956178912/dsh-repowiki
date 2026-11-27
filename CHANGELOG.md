@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.201.0] - 2026-11-28
+
+### Added
+
+- **OCaml indexing (24th language)**: `.ml`/`.mli` files produce top-level
+  `let`/`let rec` (including `let%ppx`, attributes and operators excluded)
+  functions, `type` containers and aliases (parameterised names resolve to
+  the trailing identifier), `module`/`module type`, `class`/`class type`,
+  `exception`, and `val`/`external` signatures. Nested `(* … *)` comments
+  and strings are masked first; indented bodies stay unindexed, and
+  `struct`/`sig`/`object` ranges end at their matching `end`. `open`,
+  `include`, `open!` and `module M = Foo` resolve through a file-name
+  module map (`.ml` wins over `.mli`, `Foo.Bar` maps to `foo.ml`); external
+  libraries stay edge-free. `dune-project` supplies the project name and
+  version, while `*.opam` supplies the version and `depends` entries with
+  OCaml technology mappings (capped at 20 nested manifests). Prompt fences
+  and the panel language filter know `ocaml`.
+
+### Tests
+
+- 603 cases pass (LANG=en and LANG=zh); new coverage pins symbol kinds and
+  ranges (incl. `end`-balanced modules/classes and `_` privacy), comment/
+  string shielding, `open`/`include`/alias extraction, dune/opam metadata,
+  and an indexer fixture proving module-map resolution and `.ml` preference.
+
 ## [0.200.0] - 2026-11-28
 
 ### Added
