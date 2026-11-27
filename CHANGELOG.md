@@ -5,6 +5,37 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.232.0] - 2026-11-28
+
+### Added
+
+- **Architecture baseline ratchet (`verify:arch`)**: `scripts/verify-arch.mjs`
+  snapshots the architecture facts that already drive `repowiki-status`
+  (import cycle groups, per-pair cross-layer violations from plan layers,
+  unresolved relative imports, duplicate-block count, high-complexity
+  function count and max complexity, plus the health architecture
+  component score) into `.dsh-repowiki/arch-baseline.json` and fails only
+  on **new** regressions: unknown cycle groups, new or larger layer pairs,
+  new unresolved imports, ceilings above the baseline and a lower
+  architecture score. Fixed findings are reported as "tighten the
+  baseline" hints and `--update` rewrites the file; `--require` fails when
+  no baseline exists, `--json` emits stable problem codes (`index/*`,
+  `plan/*`, `baseline/*`) plus structured `regressions`/`improvements`, and
+  exit codes stay 0/1/2 like `verify:wiki`.
+- **Deterministic baseline files**: every list is sorted and deduplicated
+  and the baseline carries no timestamps, so re-running `--update` on
+  unchanged sources produces a byte-identical file and Git diffs only show
+  real changes. Snapshots record the analysis thresholds in effect, cap
+  long lists (200 cycle groups, 200 unresolved imports, 100 layer pairs)
+  and mark truncation so a capped baseline cannot silently hide new issues.
+
+### Tests
+
+- 720 cases pass (LANG=en and LANG=zh); new coverage for the snapshot,
+  normalization (junk entries, unsupported versions, missing ceilings),
+  every ratchet branch, plan-layer regressions, duplicate ceilings,
+  untrusted index paths and the CLI/report contract.
+
 ## [0.231.0] - 2026-11-28
 
 ### Added

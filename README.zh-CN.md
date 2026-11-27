@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、38 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度，以及 Elixir 模块/别名索引与根/umbrella `mix.exs` 技术栈与 `.exs` 测试/脚本索引、深层 Markdown 标题与清单并发读取与 Lua 模块/require 索引与 Zig 容器/成员索引及 `build.zig.zon` 元数据与结构化不可信索引计数与 Gleam 类型/导入索引与结构化 Wiki 陈旧原因与 Gleam monorepo 清单及跨行导入与 Zig monorepo 清单与 Zig 公开再导出与解析缓存版本升级与 Shell 函数/source 索引与 R 函数/类及 `DESCRIPTION` 元数据与 status 解析器版本可见性与 R `NAMESPACE` 导出证据与 R6/S4 方法符号与 Julia 模块/类型/函数及 `Project.toml` 元数据与 R S4 声明与 Julia 宏修饰 struct/枚举与 Nim 例程/类型及 `.nimble` 元数据与 Nim `type` 块成员与 OCaml 模块/类型及 dune/opam 元数据、`and` 续接定义与原始字符串屏蔽与 Haskell 模块/类型及 cabal 元数据、类方法与多行签名与 Rust workspace crate 解析与 Haskell `hs-source-dirs` 与嵌套 `pubspec.yaml`/`dune-project` 读取上限与 Haskell 导出列表可见性与 Erlang 模块/函数及 rebar 元数据与语言接入完整性守卫与跨语言测试路径约定与 OCaml 同名模块近邻解析与 Solidity 合约/函数及 foundry 元数据与 Clojure 命名空间/形式及 deps.edn/project.clj 元数据与 Terraform/HCL 块及模块源/provider 元数据与索引规模/性能回归守卫与 Groovy 类/方法及点分 import 与 PowerShell 函数/类及模块/dot-source 边与 Fortran 模块/过程及大小写不敏感 `use` 解析与 Perl 包/sub 及 `lib/` 模块解析与 Object Pascal 单元/类及 `uses` 解析与 Nix 绑定及 `import`/`callPackage` 路径与 VB.NET 命名空间/类及 `Imports`/`Inherits` 解析与 Tcl proc/命名空间及 `source` 解析与 plan 声明式架构分层及跨层违规报告与有界跨文件重复代码检测、函数级复杂度估算计入分层/重复/复杂度的健康分、坏相对导入报告、plan 可配置分析阈值及 F# 命名空间/模块与 `open` 解析（v0.231.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、38 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测、页面完整性校验、生成失败页持久化、结构化问题码与空清单严格化、面板生成失败/缺页/路径非法/卡片/记忆陈旧提示、旧索引/未验证范围严格化、页面相对链接（页面与项目文件）/清单路径与重复页完整性、status 缺页/路径非法/重复页计数、缺页/失败页/非法路径健康分、门禁有界并发读取、CI 门禁自证 job 及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包、分页检索、嵌套/字符类忽略规则、带写后校验与有界并发大快照校验的指纹快照，Dart 支持与工作区 `package:` 解析、按清单限定复制范围的指纹快照、PHP PSR-4 自动加载解析、默认依赖目录排除、不可信索引路径加固与可复现索引产物与更严格的快照清单校验、有界目录预取与 GFM 表格/嵌套列表渲染与更精确的中文查询分词与依赖图感知的 Wiki 新鲜度，以及 Elixir 模块/别名索引与根/umbrella `mix.exs` 技术栈与 `.exs` 测试/脚本索引、深层 Markdown 标题与清单并发读取与 Lua 模块/require 索引与 Zig 容器/成员索引及 `build.zig.zon` 元数据与结构化不可信索引计数与 Gleam 类型/导入索引与结构化 Wiki 陈旧原因与 Gleam monorepo 清单及跨行导入与 Zig monorepo 清单与 Zig 公开再导出与解析缓存版本升级与 Shell 函数/source 索引与 R 函数/类及 `DESCRIPTION` 元数据与 status 解析器版本可见性与 R `NAMESPACE` 导出证据与 R6/S4 方法符号与 Julia 模块/类型/函数及 `Project.toml` 元数据与 R S4 声明与 Julia 宏修饰 struct/枚举与 Nim 例程/类型及 `.nimble` 元数据与 Nim `type` 块成员与 OCaml 模块/类型及 dune/opam 元数据、`and` 续接定义与原始字符串屏蔽与 Haskell 模块/类型及 cabal 元数据、类方法与多行签名与 Rust workspace crate 解析与 Haskell `hs-source-dirs` 与嵌套 `pubspec.yaml`/`dune-project` 读取上限与 Haskell 导出列表可见性与 Erlang 模块/函数及 rebar 元数据与语言接入完整性守卫与跨语言测试路径约定与 OCaml 同名模块近邻解析与 Solidity 合约/函数及 foundry 元数据与 Clojure 命名空间/形式及 deps.edn/project.clj 元数据与 Terraform/HCL 块及模块源/provider 元数据与索引规模/性能回归守卫与 Groovy 类/方法及点分 import 与 PowerShell 函数/类及模块/dot-source 边与 Fortran 模块/过程及大小写不敏感 `use` 解析与 Perl 包/sub 及 `lib/` 模块解析与 Object Pascal 单元/类及 `uses` 解析与 Nix 绑定及 `import`/`callPackage` 路径与 VB.NET 命名空间/类及 `Imports`/`Inherits` 解析与 Tcl proc/命名空间及 `source` 解析与 plan 声明式架构分层及跨层违规报告与有界跨文件重复代码检测、函数级复杂度估算计入分层/重复/复杂度的健康分、坏相对导入报告、plan 可配置分析阈值、F# 命名空间/模块与 `open` 解析，以及架构基线棘轮门禁（`verify:arch` 只拦截新增循环/层违规/坏导入/重复块/复杂度/架构分退化，基线可复现且随 Git 审阅，v0.232.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -389,6 +389,7 @@
 - **Git 溯源不启子进程**：`index.json` 的 `git.branch`/`git.commit` 来自 `.git/HEAD`、松散引用、`packed-refs` 与 worktree `commondir`；非 Git 仓库省略该字段。
 - **并发写安全**（ADR-0005）：六个写工具按解析出的资产根排队（进程内 promise 链锁）；extract/generate 的模型调用在锁外，临界区内做写前二次判定；抽取可按 `concurrency` 并行最多 4 路模型调用，并按 `attempts` 做有界重试，写盘仍逐张串行；不同仓库互不阻塞，只读检索不加锁。
 - **零依赖排序检索**：卡片/Wiki/已采信记忆的 BM25（拉丁词 + 中文单字/二元组），无 embedding、无向量库。
+- **架构质量只拦新增退化**：`verify:arch` 把循环组、跨层违规层对、坏相对导入、重复块、高复杂度函数与架构分量分冻结为可复现基线（排序去重、无时间戳）；CI 只对新增退化失败，修复后 `--update` 收紧——避免"存量问题逼停检查"。
 - **按需反向引用**：`src/references.js` 在查询期反演 `index.edges`（目标文件 → 符号 → 引用位置）；schema v6 的边携带 import 行号，结果精确到 `path:Lx`，有界且明确为 import 级语义。
 - **按需 Wiki 引用**：`src/wiki-references.js` 反演 Wiki 清单（源文件 → 页面/章节）；清单 v2 记录章节级来源，"这个文件被哪些文档引用"无需重读 Wiki 正文。
 
@@ -443,6 +444,14 @@ npm run verify:host
 # 行号范围也失败）；--require 在无资产或空清单时失败；支持
 # --root/--locale/--json（v0.156.0）
 npm run verify:wiki -- --root . --strict --require
+
+# 架构基线棘轮门禁：把当前循环组/分层违规层对/坏相对导入/重复块数/
+# 高复杂度函数数与架构分冻结为 .dsh-repowiki/arch-baseline.json，
+# 之后只对**新增**退化失败（新循环、层对新增或计数上升、新坏导入、
+# 上限抬升、架构分下降）；已修复项提示 --update 收紧基线；
+# --require 在无基线时失败；支持 --root/--json（v0.232.0）
+npm run verify:arch -- --root .
+npm run verify:arch -- --root . --update
 ```
 
 ### CI 用法
@@ -457,6 +466,25 @@ npm run verify:wiki -- --root . --strict --require
 `problems[].code`（如 `citation/missing`、`wiki/stale-cards`），便于 CI
 按码聚合或抑制。仓库工作流会用生成的 fixture 实际执行该配方，并断言干净
 资产通过、卡片变化后退出码为 1。
+
+### 架构基线门禁（ratchet）
+
+`npm run verify:arch` 读取索引与 plan 分层规则，生成与 `repowiki-status`
+同口径的架构事实，再与 `.dsh-repowiki/arch-baseline.json` 比较：
+
+- **身份型**（新签名即失败）：循环组（成员集合）、跨层违规（`from → to`
+  层对计数，新增或计数上升即失败）、坏相对导入（`path → specifier`）。
+- **上限型**（数值上升即失败）：重复块数、高复杂度函数数、最大函数复杂度。
+- **分值型**（下降即失败）：健康分里的架构分量（环、fan-in、分层、重复、
+  复杂度）。
+
+基线文件不含时间戳，所有列表排序去重：同一输入重复 `--update` 得到逐字节
+相同的文件，Git diff 只体现真实变化。首次接入或有意接受一批存量问题时跑
+`--update`；修掉问题后再次 `--update` 收紧。`--require` 让"基线缺失"直接
+失败（CI 推荐），`--json` 输出 `problems[].code`（`index/*`、`plan/*`、`baseline/*`）与结构化 `regressions`/`improvements`
+与结构化 `regressions`/`improvements`。退出码：`0` 通过、`1` 检出新增退化
+或基线不可用、`2` 参数/读取错误（缺少索引）。CI 的 `verify-arch` job 会
+先生成基线并断言通过，再制造一个循环断言退出码为 1。
 
 ### 问题码
 
@@ -500,6 +528,7 @@ npm run verify:wiki -- --root . --strict --require
 index.js               插件入口（apply + inject: fs/tools/subagents）
 scripts/verify-host-tokens.mjs  本地宿主漂移自检（令牌存活性，v0.22.0）
 scripts/verify-wiki.mjs         Wiki 新鲜度门禁（断链/越界/漂移/陈旧/页面完整性/链接与路径/覆盖率，v0.151.0）
+scripts/verify-arch.mjs         架构基线棘轮门禁（循环/分层/坏导入/重复/复杂度/架构分只拦新增退化，v0.232.0）
 scripts/check-coverage.mjs      覆盖率门禁（行/分支/函数）
 scripts/scan-secrets.mjs        git 跟踪文件密钥扫描
 scripts/bench.mjs               合成仓库索引基准

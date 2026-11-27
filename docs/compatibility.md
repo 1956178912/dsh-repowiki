@@ -22,6 +22,7 @@
 | `wiki/<locale>/_index.json` | 3（v1/v2 可读） | v1 页面级 `sources`；v2 增加章节级 `sections`；v3 增加 `inputDigest`/`memoryDigest`/`graphDigest`（生成增量短路与陈旧检测；graphDigest 覆盖索引文件集合与依赖边，缺失时只做卡片/记忆检查）、`citationDigests`/`citationMisses`（引用内容指纹与未覆盖原因）、`failed`/`failedTotal`（上次生成失败页）；旧清单按可得字段降级 |
 | 记忆 frontmatter | 1 | `status` 为 `pending`/`accepted`/`rejected`；可选 `reviewedAt` |
 | `repowiki-plan.json` | 无版本字段 | `exclude`/`includeOnly`/`maxCardsPerRun`/`cardComplexityThreshold`/`concurrency`/`attempts`；损坏时回退默认值并告警 |
+| `arch-baseline.json` | 1 | 由 `verify:arch --update` 生成：`cycles`/`layerViolations`/`unresolvedImports` 为身份签名，`ceilings`/`architectureScore` 为数值上限；字段缺失或畸形时对应检查关闭并告警，版本不符拒绝（重跑 `--update`）；无时间戳、列表排序去重，可逐字节复现 |
 
 ## 语言覆盖
 

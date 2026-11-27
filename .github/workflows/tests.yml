@@ -144,6 +144,89 @@ jobs:
           set -e
           test "$code" -eq 1
 
+  verify-arch:
+    name: architecture baseline gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build fixture index
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdir, writeFile } from 'node:fs/promises'
+
+          const root = '.ci-arch'
+          await mkdir(`${root}/.dsh-repowiki`, { recursive: true })
+          await writeFile(`${root}/a.js`, 'function a() {\n  return 1\n}\n')
+          await writeFile(`${root}/b.js`, 'function b() {\n  return 2\n}\n')
+          await writeFile(`${root}/.dsh-repowiki/index.json`, JSON.stringify({
+            schemaVersion: 6,
+            files: [
+              {
+                path: 'a.js',
+                lang: 'javascript',
+                symbols: [{ name: 'a', kind: 'function', line: 1, endLine: 3 }],
+                imports: [{ specifier: './b', line: 1, relative: true }],
+              },
+              {
+                path: 'b.js',
+                lang: 'javascript',
+                symbols: [{ name: 'b', kind: 'function', line: 1, endLine: 3 }],
+                imports: [{ specifier: './a', line: 1, relative: true }],
+              },
+            ],
+            edges: [
+              { from: 'a.js', to: 'b.js', line: 1, kind: 'import' },
+              { from: 'b.js', to: 'a.js', line: 1, kind: 'import' },
+            ],
+          }, null, 2))
+          NODE
+      - name: Missing baseline fails under --require
+        run: |
+          set +e
+          node scripts/verify-arch.mjs --root .ci-arch --require
+          code=$?
+          set -e
+          test "$code" -eq 1
+      - name: Baseline write and clean check
+        run: |
+          node scripts/verify-arch.mjs --root .ci-arch --update
+          node scripts/verify-arch.mjs --root .ci-arch --require --json > arch-report.json
+          node --input-type=module -e "
+            import { readFileSync } from 'node:fs'
+            const report = JSON.parse(readFileSync('arch-report.json', 'utf8'))
+            if (!report.ok || report.regressions.length !== 0) process.exit(1)
+            if (report.current.cycles.length !== 1) process.exit(1)
+          "
+      - name: New cycle fails the gate
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises'
+
+          const file = '.ci-arch/.dsh-repowiki/index.json'
+          const index = JSON.parse(await readFile(file, 'utf8'))
+          index.files.push(
+            { path: 'c.js', lang: 'javascript', symbols: [], imports: [] },
+            { path: 'd.js', lang: 'javascript', symbols: [], imports: [] },
+          )
+          index.edges.push(
+            { from: 'c.js', to: 'd.js', line: 1, kind: 'import' },
+            { from: 'd.js', to: 'c.js', line: 1, kind: 'import' },
+          )
+          await writeFile(file, JSON.stringify(index, null, 2))
+          await writeFile('.ci-arch/c.js', 'const c = 1\n')
+          await writeFile('.ci-arch/d.js', 'const d = 2\n')
+          NODE
+          set +e
+          node scripts/verify-arch.mjs --root .ci-arch --require > arch-failure.txt
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -q "new import cycle group" arch-failure.txt
+
   audit:
     name: dependency audit + SBOM
     runs-on: ubuntu-latest

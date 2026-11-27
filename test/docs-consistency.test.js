@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import {
   CARD_SCHEMA_VERSION, INDEX_SCHEMA_VERSION, KNOWLEDGE_INDEX_SCHEMA_VERSION,
   MEMORY_SCHEMA_VERSION, WIKI_MANIFEST_SCHEMA_VERSION, SYMBOL_LANGUAGES,
+  ARCH_BASELINE_SCHEMA_VERSION,
 } from '../src/schema.js'
 import { fenceLang } from '../src/prompts.js'
 
@@ -32,6 +33,8 @@ test('docs/compatibility.md 的资产版本与代码常量一致', () => {
     `兼容矩阵应声明卡片版本 ${CARD_SCHEMA_VERSION}`)
   assert.match(doc, new RegExp(`\\| 记忆 frontmatter \\| ${MEMORY_SCHEMA_VERSION} \\|`),
     `兼容矩阵应声明记忆版本 ${MEMORY_SCHEMA_VERSION}`)
+  assert.match(doc, new RegExp(`\\| \`arch-baseline\\.json\` \\| ${ARCH_BASELINE_SCHEMA_VERSION} \\|`),
+    `兼容矩阵应声明架构基线版本 ${ARCH_BASELINE_SCHEMA_VERSION}`)
 })
 
 test('每种符号语言都有提示词围栏与面板标签', () => {

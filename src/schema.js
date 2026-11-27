@@ -287,6 +287,16 @@ export const WIKI_DIR = 'wiki'
 export const PLAN_FILE = 'repowiki-plan.json'
 
 /**
+ * 架构基线文件名（相对资产目录）。由 `verify:arch --update` 写入并随 Git
+ * 共享，记录当前已知的循环/分层违规/坏导入与各项上限，供 CI 只拦截
+ * **新增**退化（ratchet），而不是要求一次性清零历史问题。
+ */
+export const ARCH_BASELINE_FILE = 'arch-baseline.json'
+
+/** 架构基线 schemaVersion（字段语义变化时递增，读取方按版本拒绝）。 */
+export const ARCH_BASELINE_SCHEMA_VERSION = 1
+
+/**
  * 卡片提取的默认阈值与上限（方案 §11.4 成本模型）：
  * 符号数低于 threshold 的文件只产签名信息、不值得子代理提取；
  * maxCards 限制单次提取的卡片数，超限分批。

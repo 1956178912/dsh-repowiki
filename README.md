@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 38-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/duplicate-page/stale-card/memory notices, index-version/range-unverified strictness, relative-link/page-path/duplicate-page integrity (wiki pages and project files), status missing-page/invalid-path/duplicate-page counts, missing/failed-page and invalid-path health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors, paginated retrieval and nested/character-class ignore rules, digest-verified snapshots with write-back checks and bounded large-snapshot verification, Dart support and workspace `package:` resolution, and manifest-scoped snapshot imports that reject unlisted files, PHP PSR-4 autoload resolution, default dependency-directory exclusions, untrusted-index path hardening, reproducible index output and stricter snapshot-manifest validation and bounded directory-listing prefetch and GFM table/nested-list rendering precise CJK query tokens and graph-aware wiki freshness, and Elixir module/alias indexing with root and umbrella `mix.exs` stacks, `.exs` test/script indexing, deep Markdown headings and bounded manifest reads, and Lua module/require indexing and Zig container/member indexing with `build.zig.zon` metadata and structured untrusted-index counts and Gleam type/import indexing and structured wiki staleness reasons and Gleam monorepo manifests with multi-line imports and Zig monorepo manifests and Zig public re-exports and parser-cache invalidation for the accumulated extractor evolution and Shell function/source indexing and R functions/classes with `DESCRIPTION` metadata and parser-version visibility in status and R `NAMESPACE` export evidence and R6/S4 method symbols and Julia modules/types/functions with `Project.toml` metadata and R S4 declarations and Julia macro-decorated structs/enums and Nim routines/types with `.nimble` metadata, Nim `type` block members, and OCaml modules/types with dune/opam metadata, `and`-continuation definitions and raw-string shielding, and Haskell modules/types with cabal metadata, class methods and multi-line signatures, and Rust workspace crate resolution, and Haskell `hs-source-dirs`, and bounded nested `pubspec.yaml`/`dune-project` reads, and Haskell export-list visibility, and Erlang modules/functions with rebar metadata, and a language-onboarding guard for prompt fences and panel labels, and cross-language test-path conventions, and OCaml nearest-module resolution, and Solidity contracts/functions with foundry metadata, and Clojure namespaces/forms with deps.edn/project.clj metadata, and Terraform/HCL blocks with module sources and provider metadata, an index scale/performance regression guard, Groovy classes/methods with dotted imports, PowerShell functions/classes with module and dot-source edges, Fortran modules/procedures with case-insensitive `use` resolution, Perl packages/subs with `lib/` module resolution, Object Pascal units/classes with `uses` resolution, Nix bindings with `import`/`callPackage` paths, VB.NET namespaces/classes with `Imports`/`Inherits` resolution, Tcl procs/namespaces with `source` resolution, and plan-declared architecture layers with cross-layer violation reporting, bounded cross-file duplicate-code detection, function-level complexity estimates, health scoring that counts layer violations, duplicate blocks and high-complexity functions, broken relative-import reporting, plan-configurable analysis thresholds, and F# namespaces/modules with `open` resolution (v0.231.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 38-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/duplicate-page/stale-card/memory notices, index-version/range-unverified strictness, relative-link/page-path/duplicate-page integrity (wiki pages and project files), status missing-page/invalid-path/duplicate-page counts, missing/failed-page and invalid-path health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors, paginated retrieval and nested/character-class ignore rules, digest-verified snapshots with write-back checks and bounded large-snapshot verification, Dart support and workspace `package:` resolution, and manifest-scoped snapshot imports that reject unlisted files, PHP PSR-4 autoload resolution, default dependency-directory exclusions, untrusted-index path hardening, reproducible index output and stricter snapshot-manifest validation and bounded directory-listing prefetch and GFM table/nested-list rendering precise CJK query tokens and graph-aware wiki freshness, and Elixir module/alias indexing with root and umbrella `mix.exs` stacks, `.exs` test/script indexing, deep Markdown headings and bounded manifest reads, and Lua module/require indexing and Zig container/member indexing with `build.zig.zon` metadata and structured untrusted-index counts and Gleam type/import indexing and structured wiki staleness reasons and Gleam monorepo manifests with multi-line imports and Zig monorepo manifests and Zig public re-exports and parser-cache invalidation for the accumulated extractor evolution and Shell function/source indexing and R functions/classes with `DESCRIPTION` metadata and parser-version visibility in status and R `NAMESPACE` export evidence and R6/S4 method symbols and Julia modules/types/functions with `Project.toml` metadata and R S4 declarations and Julia macro-decorated structs/enums and Nim routines/types with `.nimble` metadata, Nim `type` block members, and OCaml modules/types with dune/opam metadata, `and`-continuation definitions and raw-string shielding, and Haskell modules/types with cabal metadata, class methods and multi-line signatures, and Rust workspace crate resolution, and Haskell `hs-source-dirs`, and bounded nested `pubspec.yaml`/`dune-project` reads, and Haskell export-list visibility, and Erlang modules/functions with rebar metadata, and a language-onboarding guard for prompt fences and panel labels, and cross-language test-path conventions, and OCaml nearest-module resolution, and Solidity contracts/functions with foundry metadata, and Clojure namespaces/forms with deps.edn/project.clj metadata, and Terraform/HCL blocks with module sources and provider metadata, an index scale/performance regression guard, Groovy classes/methods with dotted imports, PowerShell functions/classes with module and dot-source edges, Fortran modules/procedures with case-insensitive `use` resolution, Perl packages/subs with `lib/` module resolution, Object Pascal units/classes with `uses` resolution, Nix bindings with `import`/`callPackage` paths, VB.NET namespaces/classes with `Imports`/`Inherits` resolution, Tcl procs/namespaces with `source` resolution, and plan-declared architecture layers with cross-layer violation reporting, bounded cross-file duplicate-code detection, function-level complexity estimates, health scoring that counts layer violations, duplicate blocks and high-complexity functions, broken relative-import reporting, plan-configurable analysis thresholds, F# namespaces/modules with `open` resolution, and an architecture baseline ratchet that fails only on new cycle/layer/unresolved/duplicate/complexity/score regressions over a reproducible, Git-reviewed baseline (v0.232.0)
 
 | Capability | Description |
 |---|---|
@@ -226,6 +226,7 @@ Roadmap:
 - **Git provenance without a subprocess**: `index.json` carries `git.branch` / `git.commit` parsed from `.git/HEAD`, loose refs, `packed-refs` and worktree `commondir` files; non-repositories simply omit the field.
 - **Concurrent-write safety** (ADR-0005): the six mutating tools queue per resolved asset root through an in-process promise-chain lock; extract/generate perform model calls outside the lock and re-check freshness inside the write critical section; extraction can dispatch up to 4 model calls in parallel (`concurrency`) with bounded retries (`attempts`) while writes remain serialized; different repositories never block each other, and read-only queries stay lock-free.
 - **Zero-dependency ranking**: BM25 over cards/wiki/accepted memory with Latin words plus CJK unigrams/bigrams; no embeddings, no vector store.
+- **Architecture quality ratchets instead of resetting**: `verify:arch` freezes cycle groups, cross-layer violation pairs, unresolved imports, duplicate blocks, high-complexity functions and the architecture score into a reproducible baseline (sorted, deduplicated, no timestamps); CI fails only on new regressions and `--update` tightens it after fixes, so legacy findings cannot force the gate to be disabled.
 - **Reverse references on demand**: `src/references.js` inverts `index.edges` (`target file → symbol → importing sites`) at query time; schema v6 edges carry the import line, so results are `path:Lx` precise, bounded and explicitly import-level.
 - **Wiki citations on demand**: `src/wiki-references.js` inverts the wiki manifest (`source file → pages/sections`); manifest v2 stores per-section sources, so "which docs cite this file" is answered without re-reading wiki pages.
 
@@ -285,6 +286,17 @@ npm run verify:host
 # warn unless --strict. --require fails when no manifest exists. --root /
 # --locale / --json supported. v0.156.0.
 npm run verify:wiki -- --root . --strict --require
+
+# Architecture baseline ratchet: freeze the current cycle groups, cross-layer
+# violation pairs, unresolved relative imports, duplicate-block count,
+# high-complexity function count and architecture score into
+# .dsh-repowiki/arch-baseline.json, then fail only on NEW regressions (a new
+# cycle, a new/larger layer pair, a new unresolved import, a raised ceiling or
+# a lower score). Fixed findings suggest `--update` to tighten the baseline;
+# `--require` fails when no baseline exists; `--root` / `--json` supported.
+# v0.232.0.
+npm run verify:arch -- --root .
+npm run verify:arch -- --root . --update
 ```
 
 ### CI usage
@@ -302,6 +314,30 @@ report also carries stable `problems[].code` values (e.g. `citation/missing`,
 `wiki/stale-cards`) for CI aggregation. The repository workflow runs this
 exact recipe against a generated fixture and asserts both the passing and the
 stale-failure exit code.
+
+### Architecture baseline gate (ratchet)
+
+`npm run verify:arch` derives the same architecture facts `repowiki-status`
+reports and compares them with `.dsh-repowiki/arch-baseline.json`:
+
+- **Identity signals** (a new signature fails): cycle groups (member sets),
+  cross-layer violations (per `from → to` layer pair; a new pair or a higher
+  count fails) and unresolved relative imports (`path → specifier`).
+- **Ceilings** (a higher number fails): duplicate-block count,
+  high-complexity function count and max function complexity.
+- **Score** (a lower number fails): the architecture component of the health
+  score (cycles, fan-in, layers, duplicates, complexity).
+
+The baseline has no timestamps and every list is sorted and deduplicated, so
+re-running `--update` on unchanged sources produces a byte-identical file and
+Git diffs only show real changes. Run `--update` once when adopting the gate
+(or when deliberately accepting a batch of existing findings), and again
+after fixing issues to tighten it. `--require` turns a missing baseline into a
+failure (recommended in CI); `--json` emits stable `problems[].code` values
+(`index/*`, `plan/*`, `baseline/*`) plus structured `regressions`/`improvements`. Exit
+codes: `0` pass, `1` new regression or unusable baseline, `2` usage/read error
+(missing index). The CI `verify-arch` job writes a baseline, asserts it
+passes, then injects a cycle and asserts exit code 1.
 
 ### Problem codes
 
@@ -345,6 +381,7 @@ stale-failure exit code.
 index.js               Plugin entry (apply + inject: fs/tools/subagents)
 scripts/verify-host-tokens.mjs  Local host drift check (token liveness, v0.22.0)
 scripts/verify-wiki.mjs         Wiki freshness gate (links/ranges/drift/stale/pages/paths/coverage, v0.151.0)
+scripts/verify-arch.mjs         Architecture baseline ratchet (cycles/layers/imports/duplicates/complexity/score, v0.232.0)
 scripts/check-coverage.mjs      Coverage gate (lines/branches/functions)
 scripts/scan-secrets.mjs        Git-tracked secret scan
 scripts/bench.mjs               Synthetic-repo index benchmark
