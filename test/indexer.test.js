@@ -1896,6 +1896,22 @@ test('Tcl：source 相对路径、项目根与脚本目录解析', async () => {
   ])
 })
 
+test('F#：open 命名空间与父命名空间.模块名解析', async () => {
+  const dir = makeProject({
+    'src/Core/Math.fs': 'namespace Demo.Core\n\nmodule Math =\n    let add x y = x + y\n',
+    'src/Core/Types.fs': 'namespace Demo.Core\n\ntype Point(x: int) =\n    member this.X = x\n',
+    'src/App.fs': 'namespace Demo.App\n\nopen Demo.Core\nopen Demo.Core.Math\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { fsharp: 3 })
+
+  const edges = doc.edges.filter(e => e.from === 'src/App.fs')
+  assert.deepEqual(edges.map(e => [e.line, e.to]).sort(), [
+    [3, 'src/Core/Math.fs'],
+    [4, 'src/Core/Math.fs'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

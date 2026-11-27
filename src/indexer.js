@@ -729,6 +729,61 @@ function resolveFortranUse(specifier, modules) {
 }
 
 /**
+ * 建立 F# 模块/命名空间 → 文件索引：登记 namespace/module 符号名，以及
+ * 「父命名空间.模块名」组合名，使 `open Demo.Core.Math` 能命中 `module Math`；
+ * 同名取字典序最小文件，保证确定性。
+ * @param {Array<{path:string, lang:string, symbols?:Array}>} files - 索引文件条目。
+ * @returns {Map<string,string>} 模块/命名空间名 → 文件相对路径。
+ */
+function buildFsharpModules(files) {
+  const modules = new Map()
+  /**
+   * 登记一个模块名（同键取字典序最小文件）。
+   * @param {string} name - 模块/命名空间名。
+   * @param {string} filePath - 文件相对路径。
+   * @returns {void}
+   */
+  const set = (name, filePath) => {
+    if (!name) return
+    const existing = modules.get(name)
+    if (existing === undefined || filePath < existing) modules.set(name, filePath)
+  }
+  for (const file of files) {
+    if (file.lang !== 'fsharp') continue
+    for (const symbol of file.symbols ?? []) {
+      if (symbol?.kind !== 'class' || typeof symbol.name !== 'string') continue
+      if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(symbol.name)) continue
+      set(symbol.name, file.path)
+      if (typeof symbol.parent === 'string' && symbol.parent !== '') {
+        set(`${symbol.parent}.${symbol.name}`, file.path)
+      }
+    }
+  }
+  return modules
+}
+
+/**
+ * 解析 F# `open`：精确匹配，未命中时逐段去掉末段回退（`open A.B` 可命中
+ * 命名空间 `A`）；外部命名空间返回 null。
+ * @param {string} specifier - 点分命名空间/模块名。
+ * @param {Map<string,string>} modules - 模块名 → 文件。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveFsharpModule(specifier, modules) {
+  if (typeof specifier !== 'string') return null
+  let current = specifier.trim()
+  if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(current)) return null
+  while (current !== '') {
+    const hit = modules.get(current)
+    if (hit) return hit
+    const cut = current.lastIndexOf('.')
+    if (cut < 0) break
+    current = current.slice(0, cut)
+  }
+  return null
+}
+
+/**
  * 建立 Perl 模块加载根：任意层级的 `lib/` 目录（含 `blib/lib` 的上一级
  * `lib`），最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2449,6 +2504,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   fortranModules:Map<string,string>,
  *   perlRoots:string[],
  *   pascalUnits:Map<string,string>,
+ *   fsharpModules:Map<string,string>,
  *   haskellRoots:string[],
  *   erlangRoots:string[],
  *   clojureRoots:string[],
@@ -2502,6 +2558,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
   if (lang === 'tcl') return resolveTclSource(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'fsharp') return resolveFsharpModule(imp.specifier, ctx.fsharpModules)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
@@ -2794,6 +2851,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     fortranModules: buildFortranModules(files),
     perlRoots: buildPerlRoots(indexed),
     pascalUnits: buildPascalUnits(files),
+    fsharpModules: buildFsharpModules(files),
     haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     erlangRoots: buildErlangRoots(indexed),
     clojureRoots: buildClojureRoots(indexed),

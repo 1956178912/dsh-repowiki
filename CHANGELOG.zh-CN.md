@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.231.0] - 2026-11-28
+
+- **F# 支持（第 38 种语言）**：`namespace`/`module` 声明（嵌套模块以
+  命名空间为 `parent`）、`type` 映射为 class（显式 `class … end`、
+  构造参数形式）/ interface（显式 `interface`）/ type（record/union/
+  缩写）、`member`/`abstract member`/`override`（带 `parent`）与 `let`
+  绑定（带参数为 function，否则 variable）；范围按 `end` 或缩进块，
+  `//`、可嵌套 `(* … *)`、引号与三引号字符串屏蔽。
+- **F# `open` 边**：`open Foo.Bar` 与 `open type Foo.Bar` 经命名空间/
+  模块映射解析（精确后逐段前缀回退）；登记 `Parent.Module` 别名，
+  `open Demo.Core.Math` 可命中 `namespace Demo.Core` 下的 `module Math`；
+  外部命名空间不建边。
+- **测试**：688 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖命名空间、
+  模块、类、record、union、成员、override、let 绑定、缩进范围、字符串
+  屏蔽与 `open` 解析。
+
 ## [0.230.0] - 2026-11-28
 
 - **可配置分析阈值**：plan 新增 `complexityThreshold`（1–100，默认 15）、

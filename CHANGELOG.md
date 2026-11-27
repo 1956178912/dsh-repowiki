@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.231.0] - 2026-11-28
+
+### Added
+
+- **F# indexing (38th language)**: `namespace`/`module` declarations
+  (nested modules keep their namespace as `parent`), `type` definitions
+  mapped to class (explicit `class … end`, constructor form), interface
+  (explicit `interface`) or type (records, unions, abbreviations),
+  `member`/`abstract member`/`override` with `parent` ownership, and
+  `let` bindings classified as function (with parameters) or variable.
+  Ranges follow `end` or indentation, and `//`, nested `(* … *)`,
+  quoted and triple-quoted strings are masked.
+- **F# `open` edges**: `open Foo.Bar` and `open type Foo.Bar` resolve
+  through a namespace/module map with exact then segment-prefix fallback;
+  `Parent.Module` aliases are registered so `open Demo.Core.Math` finds
+  `module Math` declared under `namespace Demo.Core`. External
+  namespaces stay edge-free.
+
+### Tests
+
+- 688 cases pass (LANG=en and LANG=zh); new coverage for namespaces,
+  modules, classes, records, unions, members, overrides, let bindings,
+  indentation ranges, string masking and `open` resolution.
+
 ## [0.230.0] - 2026-11-28
 
 ### Added

@@ -773,6 +773,22 @@ test('Tcl：source 路径与注释/字符串过滤', () => {
   ])
 })
 
+test('F#：open 命名空间/类型与注释屏蔽', () => {
+  const code = [
+    'open System',
+    'open Demo.Core',
+    'open type Demo.Core.Point',
+    '// open Commented.Nope',
+    'let s = "open String.Fake"',
+  ].join('\n')
+  const imports = extractImports(code, 'fsharp')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['System', 1],
+    ['Demo.Core', 2],
+    ['Demo.Core.Point', 3],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

@@ -184,6 +184,7 @@ export function fenceLang(lang) {
     case 'nix': return 'nix'
     case 'vbnet': return 'vbnet'
     case 'tcl': return 'tcl'
+    case 'fsharp': return 'fsharp'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

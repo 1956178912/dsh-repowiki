@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan, vbnetScan, tclScan,
+  nixScan, vbnetScan, tclScan, fsharpScan,
 } from './symbols.js'
 
 /**
@@ -1419,6 +1419,29 @@ function extractTclImports(lines) {
 }
 
 /**
+ * 提取 F# 的 `open` 引用：支持 `open Foo.Bar` 与 `open type Foo.Bar`；
+ * 注释与字符串内的伪语句由 `fsharpScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractFsharpImports(lines) {
+  const result = []
+  const masked = fsharpScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const m = /^open\s+(?:type\s+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/.exec(masked[i].trim())
+    if (!m) continue
+    result.push({
+      specifier: m[1],
+      line: i + 1,
+      kind: 'import',
+      relative: false,
+      imported: [m[1].split('.').pop()],
+    })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1539,6 +1562,7 @@ export function extractImports(code, lang) {
   if (lang === 'nix') return extractNixImports(lines)
   if (lang === 'vbnet') return extractVbnetImports(lines)
   if (lang === 'tcl') return extractTclImports(lines)
+  if (lang === 'fsharp') return extractFsharpImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

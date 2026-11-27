@@ -4946,6 +4946,173 @@ function extractTcl(lines) {
 }
 
 /**
+ * 扫描 F# 源码行：`//` 行注释、可嵌套 `(* … *)` 块注释、三引号与普通
+ * 字符串（反斜杠转义）内容替换为空格；`#if`/`#load` 等预处理指令行忽略。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function fsharpScan(lines) {
+  const out = []
+  let blockDepth = 0
+  /** @type {string|null} */
+  let quote = null
+  for (const raw of lines) {
+    if (blockDepth === 0 && quote === null && /^\s*#(?:if|else|elif|endif|light|nowarn|load|r|time)\b/i.test(raw)) {
+      out.push(' '.repeat(raw.length))
+      continue
+    }
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (blockDepth > 0) {
+        if (ch === '(' && next === '*') { blockDepth++; i++; masked += '  ' }
+        else if (ch === '*' && next === ')') { blockDepth--; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (quote === '"""') {
+        if (raw.startsWith('"""', i)) { quote = null; i += 2; masked += '   ' }
+        else masked += ' '
+        continue
+      }
+      if (quote === '"') {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { quote = null; masked += ch }
+        else masked += ' '
+        continue
+      }
+      if (ch === '/' && next === '/') break
+      if (ch === '(' && next === '*') { blockDepth = 1; i++; masked += '  '; continue }
+      if (raw.startsWith('"""', i)) { quote = '"""'; i += 2; masked += '   '; continue }
+      if (ch === '"') { quote = '"'; masked += ch; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 计算 F# 类型声明的结束行：`class`/`interface` 找配对 `end`，同行闭合
+ * 或 record/union 单行止于本行，其余按缩进块。
+ * @param {string[]} masked - 掩码行。
+ * @param {number} startIdx - 声明起始行（0-based）。
+ * @param {number} indent - 声明行缩进。
+ * @returns {number} 结束行（1-based）。
+ */
+function fsharpTypeEnd(masked, startIdx, indent) {
+  const line = masked[startIdx]
+  if (/\bend\b/.test(line)) return startIdx + 1
+  if (/\b(?:class|interface)\b/.test(line)) {
+    for (let j = startIdx + 1; j < masked.length; j++) {
+      if (/^\s*end\b/.test(masked[j])) return j + 1
+    }
+  }
+  if (/\}\s*$/.test(line)) return startIdx + 1
+  const blockEnd = haskellBlockEnd(masked, startIdx, indent)
+  return blockEnd > startIdx + 1 ? blockEnd : startIdx + 1
+}
+
+/**
+ * 提取 F# 符号：`namespace`/`module`（class）、`type`（class/interface/
+ * type）、`member`/`abstract member`/`override`（method + `parent`）与
+ * 顶层/模块内 `let`（function/variable）。缩进块确定范围；注释与字符串
+ * 内的伪声明不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractFsharp(lines) {
+  const masked = fsharpScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const containers = []
+  for (let i = 0; i < masked.length; i++) {
+    while (containers.length > 0 && containers[containers.length - 1].end <= i + 1) containers.pop()
+    const rawLine = masked[i]
+    const line = rawLine.trim()
+    if (line === '') continue
+    const indent = haskellIndentOf(rawLine)
+    const parent = containers.length > 0 ? containers[containers.length - 1].name : undefined
+
+    const nsMatch = /^namespace\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)/.exec(line)
+    if (nsMatch) {
+      if (indent === 0) containers.length = 0
+      const symbol = {
+        name: nsMatch[1], kind: 'class', line: i + 1, endLine: masked.length, exported: true,
+      }
+      symbols.push(symbol)
+      containers.push({ name: nsMatch[1], end: masked.length })
+      continue
+    }
+
+    const moduleMatch = /^module\s+(?:private\s+|internal\s+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*(=)?/.exec(line)
+    if (moduleMatch) {
+      if (indent === 0 && !moduleMatch[2]) containers.length = 0
+      const end = moduleMatch[2] || indent > 0
+        ? haskellBlockEnd(masked, i, indent)
+        : masked.length
+      /** @type {object} */
+      const symbol = {
+        name: moduleMatch[1], kind: 'class', line: i + 1, endLine: end, exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      containers.push({ name: moduleMatch[1], end })
+      continue
+    }
+
+    const typeMatch = /^type\s+(?:private\s+|internal\s+)?([A-Za-z_]\w*)(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*=/.exec(line)
+    if (typeMatch) {
+      const keyword = /\binterface\b/.test(line) ? 'interface'
+        : /\bclass\b/.test(line) || /^type\s+(?:private\s+|internal\s+)?[A-Za-z_]\w*\s*\(/.test(line)
+          ? 'class'
+          : 'type'
+      const end = fsharpTypeEnd(masked, i, indent)
+      /** @type {object} */
+      const symbol = {
+        name: typeMatch[1], kind: keyword, line: i + 1, endLine: end, exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      containers.push({ name: typeMatch[1], end })
+      continue
+    }
+
+    const memberMatch = /^(?:abstract\s+member|member)\s+(?:(?:private|internal|public|static|override|default|inline)\s+)*(?:[A-Za-z_]\w*\.)?([A-Za-z_]\w*)/.exec(line)
+    const overrideMatch = /^(?:override|default)\s+(?:[A-Za-z_]\w*\.)?([A-Za-z_]\w*)\s*\(/.exec(line)
+    const memberName = memberMatch?.[1] ?? overrideMatch?.[1]
+    if (memberName) {
+      const end = haskellBlockEnd(masked, i, indent)
+      /** @type {object} */
+      const symbol = {
+        name: memberName, kind: parent ? 'method' : 'function', line: i + 1,
+        endLine: end > i + 1 ? end : i + 1, exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      continue
+    }
+
+    const letMatch = /^let\s+(?:(?:rec|inline|mutable|private|internal)\s+)*([A-Za-z_]\w*)/.exec(line)
+    if (letMatch) {
+      const rest = line.slice(line.indexOf(letMatch[1]) + letMatch[1].length)
+      const beforeEquals = (rest.split('=')[0] ?? '').replace(/:\s*[^=]*$/, '').trim()
+      const kind = beforeEquals !== '' ? 'function' : 'variable'
+      const end = haskellBlockEnd(masked, i, indent)
+      /** @type {object} */
+      const symbol = {
+        name: letMatch[1], kind, line: i + 1,
+        endLine: end > i + 1 ? end : i + 1, exported: true,
+      }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -5094,6 +5261,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'nix') return extractNix(lines)
   if (lang === 'vbnet') return extractVbnet(lines)
   if (lang === 'tcl') return extractTcl(lines)
+  if (lang === 'fsharp') return extractFsharp(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

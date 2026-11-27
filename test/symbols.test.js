@@ -2109,6 +2109,61 @@ test('Tcl：namespace eval/TclOO/proc 归属与字符串花括号屏蔽', () => 
   assert.ok(!byName.has('fake'), '行注释不登记')
 })
 
+test('F#：namespace/module/type/member/let 与缩进范围', () => {
+  const code = [
+    'namespace Demo.Core',
+    '',
+    'open System',
+    '',
+    'module Math =',
+    '    let add x y = x + y',
+    '    let pi = 3.14',
+    '',
+    'type Point(x: int, y: int) =',
+    '    member this.X = x',
+    '    member this.Y = y',
+    '    member this.Add(p: Point) =',
+    '        Point(x + p.X, y + p.Y)',
+    '',
+    'type Shape =',
+    '    | Circle of float',
+    '    | Square of float',
+    '',
+    'type IWidget =',
+    '    abstract member Render: unit -> string',
+    '',
+    'let topLevel x = x + 1',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'fsharp')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Demo.Core').kind, 'class')
+  assert.equal(byName.get('Demo.Core').endLine, 22)
+  assert.equal(byName.get('Math').kind, 'class')
+  assert.equal(byName.get('Math').parent, 'Demo.Core')
+  assert.equal(byName.get('Math').endLine, 8)
+  assert.equal(byName.get('add').kind, 'function')
+  assert.equal(byName.get('add').parent, 'Math')
+  assert.equal(byName.get('add').endLine, 6)
+  assert.equal(byName.get('pi').kind, 'variable')
+  assert.equal(byName.get('Point').kind, 'class')
+  assert.equal(byName.get('Point').endLine, 14)
+  assert.equal(byName.get('X').kind, 'method')
+  assert.equal(byName.get('X').parent, 'Point')
+  assert.equal(byName.get('X').endLine, 10)
+  assert.equal(byName.get('Add').parent, 'Point')
+  assert.equal(byName.get('Add').endLine, 14, '多行 member 覆盖其缩进体')
+  assert.equal(byName.get('Shape').kind, 'type')
+  assert.equal(byName.get('Shape').endLine, 18)
+  assert.equal(byName.get('IWidget').kind, 'type', 'abstract member 定义的接口按 type 登记')
+  assert.equal(byName.get('IWidget').endLine, 21)
+  assert.equal(byName.get('Render').kind, 'method')
+  assert.equal(byName.get('Render').parent, 'IWidget')
+  assert.equal(byName.get('topLevel').kind, 'function')
+  assert.equal(byName.get('topLevel').endLine, 22)
+  assert.ok(!byName.has('Circle'), 'union 案例不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

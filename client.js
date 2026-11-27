@@ -358,6 +358,7 @@ const LANGUAGE_LABELS = {
   nix: 'Nix',
   vbnet: 'Visual Basic .NET',
   tcl: 'Tcl',
+  fsharp: 'F#',
   c: 'C',
   cpp: 'C++',
 }
