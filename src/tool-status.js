@@ -257,6 +257,11 @@ export function repowikiStatusTool(ctx) {
               count: { type: 'integer' },
               manifest: { type: 'boolean' },
               stale: { type: 'integer' },
+              staleReasons: {
+                type: 'array',
+                items: { type: 'string', enum: ['cards', 'graph', 'memory'] },
+                description: 'Why the wiki is stale, using the same values and order as verify:wiki (page input digests, dependency graph, accepted memory). Omitted when fresh.',
+              },
               failed: { type: 'integer', description: 'Pages that failed to write during the last generation.' },
               failedPages: { type: 'array', items: { type: 'string' } },
               missing: { type: 'integer', description: 'Manifest pages whose file is missing on disk.' },
@@ -647,7 +652,7 @@ export function repowikiStatusTool(ctx) {
           `Knowledge base: ${value.root} (${value.locale}${value.localeSource === 'fallback' ? `, fallback from ${value.localeRequested}` : ''})`,
           `Index: ${value.index.exists ? `v${value.index.schemaVersion ?? '?'} ${value.index.compatible ? 'compatible' : 'INCOMPATIBLE'}, ${value.index.files} files / ${value.index.symbols} symbols / ${value.index.modules} modules${value.index.skipped ? ` / ${value.index.skipped} skipped` : ''}${value.index.untrusted ? ` / ${value.index.untrusted.files} untrusted path(s), ${value.index.untrusted.edges} edge(s) dropped` : ''}` : 'missing'}`,
           `Cards: ${value.cards.count} (stale ${value.cards.stale}, orphaned ${value.cards.orphaned})`,
-          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, duplicate ${value.wiki.duplicate}, orphaned ${value.wiki.orphaned}`,
+          `Wiki: ${value.wiki.count} page(s), manifest ${value.wiki.manifest ? 'present' : 'missing'}, stale ${value.wiki.stale}${value.wiki.staleReasons ? ` (${value.wiki.staleReasons.join(', ')})` : ''}, failed ${value.wiki.failed}, missing ${value.wiki.missing}, invalid ${value.wiki.invalid}, duplicate ${value.wiki.duplicate}, orphaned ${value.wiki.orphaned}`,
           ...(value.brokenCitations
             ? [`Broken citations: ${value.brokenCitations.total === 0
               ? '(none)'
@@ -775,8 +780,9 @@ export function repowikiStatusTool(ctx) {
       )
       // 结构指纹：文件集合 + 依赖边。旧清单缺该字段时跳过（不误报）。
       const currentGraphDigest = digestText(wikiGraphText(index), 16)
-      if (manifest && typeof manifest.graphDigest === 'string' && manifest.graphDigest
-        && manifest.graphDigest !== currentGraphDigest) {
+      const graphStale = Boolean(manifest && typeof manifest.graphDigest === 'string'
+        && manifest.graphDigest && manifest.graphDigest !== currentGraphDigest)
+      if (graphStale) {
         warnings.push('Wiki is stale: the indexed file set or dependency graph changed since generation; run repowiki-generate.')
       }
       const manifestSlugs = new Set((manifest?.pages ?? []).map(p => p.slug))
@@ -853,16 +859,25 @@ export function repowikiStatusTool(ctx) {
       }
       // 生成侧还会用已采信记忆指纹做增量短路：记忆变化时提示刷新，
       // 避免用户看到 stale=0 却在下一次 generate 触发重新合成
+      let memoryStale = false
       if (manifest && wikiPages.length > 0 && typeof manifest.memoryDigest === 'string') {
         const accepted = await listMemory(fs, root, locale, 'accepted', true)
         const currentMemoryDigest = digestText(
           accepted.map(entry => `${entry.slug}:${(entry.body ?? '').trim()}`).sort().join('\n'),
           16,
         )
-        if (currentMemoryDigest !== manifest.memoryDigest) {
+        memoryStale = currentMemoryDigest !== manifest.memoryDigest
+        if (memoryStale) {
           warnings.push('Accepted memory changed since the wiki was generated; run repowiki-generate to refresh it.')
         }
       }
+      // 与 verify:wiki 的 staleReasons 同值域/同顺序：页面输入指纹（卡片）、
+      // 依赖图、已采信记忆。页面级 stale 计数为 0 时也可能因图/记忆陈旧，
+      // 因此单独输出原因而不是只给计数。
+      const wikiStaleReasons = []
+      if (wikiStale > 0) wikiStaleReasons.push('cards')
+      if (graphStale) wikiStaleReasons.push('graph')
+      if (memoryStale) wikiStaleReasons.push('memory')
 
       // Wiki 引用完整性：清单里的 sources 必须能落到索引文件或磁盘文件。
       // 非索引引用（README 等）用 fs 探测确认；超过探测上限时视为"未验证"，
@@ -1042,6 +1057,7 @@ export function repowikiStatusTool(ctx) {
           count: wikiPages.length,
           manifest: manifest !== null,
           stale: wikiStale,
+          ...(wikiStaleReasons.length > 0 ? { staleReasons: wikiStaleReasons } : {}),
           failed: wikiFailed,
           failedPages: wikiFailedPages,
           missing: missingWikiPages.length,

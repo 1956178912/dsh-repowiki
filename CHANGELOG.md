@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.186.0] - 2026-11-28
+
+### Changed
+
+- **Structured wiki staleness reasons in status**: `repowiki-status` now
+  returns `wiki.staleReasons` with the same values and order as
+  `verify:wiki` (`cards`, `graph`, `memory`) and prints them in the `Wiki:`
+  line. A page-level stale count of zero no longer hides graph- or
+  memory-driven staleness, so JSON/CI consumers can route the right refresh
+  instead of parsing warning prose; the warnings themselves are unchanged.
+
+### Tests
+
+- 574 cases pass (LANG=en and LANG=zh); the graph and accepted-memory
+  status fixtures now pin the reason arrays and the rendered annotations.
+
 ## [0.185.0] - 2026-11-28
 
 ### Added

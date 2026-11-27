@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.186.0] - 2026-11-28
+
+- **status 结构化 Wiki 陈旧原因**：`repowiki-status` 输出
+  `wiki.staleReasons`（`cards`/`graph`/`memory`，值域与顺序同
+  `verify:wiki`）并在 `Wiki:` 行展示。页面级计数为 0 时不再掩盖依赖图或
+  已采信记忆导致的陈旧，JSON/CI 消费方可直接决定刷新方式；原告警不变。
+- **测试**：574 例在 LANG=en 与 LANG=zh 下全通过；图陈旧与记忆陈旧夹具
+  新增原因数组与渲染标注断言。
+
 ## [0.185.0] - 2026-11-28
 
 - **Gleam 支持（第 19 种语言）**：`.gleam` 提取 `type`/`opaque type`/

@@ -57,6 +57,9 @@ test('repowiki-status：结构指纹不一致时提示 Wiki 落后', async () =>
   })
   const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.ok(out.warnings.some(w => /dependency graph changed/.test(w)), '结构指纹不一致应告警')
+  assert.deepEqual(out.wiki.staleReasons, ['graph'], '结构化陈旧原因与 verify:wiki 同值域')
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /stale 0 \(graph\)/)
 })
 
 test('repowiki-status：索引中的越界路径被忽略并进入告警', async () => {
@@ -164,8 +167,10 @@ test('repowiki-status：已采信记忆变化时提示刷新 Wiki', async () => 
 
   const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.ok(out.warnings.some(w => /Accepted memory changed/.test(w)), '记忆指纹不一致应告警')
+  assert.deepEqual(out.wiki.staleReasons, ['memory'], '记忆陈旧单独归类')
   const rendered = repowikiStatusTool(ctx).output.render({}, out)
   assert.match(rendered[0].text, /Warning: Accepted memory changed/)
+  assert.match(rendered[0].text, /stale \d+ \(memory\)/)
 })
 
 test('repowiki-status：展示最近一次抽取快照（lastRun）', async () => {
