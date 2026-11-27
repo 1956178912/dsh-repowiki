@@ -150,6 +150,10 @@ const DICTS = {
     wikiRangeBadge: '越界 {n}',
     wikiRangeHint: '{n} 处引用超出索引记录的文件行数',
     wikiIssueSummary: '引用问题：{outOfRange} 处行号越界 · {unchecked} 处未检查',
+    wikiCoverageBadge: '未覆盖 {n}',
+    wikiCoverageHint: '{n} 处引用没有内容指纹，无法做漂移检查',
+    wikiCoverageSummary: '引用指纹：{tracked}/{total} 已记录 · {untracked} 未覆盖',
+    wikiCoverageLegacy: '引用指纹：清单无指纹记录（{total} 处引用）',
     copyPath: '复制路径',
     copied: '已复制',
     copyFailed: '复制失败（剪贴板不可用）',
@@ -254,6 +258,10 @@ const DICTS = {
     wikiRangeBadge: 'Out of range {n}',
     wikiRangeHint: '{n} citation(s) exceed the indexed line count',
     wikiIssueSummary: 'Citation issues: {outOfRange} out-of-range · {unchecked} unchecked',
+    wikiCoverageBadge: 'Untracked {n}',
+    wikiCoverageHint: '{n} citation(s) have no content digest; drift checks cannot cover them',
+    wikiCoverageSummary: 'Citation digests: {tracked}/{total} tracked · {untracked} untracked',
+    wikiCoverageLegacy: 'Citation digests: manifest has no digests ({total} citations)',
     copyPath: 'Copy path',
     copied: 'Copied',
     copyFailed: 'Copy failed (clipboard unavailable)',
@@ -1232,10 +1240,16 @@ window.__ModuleLoader__.load({
      * @returns {{outOfRange:number, unchecked:number}} 计数。
      */
     function citationIssuesFor(meta, lineCounts) {
-      const sources = []
-      for (const source of Array.isArray(meta?.sources) ? meta.sources : []) sources.push(source)
+      // 清单页级 sources 是章节 sources 的并集：必须去重，否则越界/
+      // 未检查计数会重复。指纹覆盖率使用同一口径。
+      const sources = new Set()
+      for (const source of Array.isArray(meta?.sources) ? meta.sources : []) {
+        if (typeof source === 'string' && source) sources.add(source)
+      }
       for (const section of Array.isArray(meta?.sections) ? meta.sections : []) {
-        for (const source of Array.isArray(section?.sources) ? section.sources : []) sources.push(source)
+        for (const source of Array.isArray(section?.sources) ? section.sources : []) {
+          if (typeof source === 'string' && source) sources.add(source)
+        }
       }
       let outOfRange = 0
       let unchecked = 0
@@ -1251,6 +1265,38 @@ window.__ModuleLoader__.load({
         if (parsed.start < 1 || end < parsed.start || parsed.start > lines || end > lines) outOfRange++
       }
       return { outOfRange, unchecked }
+    }
+
+    /**
+     * 汇总页面清单里的引用指纹覆盖率（按页去重）。
+     * @param {object|null} meta - 清单页面条目。
+     * @returns {{total:number, tracked:number, untracked:number, hasDigests:boolean}}
+     *   覆盖率；旧清单无指纹时 tracked 为 0。
+     */
+    function citationCoverageFor(meta) {
+      const sources = new Set()
+      for (const source of Array.isArray(meta?.sources) ? meta.sources : []) {
+        if (typeof source === 'string' && source) sources.add(source)
+      }
+      for (const section of Array.isArray(meta?.sections) ? meta.sections : []) {
+        for (const source of Array.isArray(section?.sources) ? section.sources : []) {
+          if (typeof source === 'string' && source) sources.add(source)
+        }
+      }
+      const digests = meta?.citationDigests && typeof meta.citationDigests === 'object'
+        ? meta.citationDigests
+        : null
+      let tracked = 0
+      for (const source of sources) {
+        if (digests && typeof digests[source] === 'string' && digests[source]) tracked++
+      }
+      return {
+        total: sources.size,
+        tracked,
+        untracked: sources.size - tracked,
+        hasDigests: Boolean(digests
+          && Object.values(digests).some(value => typeof value === 'string' && value)),
+      }
     }
 
     /**
@@ -1277,6 +1323,7 @@ window.__ModuleLoader__.load({
             return {
               ...entry, order: Number.MAX_SAFE_INTEGER, module: '', sources: [], sections: [],
               orphan: Boolean(manifest), outOfRange: 0, unchecked: 0,
+              citationCoverage: { total: 0, tracked: 0, untracked: 0, hasDigests: false },
             }
           }
           const issues = citationIssuesFor(meta, lineCounts)
@@ -1290,6 +1337,7 @@ window.__ModuleLoader__.load({
             sections: Array.isArray(meta.sections) ? meta.sections : [],
             orphan: false,
             ...issues,
+            citationCoverage: citationCoverageFor(meta),
           }
         })
         .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title))
@@ -2814,6 +2862,16 @@ window.__ModuleLoader__.load({
       const showModule = entries.some(entry => entry.module)
       const outOfRange = entries.reduce((sum, entry) => sum + (entry.outOfRange ?? 0), 0)
       const unchecked = entries.reduce((sum, entry) => sum + (entry.unchecked ?? 0), 0)
+      // 指纹覆盖率：数据只来自清单；旧清单无指纹时给出降级说明，不逐页打扰
+      const coverage = entries.reduce((acc, entry) => {
+        const item = entry.citationCoverage
+        if (!item) return acc
+        acc.total += item.total
+        acc.tracked += item.tracked
+        acc.untracked += item.untracked
+        acc.hasDigests = acc.hasDigests || item.hasDigests
+        return acc
+      }, { total: 0, tracked: 0, untracked: 0, hasDigests: false })
       return h('div', null,
         h('input', {
           type: 'search',
@@ -2834,6 +2892,12 @@ window.__ModuleLoader__.load({
           role: 'status',
           style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px' },
         }, tt('wikiIssueSummary', { outOfRange, unchecked })),
+        coverage.total > 0 && (!coverage.hasDigests || coverage.untracked > 0) && h('p', {
+          role: 'status',
+          style: { ...mutedStyle(), fontSize: 12, margin: '0 0 12px' },
+        }, coverage.hasDigests
+          ? tt('wikiCoverageSummary', coverage)
+          : tt('wikiCoverageLegacy', { total: coverage.total })),
         filtered.length === 0
           ? h('p', { style: { ...mutedStyle(), fontSize: 13 }, role: 'status' }, t('wikiEmpty'))
           : [...groups.entries()].map(([module, list]) => h('div', { key: module, style: { marginBottom: 12 } },
@@ -2859,6 +2923,11 @@ window.__ModuleLoader__.load({
                   textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   color: 'var(--dsw-alias-label-primary, #111827)' },
               }, entry.title),
+              coverage.hasDigests && entry.citationCoverage?.untracked > 0 && h('span', {
+                style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-label-tertiary, #6b7280)' },
+                title: tt('wikiCoverageBadge', { n: entry.citationCoverage.untracked }),
+                'aria-label': tt('wikiCoverageHint', { n: entry.citationCoverage.untracked }),
+              }, `◌ ${entry.citationCoverage.untracked}`),
               entry.outOfRange > 0 && h('span', {
                 style: { fontSize: 11, flex: 'none', color: 'var(--dsw-alias-state-error-primary, #dc2626)' },
                 title: tt('wikiRangeHint', { n: entry.outOfRange }),

@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.132.0] - 2026-11-27
+
+### Added
+
+- **Panel citation digest coverage**: the Wiki tab now derives per-page and
+  aggregate digest coverage from the manifest without reading source files.
+  Pages with citations but no digest show a muted `◌ N` badge (with an
+  accessible title), the list header shows `tracked/total` when coverage is
+  incomplete, and legacy manifests without any digests show one
+  `manifest has no digests` line instead of a badge on every page.
+
+### Fixed
+
+- **Double-counted panel citation issues**: page-level `sources` are the union
+  of section sources, so counting both doubled the out-of-range and unchecked
+  totals. Issue counts are now deduplicated per page, matching status/generate.
+
+### Tests
+
+- 486 cases pass (LANG=en and LANG=zh); the panel fixture manifest is now v3
+  with 4/5 digests, asserting both the `◌ 1` badge and the coverage summary,
+  plus a legacy v2 case that shows the no-digest line without per-page badges.
+
 ## [0.131.0] - 2026-11-27
 
 ### Added

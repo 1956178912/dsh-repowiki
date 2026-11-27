@@ -138,11 +138,11 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
     '.dsh-repowiki/wiki/zh/overview.md': wikiPage('概览', '这是概览正文。'),
     '.dsh-repowiki/wiki/zh/core.md': wikiPage('核心模块', '核心正文。'),
     '.dsh-repowiki/wiki/zh/_index.json': JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       pages: [
         {
           slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
-          sources: ['a.js'],
+          sources: ['a.js#L1-L3', 'a.js#L5', 'a.js#L7', 'a.js#L9', 'a.js#L11'],
           // 五个章节引用同一文件：验证 chip 上限（4）与溢出提示
           sections: [
             { heading: 'A 章节', sources: ['a.js#L1-L3'] },
@@ -151,6 +151,13 @@ function makeFakeRemotes(overrides = {}, workspacesOverride = null) {
             { heading: 'D 章节', sources: ['a.js#L9'] },
             { heading: 'E 章节', sources: ['a.js#L11'] },
           ],
+          // #L11 越界，生成时无法记录指纹 → 覆盖率 4/5，用于验证未覆盖徽章
+          citationDigests: {
+            'a.js#L1-L3': 'aaaaaaaaaaaa',
+            'a.js#L5': 'bbbbbbbbbbbb',
+            'a.js#L7': 'cccccccccccc',
+            'a.js#L9': 'dddddddddddd',
+          },
           generatedAt: '2026-11-26T08:00:00.000Z',
         },
         {
@@ -993,6 +1000,8 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(listTexts.some(s => s.includes('核心模块')), 'Wiki 列表应含第二个页面标题')
   assert.ok(listTexts.includes('wikiIssueSummary'), '展示引用问题摘要（概览页 #L11 超出 a.js 的 10 行）')
   assert.ok(listTexts.includes('⚠ 1'), '概览页带行号越界徽章')
+  assert.ok(listTexts.includes('wikiCoverageSummary'), '展示引用指纹覆盖率摘要')
+  assert.ok(listTexts.includes('◌ 1'), '概览页带未覆盖徽章（#L11 无指纹）')
 
   // 打开第一个页面，查看原文
   const entry = findNode(hooks.root, (n) => n.type === 'button'
@@ -1004,6 +1013,26 @@ test('Wiki 页签：页面列表与单页原文浏览', async () => {
   assert.ok(pageTexts.some(s => s.includes('这是概览正文。')), '应呈现页面正文')
   const backBtn = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'wikiBack')
   assert.ok(backBtn, '应渲染返回列表控件（aria-label）')
+})
+
+test('Wiki 页签：旧清单无指纹时展示覆盖率降级', async () => {
+  const legacy = JSON.stringify({
+    schemaVersion: 2,
+    pages: [{
+      slug: 'overview', path: 'wiki/zh/overview.md', title: '概览', order: 0,
+      sources: ['a.js'], sections: [], generatedAt: '2026-11-26T08:00:00.000Z',
+    }],
+  })
+  const hooks = await mountReadyPage({ '.dsh-repowiki/wiki/zh/_index.json': legacy })
+  const wikiTab = findNode(hooks.root, (n) => n.type === 'button'
+    && typeof n.children?.[0] === 'string' && n.children[0].startsWith('viewWiki'))
+  assert.ok(wikiTab, '应渲染 Wiki 页签')
+  wikiTab.props.onClick()
+  await flush()
+
+  const listTexts = collectTexts(hooks.root)
+  assert.ok(listTexts.includes('wikiCoverageLegacy'), '旧清单提示无指纹记录')
+  assert.ok(!listTexts.some(text => text.startsWith('◌')), '旧清单不逐页渲染未覆盖徽章')
 })
 
 test('Wiki 引用可点击跳转到对应页面', async () => {
