@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { verifyWiki, parseArgs, formatReport, main } from '../scripts/verify-wiki.mjs'
 import { citationDigest } from '../src/citation-digest.js'
+import { MEMORY_SCHEMA_VERSION } from '../src/schema.js'
 import { digestText, encodeFrontmatter } from '../src/util.js'
 
 /** 建临时项目根。 */
@@ -58,6 +59,8 @@ test('verify-wiki：干净资产严格模式通过', async () => {
   writeIndex(root, [{ path: 'a.ts', lines: 2 }])
   writeManifest(root, 'zh', {
     schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
     pages: [pageWithDigest('a.ts#L1', citationDigest(text, 1, 1))],
   })
 
@@ -147,8 +150,51 @@ test('verify-wiki：卡片变化导致 Wiki 陈旧', async () => {
   const stale = await verifyWiki({ root })
   assert.equal(stale.ok, false)
   assert.equal(stale.locales[0].stale, true)
+  assert.deepEqual(stale.locales[0].staleReasons, ['cards'])
   assert.match(stale.issues.join(' '), /wiki is stale: cards changed/)
-  assert.match(formatReport(stale), /\(stale\)/)
+  assert.match(formatReport(stale), /\(stale: cards\)/)
+})
+
+test('verify-wiki：已采信记忆变化导致 Wiki 陈旧', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  const memoryFile = path.join(root, '.dsh-repowiki/memory/zh/demo.md')
+  const memoryText = (status, body) => `${encodeFrontmatter({
+    schemaVersion: MEMORY_SCHEMA_VERSION,
+    kind: 'memory',
+    title: 'Demo',
+    tags: [],
+    status,
+    createdAt: 'now',
+  })}\n# Demo\n\n${body}\n`
+  writeText(memoryFile, memoryText('accepted', 'body-1'))
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('demo:body-1', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+
+  const fresh = await verifyWiki({ root })
+  assert.equal(fresh.ok, true)
+  assert.equal(fresh.locales[0].stale, false)
+
+  writeText(memoryFile, memoryText('accepted', 'body-2'))
+  const stale = await verifyWiki({ root })
+  assert.equal(stale.ok, false)
+  assert.equal(stale.locales[0].stale, true)
+  assert.deepEqual(stale.locales[0].staleReasons, ['memory'])
+  assert.match(stale.issues.join(' '), /wiki is stale: accepted memory changed/)
+  assert.match(formatReport(stale), /\(stale: memory\)/)
+
+  // 未采信（pending/rejected）记忆不参与 generate 的输入指纹：
+  // 恢复已采信内容后再加一条 pending，不应判陈旧。
+  writeText(memoryFile, memoryText('accepted', 'body-1'))
+  writeText(path.join(root, '.dsh-repowiki/memory/zh/extra.md'), memoryText('pending', 'draft'))
+  const pending = await verifyWiki({ root })
+  assert.equal(pending.ok, true)
+  assert.equal(pending.locales[0].stale, false)
 })
 
 test('verify-wiki：未覆盖默认警告，严格模式失败', async () => {
@@ -173,6 +219,23 @@ test('verify-wiki：未覆盖默认警告，严格模式失败', async () => {
   const strict = await verifyWiki({ root, strict: true })
   assert.equal(strict.ok, false)
   assert.match(strict.issues.join(' '), /1 citation\(s\) have no content digest/)
+  assert.match(strict.issues.join(' '), /manifest has no inputDigest\/memoryDigest/)
+})
+
+test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {
+  const root = makeRoot()
+  const optional = await verifyWiki({ root })
+  assert.equal(optional.ok, true)
+  assert.deepEqual(optional.warnings, ['no wiki manifests found'])
+
+  const required = await verifyWiki({ root, requireAssets: true })
+  assert.equal(required.ok, false)
+  assert.match(required.issues.join(' '), /no wiki manifests found/)
+
+  const script = fileURLToPath(new URL('../scripts/verify-wiki.mjs', import.meta.url))
+  const cli = spawnSync(process.execPath, [script, '--root', root, '--require'], { encoding: 'utf8' })
+  assert.equal(cli.status, 1)
+  assert.match(cli.stdout, /Result: FAIL/)
 })
 
 test('verify-wiki：显式 locale 缺失失败，无 Wiki 则通过', async () => {
@@ -190,11 +253,12 @@ test('verify-wiki：显式 locale 缺失失败，无 Wiki 则通过', async () =
 
 test('verify-wiki：参数解析与非法输入', () => {
   const parsed = parseArgs([
-    '--root', '/tmp/demo', '--locale', 'zh', '--locale', 'en', '--strict', '--json',
+    '--root', '/tmp/demo', '--locale', 'zh', '--locale', 'en', '--strict', '--require', '--json',
   ])
   assert.equal(parsed.root, path.resolve('/tmp/demo'))
   assert.deepEqual(parsed.locales, ['zh', 'en'])
   assert.equal(parsed.strict, true)
+  assert.equal(parsed.require, true)
   assert.equal(parsed.json, true)
   assert.throws(() => parseArgs(['--bogus']), /unknown argument/)
   assert.throws(() => parseArgs(['--locale', '../x']), /invalid locale/)

@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.140.0] - 2026-11-27
+
+- **记忆感知的陈旧门禁**：`verify:wiki` 同时重算已采信记忆的
+  `memoryDigest`（与 `repowiki-generate` 相同的 `slug:body` 排序），记忆在
+  生成后变化即失败；`staleReasons` 区分 `cards`/`memory`，文本报告标记
+  `(stale: cards, memory)`。
+- **`--require`**：没有 Wiki 清单时失败，避免 CI 因 root 写错或漏跑生成而
+  静默通过。
+- **`--strict` 收紧**：清单缺少 `inputDigest`/`memoryDigest`（陈旧性不可
+  验证）时也失败，与“未验证指纹即失败”的语义一致。
+- **测试**：502 例在 LANG=en 与 LANG=zh 下全通过；新增已采信记忆漂移、
+  pending/rejected 不参与指纹、`--require` 空目录经 API 与 CLI 失败用例。
+
 ## [0.139.0] - 2026-11-27
 
 - **陈旧 Wiki 门禁**：`verify:wiki` 现在重算卡片 `inputDigest`（与

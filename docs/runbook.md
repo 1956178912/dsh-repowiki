@@ -23,13 +23,14 @@ repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
 | 面板点击无反应 | DevTools Console 红错 | 面板有 `ErrorBoundary` 与 `role=status` 失败行；把错误文本反馈 |
 | 升级 dsh 后样式/功能异常 | `npm run verify:host` | 令牌漂移按输出修正；跑 `npm test` 回归 |
 | CI 提示 Wiki 引用失败 | `npm run verify:wiki -- --json` | 断链/越界/漂移按报告修引用或重新 `repowiki-generate`；未覆盖可 `--strict` 收紧 |
-| CI 提示 Wiki 陈旧（`stale`） | `npm run verify:wiki -- --json` 的 `locales[].stale` | 卡片在生成后变化；重新 `repowiki-generate`（必要时 `force=true`）。旧清单无 `inputDigest` 只告警，重建一次即可纳入检测 |
+| CI 提示 Wiki 陈旧（`stale`） | `npm run verify:wiki -- --json` 的 `locales[].stale`/`staleReasons` | 卡片或已采信记忆在生成后变化；重新 `repowiki-generate`（必要时 `force=true`）。旧清单缺指纹默认只告警、`--strict` 失败，重建一次即可纳入检测 |
+| CI 漏跑生成却通过 | — | 在门禁命令加 `--require`：没有 Wiki 清单直接失败，而不是带警告通过 |
 
 ## 常用命令
 
 ```sh
 npm run verify:host      # 主题令牌漂移
-npm run verify:wiki      # Wiki 断链/越界/漂移/陈旧/覆盖率门禁
+npm run verify:wiki      # Wiki 断链/越界/漂移/陈旧/覆盖率门禁（CI 加 --require）
 npm test                 # 全量回归
 npm run coverage:check   # 覆盖率门禁
 npm run scan:secrets     # 密钥扫描

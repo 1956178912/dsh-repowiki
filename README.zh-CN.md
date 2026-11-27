@@ -8,7 +8,7 @@
 
 > 设计依据：仓库 Wiki / 知识卡片功能移植方案的内部评审记录（评审文档本身不包含在本仓库中）。硬约束：零第三方 dsh 插件依赖，全部能力来自 dsh 官方机制。
 
-## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与陈旧 Wiki 检测、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.139.0）
+## 当前阶段：Phase 1–4 完成 —— 11 个工具、零依赖符号索引、14 语言与 SFC/工作区/构建文件解析、面板卡片/Wiki/记忆视图与深链及核心文件排名与引用问题/指纹覆盖率徽章、跨语言资产回退、文档健康度与 Wiki 引用完整性、行号越界校验及内容漂移指纹、漂移感知增量合成、引用感知健康分、引用指纹覆盖率与原因分类及面板提示、有界并发指纹校验、页级覆盖率明细、CI Wiki 新鲜度门禁与卡片/记忆陈旧检测及资产必需校验、未覆盖页面筛选、保守导出审计、模块耦合/不稳定性指标、符号级影响面与使用点证据及受影响测试路由、PageRank 核心文件、带符号锚点的任务上下文包（v0.140.0）
 
 | 能力 | 说明 |
 |---|---|
@@ -276,6 +276,10 @@
 - 陈旧 Wiki 检测（v0.139.0）：`verify:wiki` 按与 generate 相同口径重算
   卡片 `inputDigest`，卡片在生成后变化即失败（即使所有引用路径仍存在）；
   旧清单无 `inputDigest` 时仅告警跳过
+- 记忆陈旧与资产必需（v0.140.0）：门禁同时重算已采信记忆的
+  `memoryDigest`（与 generate 的增量短路同口径），`staleReasons` 区分
+  卡片/记忆；`--strict` 对缺失陈旧指纹的清单失败；`--require` 在无 Wiki
+  资产时失败，避免 CI 静默通过
 - 可选语义索引按方案保持后置（YAGNI）
 - 会话记忆条目对后续会话可见，与知识卡片一同构成知识库
 
@@ -337,17 +341,20 @@ npm run bench -- 2000
 # 找不到 app.asar（如 CI）时以 exit=3 跳过（v0.22.0）
 npm run verify:host
 
-# Wiki 新鲜度门禁：断链/行号越界/内容漂移/卡片变更后的陈旧 Wiki 失败；
-# 未覆盖/未验证默认警告，--strict 时失败；支持 --root/--locale/--json（v0.139.0）
-npm run verify:wiki -- --root . --strict
+# Wiki 新鲜度门禁：断链/行号越界/内容漂移/卡片或已采信记忆变化后的
+# 陈旧 Wiki 失败；未覆盖/未验证默认警告，--strict 时失败（缺陈旧指纹
+# 也失败）；--require 在无 Wiki 资产时失败；支持 --root/--locale/--json（v0.140.0）
+npm run verify:wiki -- --root . --strict --require
 ```
 
 ### CI 用法
 
-`npm run verify:wiki -- --json` 输出机器可读报告；Wiki 有问题或卡片变更后
-未重新生成（陈旧）时退出码非 0，可接在 `repowiki-generate` 之后作为流水线
-质量闸门。退出码：`0` 通过、`1` 校验失败、`2` 参数/读取错误。`--strict`
-还会把未覆盖引用与未验证指纹视为失败；默认仅警告。
+`npm run verify:wiki -- --json` 输出机器可读报告；Wiki 有问题或卡片/已采信
+记忆变更后未重新生成（陈旧）时退出码非 0，可接在 `repowiki-generate` 之后
+作为流水线质量闸门。退出码：`0` 通过、`1` 校验失败、`2` 参数/读取错误。
+`--strict` 还会把未覆盖引用、未验证指纹与缺失陈旧指纹的清单视为失败；
+默认仅警告。加 `--require` 可让“没有 Wiki 资产”（root 写错或漏跑生成）
+直接失败，而不是带警告通过。
 
 ## 升级运维约定（dsh 处于 rc 阶段，公开 seam 高频变动）
 
@@ -360,7 +367,7 @@ npm run verify:wiki -- --root . --strict
 ```
 index.js               插件入口（apply + inject: fs/tools/subagents）
 scripts/verify-host-tokens.mjs  本地宿主漂移自检（令牌存活性，v0.22.0）
-scripts/verify-wiki.mjs         Wiki 新鲜度门禁（断链/越界/漂移/陈旧/覆盖率，v0.139.0）
+scripts/verify-wiki.mjs         Wiki 新鲜度门禁（断链/越界/漂移/陈旧/覆盖率，v0.140.0）
 scripts/check-coverage.mjs      覆盖率门禁（行/分支/函数）
 scripts/scan-secrets.mjs        git 跟踪文件密钥扫描
 scripts/bench.mjs               合成仓库索引基准
@@ -415,7 +422,7 @@ src/memory.js          会话记忆条目（写读/状态流转）
 src/tool-memory.js     repowiki-memory 工具
 src/tool-edit.js       repowiki-edit 工具
 src/types.d.ts         ctx.fs / 工具定义的共享类型声明
-test/                  单元与集成测试（500 用例）
+test/                  单元与集成测试（502 用例）
 ```
 
 ## 许可

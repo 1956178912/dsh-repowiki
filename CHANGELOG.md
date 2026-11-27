@@ -5,6 +5,28 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.140.0] - 2026-11-27
+
+### Added
+
+- **Memory-aware stale gate**: `verify:wiki` now also recomputes the accepted
+  memory `memoryDigest` (same `slug:body` ordering as `repowiki-generate`) and
+  fails when accepted memory changed after generation. `staleReasons` reports
+  `cards`/`memory`, and the text report prints `(stale: cards, memory)`.
+- **`--require`**: fails when no wiki manifest exists, so a CI gate cannot pass
+  silently against a wrong root or a skipped generation step.
+
+### Changed
+
+- `--strict` now also fails on manifests without `inputDigest`/`memoryDigest`
+  (unverifiable staleness), matching its "unverifiable digests fail" semantics.
+
+### Tests
+
+- 502 cases pass (LANG=en and LANG=zh); new cases cover accepted-memory drift,
+  pending/rejected memory being ignored, and `--require` failing an empty root
+  through both the API and the CLI exit code.
+
 ## [0.139.0] - 2026-11-27
 
 ### Added

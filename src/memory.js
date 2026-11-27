@@ -189,6 +189,6 @@ export async function setMemoryStatus(fs, root, locale, slug, status) {
  * @param {string} text - 条目文件内容。
  * @returns {{meta:object, body:string}|null} 失败返回 null。
  */
-function parseMemoryText(text) {
+export function parseMemoryText(text) {
   return parseFrontmatter(text, MEMORY_SCHEMA_VERSION)
 }

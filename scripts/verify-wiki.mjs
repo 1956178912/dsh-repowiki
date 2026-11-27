@@ -7,7 +7,7 @@
  * - 缺失引用路径（索引 + 文件系统探测，最多 200 个）
  * - 行号越界（索引 v6 起记录 `files[].lines`）
  * - 引用内容漂移（清单 v3 `citationDigests`）
- * - 陈旧 Wiki（卡片 `inputDigest` 与清单不一致，说明生成后卡片又变了）
+ * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
  *
  * 用法：
@@ -29,6 +29,8 @@ import {
   checkCitationDrift, summarizeCitationCoverage, citationCoveragePages,
 } from '../src/citation-drift.js'
 import { parseCard } from '../src/knowledge.js'
+import { parseMemoryText } from '../src/memory.js'
+import { MEMORY_DIR } from '../src/schema.js'
 import { digestText } from '../src/util.js'
 
 const ASSET_DIR = '.dsh-repowiki'
@@ -44,6 +46,7 @@ const USAGE = [
   '',
   '  --root <dir>      Project root (default: current directory)',
   '  --locale <name>   Verify one locale (repeatable; default: every wiki locale)',
+  '  --require         Fail when no wiki manifest exists (for CI)',
   '  --strict          Also fail on untracked citations and unverifiable digests',
   '  --json            Machine-readable output',
   '  --help            Show this help',
@@ -54,8 +57,8 @@ const USAGE = [
 /**
  * 解析命令行参数。
  * @param {string[]} argv - 参数（不含 node 与脚本名）。
- * @returns {{root:string, locales:string[], strict:boolean, json:boolean, help:boolean}}
- *   解析结果。
+ * @returns {{root:string, locales:string[], strict:boolean, json:boolean, help:boolean,
+ *   require:boolean}} 解析结果。
  */
 export function parseArgs(argv) {
   const args = {
@@ -64,10 +67,12 @@ export function parseArgs(argv) {
     strict: false,
     json: false,
     help: false,
+    require: false,
   }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--strict') { args.strict = true; continue }
+    if (arg === '--require') { args.require = true; continue }
     if (arg === '--json') { args.json = true; continue }
     if (arg === '--help' || arg === '-h') { args.help = true; continue }
     if (arg === '--root') {
@@ -262,6 +267,47 @@ function cardsDigest(cards) {
 }
 
 /**
+ * 读取某 locale 的已采信记忆（正文口径与 repowiki-generate 一致）。
+ * @param {string} root - 项目根。
+ * @param {string} locale - 语言。
+ * @returns {Promise<Map<string, string>>} slug → 去掉一级标题的正文。
+ */
+async function readMemories(root, locale) {
+  const dir = path.join(root, ASSET_DIR, MEMORY_DIR, locale)
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return new Map()
+  }
+  const memories = new Map()
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+    try {
+      const parsed = parseMemoryText(await readFile(path.join(dir, entry.name), 'utf8'))
+      if (!parsed || parsed.meta.status !== 'accepted') continue
+      const slug = entry.name.replace(/\.md$/, '')
+      memories.set(slug, parsed.body.replace(/^\s*#[^\n]*\n+/, '').trim())
+    } catch {
+      // 单条坏记忆不阻断门禁；缺失会让 memoryDigest 不匹配而报 stale
+    }
+  }
+  return memories
+}
+
+/**
+ * 计算已采信记忆集合的 memoryDigest（与 repowiki-generate 相同）。
+ * @param {Map<string, string>} memories - slug → 正文。
+ * @returns {string} sha256-16。
+ */
+function memoriesDigest(memories) {
+  return digestText(
+    [...memories.entries()].map(([slug, body]) => `${slug}:${body}`).sort().join('\n'),
+    16,
+  )
+}
+
+/**
  * 校验单个 locale。
  * @param {string} root - 项目根。
  * @param {string} locale - 语言目录名。
@@ -295,17 +341,36 @@ async function verifyLocale(root, locale, index, strict) {
   const manifest = loaded.value
   const issues = []
   const warnings = []
-  // 陈旧检查：清单 inputDigest 与当前卡片集合不一致，说明卡片变了但 Wiki
-  // 未重新生成；即使引用路径都有效，内容也可能过期。
+  // 陈旧检查：卡片与已采信记忆的指纹只要有一项与清单不一致，就说明生成后
+  // 输入变了；即使引用路径都有效，内容也可能过期。generate 的增量短路同时
+  // 比较两者，门禁必须同口径，避免"生成认为要重跑、verify 认为新鲜"。
   const cards = await readCards(root, locale)
-  const currentInputDigest = cardsDigest(cards)
-  const stale = typeof manifest.inputDigest === 'string' && manifest.inputDigest
-    ? currentInputDigest !== manifest.inputDigest
+  const cardStale = typeof manifest.inputDigest === 'string' && manifest.inputDigest
+    ? cardsDigest(cards) !== manifest.inputDigest
     : null
-  if (stale === true) {
+  const memories = await readMemories(root, locale)
+  const memoryStale = typeof manifest.memoryDigest === 'string' && manifest.memoryDigest
+    ? memoriesDigest(memories) !== manifest.memoryDigest
+    : null
+  const staleReasons = []
+  if (cardStale === true) {
+    staleReasons.push('cards')
     issues.push('wiki is stale: cards changed since generation (run repowiki-generate)')
-  } else if (stale === null) {
-    warnings.push('manifest has no inputDigest; stale check skipped')
+  }
+  if (memoryStale === true) {
+    staleReasons.push('memory')
+    issues.push('wiki is stale: accepted memory changed since generation (run repowiki-generate)')
+  }
+  const stale = staleReasons.length > 0
+    ? true
+    : cardStale === null && memoryStale === null ? null : false
+  const missingDigests = []
+  if (cardStale === null) missingDigests.push('inputDigest')
+  if (memoryStale === null) missingDigests.push('memoryDigest')
+  if (missingDigests.length > 0) {
+    const message = `manifest has no ${missingDigests.join('/')}; stale check skipped`
+    if (strict) issues.push(message)
+    else warnings.push(message)
   }
   const { known, capped } = await resolveKnown(root, manifest, index.files)
   const broken = findBrokenWikiCitations(manifest, known)
@@ -342,6 +407,7 @@ async function verifyLocale(root, locale, index, strict) {
     issues,
     warnings,
     stale,
+    staleReasons,
     pages: manifest.pages.length,
     broken,
     ranges,
@@ -383,24 +449,28 @@ async function discoverLocales(root) {
 
 /**
  * 校验 Wiki 资产。
- * @param {{root?:string, locales?:string[], strict?:boolean}} [options] - 选项。
+ * @param {{root?:string, locales?:string[], strict?:boolean, requireAssets?:boolean}} [options]
+ *   选项；`requireAssets` 为 true 时没有 Wiki 清单也判失败（CI 用）。
  * @returns {Promise<{root:string, strict:boolean, ok:boolean, issues:string[],
  *   warnings:string[], locales:object[], index:object, totals:object}>} 结果。
  */
 export async function verifyWiki(options = {}) {
   const root = path.resolve(options.root ?? process.cwd())
   const strict = options.strict === true
+  const requireAssets = options.requireAssets === true
   const requested = Array.isArray(options.locales) ? [...new Set(options.locales)] : []
   const index = await loadIndex(root)
   const globalIssues = index.error ? [`index.json: ${index.error}`] : []
   const targetLocales = requested.length > 0 ? requested : await discoverLocales(root)
   if (targetLocales.length === 0) {
+    const missing = 'no wiki manifests found'
+    const issues = requireAssets ? [...globalIssues, missing] : globalIssues
     return {
       root,
       strict,
-      ok: globalIssues.length === 0,
-      issues: globalIssues,
-      warnings: ['no wiki manifests found'],
+      ok: issues.length === 0,
+      issues,
+      warnings: requireAssets ? [] : [missing],
       locales: [],
       index: summarizeIndex(index),
       totals: { pages: 0, citations: 0, tracked: 0, untracked: 0, broken: 0, outOfRange: 0, drift: 0 },
@@ -467,7 +537,10 @@ export function formatReport(result) {
     : 'missing'}`)
   if (result.locales.length === 0) lines.push('No wiki manifests found.')
   for (const locale of result.locales) {
-    lines.push(`${locale.locale}: ${locale.pages} page(s), ${locale.coverage?.total ?? 0} citation(s) (${locale.coverage?.tracked ?? 0} tracked, ${locale.coverage?.untracked ?? 0} untracked)${locale.stale === true ? ' (stale)' : ''}`)
+    const staleNote = locale.stale === true
+      ? ` (stale${Array.isArray(locale.staleReasons) && locale.staleReasons.length > 0 ? `: ${locale.staleReasons.join(', ')}` : ''})`
+      : ''
+    lines.push(`${locale.locale}: ${locale.pages} page(s), ${locale.coverage?.total ?? 0} citation(s) (${locale.coverage?.tracked ?? 0} tracked, ${locale.coverage?.untracked ?? 0} untracked)${staleNote}`)
     lines.push(`  broken ${locale.broken?.total ?? 0} / out-of-range ${locale.ranges?.total ?? 0} / drift ${locale.drift?.total ?? 0}`)
     for (const issue of locale.issues) lines.push(`  - ${issue}`)
     for (const warning of locale.warnings) lines.push(`  ! ${warning}`)
@@ -495,7 +568,12 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(USAGE)
     return 0
   }
-  const result = await verifyWiki({ root: args.root, locales: args.locales, strict: args.strict })
+  const result = await verifyWiki({
+    root: args.root,
+    locales: args.locales,
+    strict: args.strict,
+    requireAssets: args.require,
+  })
   console.log(args.json ? JSON.stringify(result, null, 2) : formatReport(result))
   return result.ok ? 0 : 1
 }
