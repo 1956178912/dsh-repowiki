@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, locale-aware asset fallback, documentation health, symbol-aware change impact with lexical usage evidence, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.120.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links and core-file ranking, locale-aware asset fallback, documentation health, symbol-aware change impact with lexical usage evidence, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.121.0)
 
 | Capability | Description |
 |---|---|
@@ -117,6 +117,7 @@ Roadmap:
 - Lexical usage evidence (v0.118.0): symbol-scoped `repowiki-impact` scans direct named importers for identifier-boundary occurrences, excluding import/export lists, destructuring and whole-line comments; bounded to 20 files / 10 sites per symbol / 100 total, with unreadable importers reported as unknown rather than absent
 - PageRank core files and repo-map fallback (v0.119.0): `repowiki-status` ranks files by static import-graph PageRank, capturing indirect importance that fan-in misses; `repowiki-context` uses the same ranking as an explicitly labelled fallback when a task matches no indexed file
 - Symbol anchors for task context (v0.120.0): `repowiki-context symbols=[...]` anchors the pack to definitions (bare names or `path#name`), works without a query, reports bare-name ambiguity with candidates, and never masks failed anchors with the repo-map fallback
+- Panel core files (v0.121.0): the single-workspace view renders a PageRank chip row next to fan-in hubs, with clickable files that open their detail; hidden when the index has no edges
 - Optional semantic index stays deferred (YAGNI per the plan)
 
 ## Architecture highlights
@@ -241,7 +242,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (448 cases)
+test/                  Unit and integration tests (449 cases)
 ```
 
 ## License

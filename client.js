@@ -114,6 +114,8 @@ const DICTS = {
     warningsToggleHint: '点击展开全部告警',
     hubLabel: '高风险入口',
     hubHint: '被最多文件依赖（改动影响面最大）',
+    coreLabel: '核心文件',
+    coreHint: '按静态 import 图 PageRank 排名（计入间接重要性，与 fan-in 互补）',
     cycleBadgeHint: '参与 {n} 个文件的循环依赖',
     cycleBadgeRoute: '（如 {route}）',
     openFile: '打开 {path}',
@@ -213,6 +215,8 @@ const DICTS = {
     warningsToggleHint: 'Click to expand all warnings',
     hubLabel: 'High-fan-in files',
     hubHint: 'Most imported files (largest change impact)',
+    coreLabel: 'Core files',
+    coreHint: 'Ranked by PageRank over static imports (weights indirect importance, complementing fan-in)',
     cycleBadgeHint: 'Part of a {n}-file import cycle',
     cycleBadgeRoute: ' (e.g. {route})',
     openFile: 'Open {path}',
@@ -656,6 +660,60 @@ window.__ModuleLoader__.load({
       return [...byTo.entries()]
         .map(([path, froms]) => ({ path, dependents: froms.size }))
         .sort((a, b) => b.dependents - a.dependents || a.path.localeCompare(b.path))
+        .slice(0, Math.max(1, Math.floor(limit)))
+    }
+
+    /**
+     * 单库视图的核心文件：静态 import 图上的 PageRank（前三）。
+     * 与 src/graph-rank.js 同参数（阻尼 0.85、收敛阈值 1e-6、迭代上限 50、
+     * 边去重、忽略自引用、dangling 权重均分），只统计出现在依赖边里的文件；
+     * 同分按路径升序，保证渲染稳定。
+     * @param {object|null} index - 工作区 index.json。
+     * @param {number} [limit] - 返回条目上限（默认 3）。
+     * @returns {Array<{path:string, score:number}>} 按分数降序。
+     */
+    function coreFilesFor(index, limit = 3) {
+      /** @type {Map<string, Set<string>>} */
+      const out = new Map()
+      const nodes = new Set()
+      for (const edge of Array.isArray(index?.edges) ? index.edges : []) {
+        if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
+        if (edge.from === edge.to) continue
+        nodes.add(edge.from)
+        nodes.add(edge.to)
+        let targets = out.get(edge.from)
+        if (!targets) {
+          targets = new Set()
+          out.set(edge.from, targets)
+        }
+        targets.add(edge.to)
+      }
+      const paths = [...nodes].sort()
+      if (paths.length === 0) return []
+      const total = paths.length
+      const damping = 0.85
+      /** @type {Map<string, number>} */
+      let rank = new Map(paths.map(path => [path, 1 / total]))
+      for (let iteration = 0; iteration < 50; iteration++) {
+        let dangling = 0
+        for (const path of paths) {
+          if (!(out.get(path)?.size)) dangling += rank.get(path) ?? 0
+        }
+        const base = (1 - damping) / total + (damping * dangling) / total
+        /** @type {Map<string, number>} */
+        const next = new Map(paths.map(path => [path, base]))
+        for (const [from, targets] of out) {
+          const weight = (rank.get(from) ?? 0) / targets.size
+          for (const to of targets) next.set(to, (next.get(to) ?? 0) + damping * weight)
+        }
+        let delta = 0
+        for (const path of paths) delta += Math.abs((next.get(path) ?? 0) - (rank.get(path) ?? 0))
+        rank = next
+        if (delta < 1e-6) break
+      }
+      return paths
+        .map(path => ({ path, score: Math.round((rank.get(path) ?? 0) * 1e6) / 1e6 }))
+        .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
         .slice(0, Math.max(1, Math.floor(limit)))
     }
 
@@ -1662,6 +1720,8 @@ window.__ModuleLoader__.load({
       const rowByPath = useMemo(() => new Map(rows.map(r => [r.path, r])), [rows])
       /** 单库视图的高风险入口（fan-in 前三，与状态工具同口径）。 */
       const hubs = useMemo(() => topDependentsFor(index, 3), [index])
+      /** 单库视图的核心文件（PageRank 前三，与 src/graph-rank.js 同口径）。 */
+      const coreFiles = useMemo(() => coreFilesFor(index, 3), [index])
       /** 索引期告警（Go internal 越界、跳过文件等），统计行计数 + 悬停明细。 */
       const indexWarnings = useMemo(
         () => (Array.isArray(index?.warnings) ? index.warnings.filter(w => typeof w === 'string' && w) : []),
@@ -1934,6 +1994,35 @@ window.__ModuleLoader__.load({
               color: 'var(--dsw-alias-label-secondary, #6b7280)',
             },
           }, `${hub.path} (${hub.dependents})`)),
+        ),
+
+        // 核心文件：静态 import 图 PageRank 前三（计入间接重要性，与 fan-in 互补）
+        !overview && status === 'ready' && index && coreFiles.length > 0 && h('div', {
+          'aria-label': t('coreLabel'),
+          title: t('coreHint'),
+          style: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 12 },
+        },
+          h('span', { style: { fontSize: 12, ...muted } }, t('coreLabel')),
+          ...coreFiles.map((entry) => {
+            const label = `${entry.path} (${entry.score.toFixed(3)})`
+            return h('button', {
+              key: entry.path,
+              type: 'button',
+              onClick: guard('open-core', () => {
+                const row = rowByPath.get(entry.path)
+                if (row) openDetail(row)
+              }),
+              'aria-label': label,
+              title: `${entry.path} — PageRank ${entry.score.toFixed(3)}`,
+              style: {
+                fontSize: 11.5, lineHeight: '18px', padding: '1px 8px',
+                borderRadius: 'var(--dsw-radius-sm, 6px)',
+                border: '1px solid var(--dsw-alias-border-l2, #e5e7eb)',
+                background: 'transparent', fontFamily: 'inherit', cursor: 'pointer',
+                color: 'var(--dsw-alias-label-secondary, #6b7280)',
+              },
+            }, label)
+          }),
         ),
 
         // 状态分支（单库模式）

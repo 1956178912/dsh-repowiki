@@ -709,6 +709,32 @@ test('单库视图展示高风险入口（fan-in 前三，按不同依赖方计�
   assert.ok(!collectTexts(empty.root).includes('hubLabel'), '无依赖边时隐藏 hub 行')
 })
 
+test('单库视图展示 PageRank 核心文件（间接重要性，可点击打开详情）', async () => {
+  const hooks = await mountReadyPage()
+  const texts = collectTexts(hooks.root)
+  assert.ok(texts.includes('coreLabel'), '渲染核心文件行标签')
+  assert.ok(texts.some(s => s === 'c.js (0.363)'), 'c.js 排名最高（双向环 + 两个上游）')
+  assert.ok(texts.some(s => s === 'a.js (0.280)'), 'a.js 次之')
+  assert.ok(texts.some(s => s === 'd.js (0.222)'), 'd.js 第三')
+
+  const chip = findNode(hooks.root, (n) => n.type === 'button' && n.props['aria-label'] === 'c.js (0.363)')
+  assert.ok(chip, '核心文件 chip 为可点击按钮')
+  chip.props.onClick()
+  await flush()
+  const region = findNode(hooks.root, (n) => n.props?.role === 'region')
+  assert.equal(region.props['aria-label'], 'C 卡片', '点击核心文件打开对应详情')
+
+  const empty = await mountReadyPage({
+    '.dsh-repowiki/index.json': JSON.stringify({
+      schemaVersion: 5, generatedAt: '2026-11-26T08:00:00.000Z',
+      stats: { files: 1, symbols: 1 }, stack: { technologies: [] },
+      files: [{ path: 'a.js', lang: 'javascript', digest: 'dig-a', symbols: [], imports: [] }],
+      edges: [],
+    }),
+  })
+  assert.ok(!collectTexts(empty.root).includes('coreLabel'), '无依赖边时隐藏核心文件行')
+})
+
 test('卡片行标记循环依赖成员（SCC 口径，非成员不标记）', async () => {
   const hooks = await mountReadyPage()
   const texts = collectTexts(hooks.root)

@@ -150,7 +150,8 @@ test('正常路径补缺：列表视图（CardRow）渲染卡片行', async () =
   const generated = [...container.querySelectorAll('button[aria-label]')]
     .filter((b) => !['reload', 'viewGrid', 'viewList'].includes(b.getAttribute('aria-label'))
       && !b.getAttribute('aria-label').includes('(pending)')
-      && !/ \(\d+\)$/.test(b.getAttribute('aria-label')))
+      && !/ \(\d+\)$/.test(b.getAttribute('aria-label'))
+      && !/ \(\d+\.\d{3}\)$/.test(b.getAttribute('aria-label')))
   assert.ok(generated.length > 0, '列表视图应渲染卡片行')
   // 卡片行形态：标题 · 路径
   const rowText = generated[0].textContent

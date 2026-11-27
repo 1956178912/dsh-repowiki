@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.121.0] - 2026-11-27
+
+### Added
+
+- **Panel core-file ranking**: the single-workspace view now renders a
+  `Core files` chip row computed with the same PageRank parameters as
+  `src/graph-rank.js` (deduplicated edges, self-references ignored, dangling
+  redistribution, damping 0.85, 50-iteration cap). Scores are shown to three
+  decimals, chips are keyboard-clickable buttons that open the matching file
+  detail, and the row is hidden when the index has no edges. It complements
+  the existing fan-in row: PageRank weights indirect importance, so modules
+  that are central through their dependents also surface.
+
+### Tests
+
+- 449 cases pass (LANG=en and LANG=zh); coverage and benchmarks are recorded
+  in `docs/coverage.md` and `docs/benchmarks.md`.
+
 ## [0.120.0] - 2026-11-27
 
 ### Added
