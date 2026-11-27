@@ -158,6 +158,31 @@ test('health：清单缺页扣 Wiki 分量', () => {
   assert.match(allMissing.issues.join(' '), /2 wiki page\(s\).*missing on disk/)
 })
 
+test('health：生成失败页与非法路径扣 Wiki 分量', () => {
+  const base = {
+    coverage: { eligible: 4, documented: 4, fresh: 4, stale: 0, percent: 100 },
+    wiki: { count: 4, stale: 0, orphaned: 0 },
+    cycles: [],
+    hubs: [],
+    warnings: [],
+    skipped: 0,
+  }
+  const failed = assessHealth({ ...base, wiki: { ...base.wiki, failed: 1 } })
+  assert.equal(failed.components[1].score, 92, '失败页计入分母，1/5 扣 40 分权重')
+  assert.match(failed.issues.join(' '), /failed to write during the last generation/)
+  assert.match(failed.components[1].detail, /1 failed/)
+
+  const invalid = assessHealth({ ...base, wiki: { ...base.wiki, invalid: 2 } })
+  assert.equal(invalid.components[1].score, 90, '非法路径 5 分/条')
+  assert.match(invalid.issues.join(' '), /path\(s\) are invalid/)
+
+  const allFailed = assessHealth({
+    ...base,
+    wiki: { count: 0, stale: 0, orphaned: 0, failed: 2 },
+  })
+  assert.equal(allFailed.components[1].score, 60, '全部生成失败仍保留 60 分底')
+})
+
 test('health：等级边界', () => {
   assert.equal(healthGrade(100), 'A')
   assert.equal(healthGrade(85), 'A')

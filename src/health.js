@@ -122,7 +122,10 @@ function citationCounts(citations) {
  * @param {object} input - 已由调用方读取的事实快照。
  * @param {{eligible:number, documented:number, fresh:number, stale:number, percent:number}} input.coverage
  *   文档覆盖率。
- * @param {{count:number, stale:number, orphaned:number, missing?:number}} input.wiki - Wiki 页面统计。
+ * @param {{count:number, stale:number, orphaned:number, missing?:number,
+ *   failed?:number, invalid?:number}} input.wiki - Wiki 页面统计；
+ *   `missing` 为清单登记但磁盘缺失，`failed` 为上次生成写失败，
+ *   `invalid` 为路径非法/与文件位置不符（调用方应排除已计入 missing 的）。
  * @param {{broken?:number, outOfRange?:number, drift?:number, untracked?:number,
  *   unchecked?:number}} [input.citations]
  *   引用完整性问题计数（缺失路径/行号越界/内容漂移/未覆盖/未验证）；前 3 类扣 Wiki 分量。
@@ -139,6 +142,8 @@ export function assessHealth(input) {
   const coverage = input.coverage
   const wiki = input.wiki ?? { count: 0, stale: 0, orphaned: 0 }
   const wikiMissing = Number.isInteger(wiki.missing) && wiki.missing > 0 ? wiki.missing : 0
+  const wikiFailed = Number.isInteger(wiki.failed) && wiki.failed > 0 ? wiki.failed : 0
+  const wikiInvalid = Number.isInteger(wiki.invalid) && wiki.invalid > 0 ? wiki.invalid : 0
   const citations = citationCounts(input.citations)
   const cycles = Array.isArray(input.cycles) ? input.cycles : []
   const hubs = Array.isArray(input.hubs) ? input.hubs : []
@@ -152,13 +157,17 @@ export function assessHealth(input) {
     + Math.min(20, citations.outOfRange * 5)
     + Math.min(20, citations.drift * 5)
   const citationProblems = citations.broken + citations.outOfRange + citations.drift
-  // 缺页也计入 Wiki 总页数：清单登记但文件丢失属于资产损坏，
-  // 按 40 分权重扣分（与引用缺失的上限一致），避免“缺页不痛不痒”。
-  const wikiTotal = wiki.count + wikiMissing
+  // 缺页与生成失败都计入 Wiki 总页数：清单登记但文件丢失、或上次生成
+  // 写失败的页面都属于资产损坏，按 40 分权重扣分（与引用缺失的上限一致）。
+  // invalid 是仍在磁盘上的页面但清单路径损坏，按 5 分/条单独扣（上限 20），
+  // 避免与 missing 双扣。
+  const wikiMissingOrFailed = wikiMissing + wikiFailed
+  const wikiTotal = wiki.count + wikiMissingOrFailed
   const wikiScore = wikiTotal === 0
     ? 0
     : clamp(100 - 60 * (wiki.stale / wikiTotal) - 20 * (wiki.orphaned / wikiTotal)
-      - 40 * (wikiMissing / wikiTotal) - citationPenalty)
+      - 40 * (wikiMissingOrFailed / wikiTotal) - Math.min(20, wikiInvalid * 5)
+      - citationPenalty)
   const topHub = hubs[0]?.dependents ?? 0
   const hubPenalty = topHub >= 10 ? 15 : topHub >= 5 ? 8 : 0
   const archScore = clamp(100 - Math.min(60, cycles.length * 10) - hubPenalty)
@@ -179,7 +188,9 @@ export function assessHealth(input) {
   if (citations.broken > 0) issues.push(`${citations.broken} wiki citation path(s) are missing`)
   if (wikiTotal === 0) issues.push('no wiki pages have been generated')
   else if (wikiMissing > 0) issues.push(`${wikiMissing} wiki page(s) are listed in the manifest but missing on disk`)
+  else if (wikiFailed > 0) issues.push(`${wikiFailed} wiki page(s) failed to write during the last generation`)
   else if (wiki.stale > 0) issues.push(`${wiki.stale} wiki page(s) are stale`)
+  if (wikiInvalid > 0) issues.push(`${wikiInvalid} wiki page path(s) are invalid or do not match their file`)
   if (citations.outOfRange > 0) issues.push(`${citations.outOfRange} wiki citation line range(s) exceed the cited file length`)
   if (citations.drift > 0) issues.push(`${citations.drift} wiki citation(s) changed since generation`)
   if (citations.untracked > 0) issues.push(`${citations.untracked} citation(s) have no content digest`)
@@ -192,7 +203,7 @@ export function assessHealth(input) {
     grade,
     components: [
       { key: 'documentation', score: Math.round(docsScore), weight: HEALTH_WEIGHTS.documentation, detail: `${coverage.documented}/${coverage.eligible} eligible files documented` },
-      { key: 'wiki', score: Math.round(wikiScore), weight: HEALTH_WEIGHTS.wiki, detail: wikiTotal === 0 ? 'no wiki pages' : `${wiki.count} page(s), ${wiki.stale} stale, ${wikiMissing} missing, ${wiki.orphaned} orphaned${citationProblems > 0 ? `, ${citationProblems} citation issue(s)` : ''}` },
+      { key: 'wiki', score: Math.round(wikiScore), weight: HEALTH_WEIGHTS.wiki, detail: wikiTotal === 0 ? 'no wiki pages' : `${wiki.count} page(s), ${wiki.stale} stale, ${wikiMissing} missing, ${wikiFailed} failed, ${wikiInvalid} invalid, ${wiki.orphaned} orphaned${citationProblems > 0 ? `, ${citationProblems} citation issue(s)` : ''}` },
       { key: 'architecture', score: Math.round(archScore), weight: HEALTH_WEIGHTS.architecture, detail: `${cycles.length} cycle group(s), top fan-in ${topHub}` },
       { key: 'hygiene', score: Math.round(hygieneScore), weight: HEALTH_WEIGHTS.hygiene, detail: `${warnings.length} warning(s), ${skipped} skipped file(s)` },
     ],

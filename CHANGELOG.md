@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.158.0] - 2026-11-27
+
+### Fixed
+
+- **False invalid-path counts in `repowiki-status`**: `listWikiPages` returns
+  paths relative to the project root (`.dsh-repowiki/wiki/...`) while manifest
+  paths are relative to the asset root (`wiki/...`). The comparison treated
+  every normal page as a path mismatch, so healthy wikis reported
+  `wiki.invalid = N`. The asset prefix is now stripped before comparing.
+
+### Added
+
+- **Health score counts failed pages and invalid paths**: the wiki component
+  now includes pages that failed to write during the last generation in its
+  denominator (40-point damage weight, same as missing pages, with a 60-point
+  floor) and deducts 5 points per invalid page path (capped at 20). Invalid
+  pages already counted as missing are excluded by the caller to avoid
+  double-penalizing. Issues name both classes explicitly.
+
+### Tests
+
+- 522 cases pass (LANG=en and LANG=zh); health cases cover failed and invalid
+  penalties, and the complete status fixture now asserts `wiki.invalid = 0`
+  for a normal generated wiki.
+
 ## [0.157.0] - 2026-11-27
 
 ### Added

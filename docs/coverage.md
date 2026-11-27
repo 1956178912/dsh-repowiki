@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.157.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.158.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.157.0）；测试 521/521（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.03%、分支 86.44%、函数 95.35%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.158.0）；测试 522/522（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.05%、分支 86.51%、函数 95.35%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（521/521，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（522/522，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -185,7 +185,7 @@
 | 环内路径可点击 | 详情环路径中的其他文件为按钮（`openFile` 可访问名），点击经行索引打开对应详情；当前文件保持纯文本 | v0.111.0 |
 | 依赖条目可点击 | 依赖/依赖方列表中的路径为按钮（保留行号），点击打开目标文件详情；与环路径共用 `openFile` 回调 | v0.112.0 |
 | 跨语言资产回退 | 未显式指定 locale 时，cards 的正文检索/记忆/Wiki 引用与 status 按"环境语言 → 实际有卡片/Wiki/记忆的另一语言"回退；显式 locale 严格；输出 `locale`/`localeRequested`/`localeSource`，status 另给 `availableLocales` | v0.113.0 |
-| 文档覆盖率与健康度 | status 的 `coverage` 以 plan 复杂度阈值下有资格生成卡片的文件为分母，输出已覆盖/新鲜/陈旧/百分比与缺口最大的模块（≤5）；`health` 四分量加权（40/25/20/15）给出 A–D 等级、分量明细与前四条待办；v0.130.0 起引用缺陷计入 Wiki 分量 | v0.114.0 / v0.130.0 |
+| 文档覆盖率与健康度 | status 的 `coverage` 以 plan 复杂度阈值下有资格生成卡片的文件为分母，输出已覆盖/新鲜/陈旧/百分比与缺口最大的模块（≤5）；`health` 四分量加权（40/25/20/15）给出 A–D 等级、分量明细与前四条待办；v0.130.0 起引用缺陷计入 Wiki 分量，v0.158.0 起失败页与非法路径也计入 | v0.114.0 / v0.130.0 |
 | 变更影响面工具 | `repowiki-impact` 匹配变更路径（绝对路径/后缀/唯一 basename，歧义只列候选），反向 BFS 求直接/传递依赖方（1–3 跳、明细有界但总数精确），返回相关循环组、fan-in、受影响卡片（含陈旧）与 Wiki 引用、四因子风险分层与验证建议 | v0.115.0 |
 | 符号级影响面 | `symbols` 支持裸名与 `path#name`；直接层要求具名 import 证据，排除副作用导入及同文件其他符号的导入方；传递层保守展开；未解析符号不回退为文件模式；保留文件级影响总数作为上界 | v0.117.0 |
 | 任务上下文包 | `repowiki-context` 融合标识符/路径/anchor/文档 BM25 路由，一次输出相关符号、带行号源码、直接 imports/dependents、循环与 fan-in；2,000–40,000 字符硬预算，省略分类计数；单文件读取失败进入 Caveats；无索引/空查询/无命中可降级 | v0.117.0 |
@@ -205,7 +205,7 @@
 | 面板生成诊断 | Wiki 页签从清单与已加载目录列表派生上次生成失败页（`failedTotal`，≤5 个 slug tooltip）、磁盘缺失页与路径非法页，`role=status` 展示在引用摘要上方；页面列表为空时同样显示；非法路径从缺页计数中排除；v0.157.0 起同区提示重复 slug/清单条目；v0.148.0 起用 Web Crypto 重算卡片 `inputDigest`，v0.149.0 起同时重算已采信记忆 `memoryDigest`，与清单不一致时提示“Wiki 落后”，不可用时静默降级 | v0.144.0 / v0.153.0 |
 | 引用内容漂移 | 清单 v3 的 `citationDigests` 记录每条引用（行范围/整文件）的 sha256-12；生成在锁外按白名单读取（200 上限），status 重算（100 读取上限）并报告变化，不可读/非法/超限计入 unchecked；旧清单不判定 | v0.128.0 |
 | 漂移感知增量生成 | `checkCitationDrift` 由 status 与 generate 共用；generate 在 fresh 短路前重算指纹，`total > 0` 或 `unchecked > 0`（含超出 500 条比较上限）时不跳过，`hint` 说明原因；验证通过返回 `citationDrift: 0`，无指纹旧清单保持原行为 | v0.129.0 |
-| 引用感知健康分 | `assessHealth` 接收 `broken/outOfRange/drift/unchecked`；缺失路径 10 分/条（上限 40），越界与漂移各 5 分/条（各上限 20），总扣分上限 80；`unchecked` 只报告不扣分；status 把三类计数接入组件明细与前四条待办，并把引用告警从卫生分量排除以避免双扣 | v0.130.0 |
+| 引用感知健康分 | `assessHealth` 接收 `broken/outOfRange/drift/unchecked`；缺失路径 10 分/条（上限 40），越界与漂移各 5 分/条（各上限 20），总扣分上限 80；`unchecked` 只报告不扣分；status 把三类计数接入组件明细与前四条待办，并把引用告警从卫生分量排除以避免双扣；v0.158.0 起失败页按缺页权重计入分母、非法路径 5 分/条 | v0.130.0 / v0.158.0 |
 | 引用指纹覆盖率 | `summarizeCitationCoverage` 按页去重统计 `total/tracked/untracked/hasDigests`；generate 在短路与写入后输出 `citationCoverage`，未覆盖时渲染提示，旧清单明确降级；status 输出并仅在覆盖率不完整或清单早于 v3 时渲染 `Citation digests` 行 | v0.131.0 |
 | 未覆盖原因分类 | 生成清单页记录 `citationMisses`（source → `unreadable`/`range`/`cap`/`unknown`）；`summarizeCitationCoverage` 输出与 `untracked` 同口径的 `reasons`；generate hint/渲染与 status `Citation digests` 行展示分类，旧清单为 `unknown` | v0.133.0 |
 | 有界并发漂移读取 | `checkCitationDrift` 先收集安全且在上限内的唯一路径，按默认 8（硬上限 16，`options.concurrency`）并发预取，再按清单顺序比较；结果、截断与 `unchecked` 口径不变 | v0.135.0 |

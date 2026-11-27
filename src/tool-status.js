@@ -14,7 +14,7 @@ import { listMemory } from './memory.js'
 import { readPlan, selectCandidates } from './config.js'
 import { documentationCoverage, assessHealth } from './health.js'
 import { pendingLocks } from './lock.js'
-import { INDEX_REL_PATH, SUPPORTED_LOCALES } from './schema.js'
+import { INDEX_REL_PATH, SUPPORTED_LOCALES, ASSET_DIR } from './schema.js'
 import { resolveContentLocale } from './locale.js'
 import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
@@ -792,7 +792,14 @@ export function repowikiStatusTool(ctx) {
         : []
       // 清单路径非法或与实际文件位置不符：与 verify:wiki 的结构校验同口径，
       // 但 status 不探测正文链接，保持只读诊断的轻量。
-      const diskPathBySlug = new Map(wikiPages.map(page => [page.slug, page.path]))
+      // listWikiPages 的 path 相对项目根（含 `.dsh-repowiki/` 前缀），清单
+      // path 相对资产根；比较前统一去掉资产前缀，否则每个正常页面都会被
+      // 误报为“路径与文件位置不符”。
+      const assetPathPrefix = `${ASSET_DIR}/`
+      const diskPathBySlug = new Map(wikiPages.map(page => [
+        page.slug,
+        page.path.startsWith(assetPathPrefix) ? page.path.slice(assetPathPrefix.length) : page.path,
+      ]))
       const invalidWikiPages = []
       for (const page of manifest?.pages ?? []) {
         const slug = typeof page?.slug === 'string' ? page.slug : ''
@@ -816,6 +823,11 @@ export function repowikiStatusTool(ctx) {
           .filter(Boolean)
           .slice(0, 10)
         : []
+      // 健康分只对“未同时缺页”的非法路径额外扣分，避免同一页面被
+      // missing 与 invalid 双扣；invalidPages 可能含重复清单条目，先去重。
+      const missingWikiSlugSet = new Set(missingWikiPages)
+      const invalidWikiNotMissing = [...new Set(invalidWikiPages)]
+        .filter(slug => !missingWikiSlugSet.has(slug)).length
       if (!manifest && wikiPages.length > 0) {
         warnings.push('wiki/_index.json is missing; page ordering/orphan detection is degraded until repowiki-generate runs.')
       }
@@ -959,6 +971,8 @@ export function repowikiStatusTool(ctx) {
             stale: wikiStale,
             orphaned: wikiOrphaned,
             missing: missingWikiPages.length,
+            failed: wikiFailed,
+            invalid: invalidWikiNotMissing,
           },
           citations: {
             broken: brokenCitations?.total ?? 0,
