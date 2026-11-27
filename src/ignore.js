@@ -7,12 +7,12 @@
  * - `!` 否定（按顺序 last-match-wins）；
  * - `/` 锚定（相对所在 .gitignore 目录）；
  * - 目录尾 `/`（只匹配目录，遍历时直接剪枝）；
- * - `*`、`?`、`**` 通配；
+ * - `*`、`?`、`**` 通配与字符类 `[abc]`/`[a-z]`/`[!a-z]`；
  * - 嵌套 `.gitignore` / `.repowikiignore`：规则只作用于其所在目录子树，
  *   更深目录的规则后置生效（与 Git 的层级优先级一致）。
  *
- * 不支持（有意，文档化）：全局 excludes、反斜杠转义、字符类 `[a-z]`
- * （按字面处理）。需要更复杂规则时用 plan 的 exclude。
+ * 不支持（有意，文档化）：全局 excludes、反斜杠转义。需要更复杂规则时
+ * 用 plan 的 exclude。
  */
 
 /** 正则元字符转义（保留我们自行展开的通配符）。 */
@@ -47,6 +47,28 @@ function globToRegex(glob) {
       }
     } else if (ch === '?') {
       out += '[^/]'
+    } else if (ch === '[') {
+      const close = glob.indexOf(']', i + 1)
+      if (close === -1) {
+        out += '\\['
+        continue
+      }
+      let body = glob.slice(i + 1, close)
+      // fnmatch 风格：[!a-z] 与 [^a-z] 都表示否定
+      if (body.startsWith('!')) body = `^${body.slice(1)}`
+      if (!body || body.includes('/')) {
+        out += '\\['
+        continue
+      }
+      body = body.replace(/\\/g, '\\\\').replace(/\[/g, '\\[')
+      try {
+        // 非法范围（如 [z-a]）按字面处理，避免整个索引因一条规则抛错
+        new RegExp(`[${body}]`)
+        out += `[${body}]`
+        i = close
+      } catch {
+        out += '\\['
+      }
     } else {
       out += ch.replace(RE_META, '\\$&')
     }

@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.162.0] - 2026-11-27
+
+### Added
+
+- **Character classes in ignore rules**: `.gitignore`/`.repowikiignore`
+  patterns now support `[abc]`, `[a-z]` and `[!a-z]`/`[^a-z]`, so common
+  rules such as `*.py[cod]` and `file[0-9].txt` work. Invalid ranges and
+  unclosed classes fall back to literal matching instead of throwing, and a
+  class containing `/` is treated literally so it cannot cross path segments.
+
+### Tests
+
+- 527 cases pass (LANG=en and LANG=zh); a new case covers positive/negative
+  classes, directory rules and malformed-range fallbacks.
+
 ## [0.161.0] - 2026-11-27
 
 ### Added

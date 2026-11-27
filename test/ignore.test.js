@@ -57,6 +57,19 @@ test('isIgnored：目录剪枝、通配、锚定与 last-match-wins', () => {
   assert.equal(isIgnored('docs/a/b.md', false, rules), false)
 })
 
+test('isIgnored：字符类与非法范围按字面降级', () => {
+  const rules = parseIgnore('*.py[cod]\nfile[0-9].txt\ntmp[!x]/\nbad[z-a].log\nunclosed[abc\n')
+  assert.equal(isIgnored('a.pyc', false, rules), true)
+  assert.equal(isIgnored('a.pyo', false, rules), true)
+  assert.equal(isIgnored('a.py', false, rules), false)
+  assert.equal(isIgnored('file7.txt', false, rules), true)
+  assert.equal(isIgnored('filex.txt', false, rules), false)
+  assert.equal(isIgnored('tmp1/a.js', false, rules), true, '否定字符类目录规则')
+  assert.equal(isIgnored('tmpx/a.js', false, rules), false)
+  assert.equal(isIgnored('bad[z-a].log', false, rules), true, '非法范围按字面匹配')
+  assert.equal(isIgnored('unclosed[abc', false, rules), true, '未闭合字符类按字面匹配')
+})
+
 test('buildIndex：读取 .gitignore 并统计 ignored', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-ignore-'))
   nodefs.writeFileSync(path.join(dir, '.gitignore'), 'generated/\n*.skip.js\n')
