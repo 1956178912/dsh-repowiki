@@ -71,7 +71,7 @@ export function repowikiImportTool(ctx) {
           snapshotVerified: { type: 'boolean', description: 'True when every listed file matched its digest and the snapshot was not partial.' },
           snapshotChecked: { type: 'integer', description: 'Number of snapshot files whose digest was compared.' },
           snapshotProblems: { type: 'integer', description: 'Mismatched + missing + unreadable + invalid entries reported by the manifest.' },
-          snapshotCapped: { type: 'boolean', description: 'True when verification stopped at the 500-file cap.' },
+          snapshotCapped: { type: 'boolean', description: 'True when verification stopped at the 20,000-file cap.' },
           indexOk: { type: 'boolean' },
           durationMs: { type: 'integer' },
           hint: { type: 'string', description: 'Present when the tool degrades instead of performing the action; explains the precondition or failure.' },
@@ -158,7 +158,7 @@ export function repowikiImportTool(ctx) {
               verification.missing > 0 ? `${verification.missing} missing` : '',
               verification.unreadable > 0 ? `${verification.unreadable} unreadable` : '',
               verification.invalid > 0 ? `${verification.invalid} invalid` : '',
-              verification.capped ? 'verification capped at 500 files' : '',
+              verification.capped ? 'verification capped at 20,000 files' : '',
               verification.partial ? 'the export was partial' : '',
             ].filter(Boolean).join(', ')
             : (manifestError || 'manifest invalid')

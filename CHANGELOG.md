@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.165.0] - 2026-11-27
+
+### Fixed
+
+- **Large snapshots can be verified**: the snapshot verifier used to stop at
+  500 files and mark the result unverified, so importing a snapshot from a
+  repository with more than 500 cards/pages was refused by default. The cap
+  is now 20,000 files, and verification reads with 8-way bounded concurrency
+  instead of one file at a time, keeping remote-workspace imports practical.
+  Results are still aggregated in manifest order for reproducible output.
+
+### Tests
+
+- 532 cases pass (LANG=en and LANG=zh); a delayed-filesystem wrapper asserts
+  real concurrency with a peak of at most 8, and an explicit low limit
+  asserts `capped`/`verified=false` semantics.
+
 ## [0.164.0] - 2026-11-27
 
 ### Fixed

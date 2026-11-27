@@ -26,8 +26,11 @@ export const SNAPSHOT_MANIFEST = '_snapshot.json'
 /** 快照清单 schemaVersion。 */
 export const SNAPSHOT_SCHEMA_VERSION = 1
 
-/** 校验快照时最多比对的文件数（资产数量远小于此值；防止异常清单放大 IO）。 */
-const MAX_SNAPSHOT_VERIFY = 500
+/** 校验快照时最多比对的文件数（覆盖 5000 文件仓库的卡片 + Wiki；防止异常清单放大 IO）。 */
+const MAX_SNAPSHOT_VERIFY = 20_000
+
+/** 快照校验的并发读取上限（远程工作区按 RTT 累积，串行会明显变慢）。 */
+const SNAPSHOT_VERIFY_CONCURRENCY = 8
 
 /**
  * 递归复制目录树（仅文本资产文件）。
@@ -159,15 +162,19 @@ export async function readSnapshotManifest(fs, dirAbs) {
 }
 
 /**
- * 校验快照清单与实际文件的一致性（只读；默认上限 500 个文件）。
+ * 校验快照清单与实际文件的一致性（只读；默认上限 20000 个文件、8 路并发）。
  * @param {FsService} fs - ctx.fs 服务。
  * @param {string} dirAbs - 快照根目录绝对路径。
  * @param {object} manifest - readSnapshotManifest 的 value。
+ * @param {{limit?:number}} [opts] - 覆盖比对上限（仅测试/特殊场景使用）。
  * @returns {Promise<{verified:boolean, checked:number, mismatched:number,
  *   missing:number, unreadable:number, invalid:number, capped:boolean,
  *   partial:boolean, mismatchedPaths:string[], missingPaths:string[]}>} 校验结果。
  */
-export async function verifySnapshot(fs, dirAbs, manifest) {
+export async function verifySnapshot(fs, dirAbs, manifest, opts = {}) {
+  const limit = Number.isInteger(opts.limit) && opts.limit > 0
+    ? opts.limit
+    : MAX_SNAPSHOT_VERIFY
   const result = {
     verified: false,
     checked: 0,
@@ -196,26 +203,48 @@ export async function verifySnapshot(fs, dirAbs, manifest) {
     seen.add(rel)
     safe.push({ path: rel, digest: item.digest })
   }
-  for (const item of safe) {
-    if (result.checked >= MAX_SNAPSHOT_VERIFY) {
-      result.capped = true
-      break
-    }
-    let text
-    try {
-      const target = await fs.resolve(item.path, { cwd: dirAbs })
-      text = await fs.readText(target)
-    } catch (err) {
-      if (err?.code === 'ENOENT' || /not found/i.test(err?.message ?? '')) {
-        result.missing++
-        if (result.missingPaths.length < 5) result.missingPaths.push(item.path)
-      } else {
-        result.unreadable++
+  // 有界并发：结果写入固定槽位，聚合仍按清单顺序，输出可复现。
+  const candidates = safe.slice(0, limit)
+  result.capped = safe.length > limit
+  /** @type {Array<'ok'|'mismatched'|'missing'|'unreadable'>} */
+  const outcomes = new Array(candidates.length)
+  let cursor = 0
+  const worker = async () => {
+    while (true) {
+      const index = cursor++
+      if (index >= candidates.length) return
+      const item = candidates[index]
+      let text
+      try {
+        const target = await fs.resolve(item.path, { cwd: dirAbs })
+        text = await fs.readText(target)
+      } catch (err) {
+        outcomes[index] = (err?.code === 'ENOENT' || /not found/i.test(err?.message ?? ''))
+          ? 'missing'
+          : 'unreadable'
+        continue
       }
+      outcomes[index] = digestText(text, 16) === item.digest ? 'ok' : 'mismatched'
+    }
+  }
+  await Promise.all(Array.from(
+    { length: Math.max(1, Math.min(SNAPSHOT_VERIFY_CONCURRENCY, candidates.length)) },
+    () => worker(),
+  ))
+  for (let index = 0; index < outcomes.length; index++) {
+    const outcome = outcomes[index]
+    const item = candidates[index]
+    if (outcome === 'missing') {
+      result.missing++
+      if (result.missingPaths.length < 5) result.missingPaths.push(item.path)
+      continue
+    }
+    if (outcome === 'unreadable') {
+      result.unreadable++
       continue
     }
     result.checked++
-    if (digestText(text, 16) !== item.digest) {
+    if (outcome === 'mismatched') {
       result.mismatched++
       if (result.mismatchedPaths.length < 5) result.mismatchedPaths.push(item.path)
     }

@@ -99,6 +99,42 @@ test('copyTree：目标写入被截断时计失败而非静默成功', async () 
   assert.equal(counts.entries.length, 1, '失败文件不进入快照清单')
 })
 
+test('verifySnapshot：有界并发读取且可限制上限', async () => {
+  const files = {}
+  for (let i = 0; i < 12; i++) files[`src/f${i}.md`] = `# ${i}\n`
+  const dir = makeDir(files)
+  const base = makeFakeFs(dir)
+  const copied = await copyTree(base, path.join(dir, 'src'), path.join(dir, 'snap'))
+  await writeSnapshotManifest(base, path.join(dir, 'snap'), copied.entries)
+  const manifest = (await readSnapshotManifest(base, path.join(dir, 'snap'))).value
+
+  let active = 0
+  let peak = 0
+  const slow = {
+    ...base,
+    async readText(target) {
+      active++
+      peak = Math.max(peak, active)
+      try {
+        await new Promise(resolve => setTimeout(resolve, 5))
+        return await base.readText(target)
+      } finally {
+        active--
+      }
+    },
+  }
+  const verified = await verifySnapshot(slow, path.join(dir, 'snap'), manifest)
+  assert.equal(verified.verified, true)
+  assert.equal(verified.checked, 12)
+  assert.ok(peak > 1, '应并发读取')
+  assert.ok(peak <= 8, '并发不超过 8')
+
+  const capped = await verifySnapshot(base, path.join(dir, 'snap'), manifest, { limit: 2 })
+  assert.equal(capped.capped, true)
+  assert.equal(capped.checked, 2)
+  assert.equal(capped.verified, false, '截断校验不能声称完整通过')
+})
+
 test('dirHasContent：存在且非空判定', async () => {
   const dir = makeDir({ 'full/a.md': 'a' })
   nodefs.mkdirSync(path.join(dir, 'empty'))
