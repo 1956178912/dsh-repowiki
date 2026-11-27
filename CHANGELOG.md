@@ -5,6 +5,34 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.196.0] - 2026-11-28
+
+### Added
+
+- **Julia indexing (22nd language)**: `.jl` files produce `module`/
+  `baremodule`, `struct`/`mutable struct`, `abstract type`/`primitive
+  type`, `function name(...)` (including `Type.method` as a method with
+  `parent`), short-form `name(args) = expr`, `macro` and top-level `const`
+  symbols. Function/struct/macro bodies are skipped so nested definitions
+  never surface; `#` comments, nested `#= … =#` block comments, multi-line
+  strings and triple-quoted strings are masked before block matching, and
+  `a[end]`/`x.end` never close a block. Files containing a `module` use
+  `export` (comma-separated, continuation lines) as the export evidence;
+  module-less scripts keep every symbol visible. `include("path")` resolves
+  relative to the importing file (`.jl` appended when omitted); dynamic
+  arguments stay edge-free. `Project.toml` supplies package name, version
+  and deduplicated `[deps]`/`[extras]` dependencies with Julia technology
+  mappings. Prompt fences and the panel language filter know `julia`.
+
+### Tests
+
+- 590 cases pass (LANG=en and LANG=zh); new coverage pins every declaration
+  form, block ranges, `Type.method` ownership, export filtering, comment/
+  block-comment/triple-string shielding, nested-definition exclusion,
+  `include` variants with dynamic arguments skipped, `Project.toml`
+  dependency deduplication and an indexer fixture proving file-relative and
+  `../` resolution.
+
 ## [0.195.0] - 2026-11-28
 
 ### Added

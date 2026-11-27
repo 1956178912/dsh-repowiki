@@ -342,6 +342,7 @@ const LANGUAGE_LABELS = {
   gleam: 'Gleam',
   shell: 'Shell',
   r: 'R',
+  julia: 'Julia',
   c: 'C',
   cpp: 'C++',
 }

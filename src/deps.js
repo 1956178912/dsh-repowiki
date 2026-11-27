@@ -8,7 +8,7 @@
  */
 
 import { scriptBlockText } from './sfc.js'
-import { shellScan } from './symbols.js'
+import { shellScan, juliaScan } from './symbols.js'
 
 /**
  * 一条模块引用记录。
@@ -876,6 +876,38 @@ function extractRImports(lines) {
 }
 
 /**
+ * 提取 Julia 的 `include("path")` 引用。
+ * 路径必须能静态确定（含 `$` 插值/`joinpath` 的动态调用跳过）；字符串、
+ * 行注释与 `#= =#` 块注释内的伪 include 由 `juliaScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractJuliaImports(lines) {
+  const result = []
+  const rows = juliaScan(lines)
+  const re = /\binclude\s*\(\s*/g
+  for (let i = 0; i < rows.length; i++) {
+    const { code, masked } = rows[i]
+    re.lastIndex = 0
+    let m
+    while ((m = re.exec(masked)) !== null) {
+      const arg = /^(["'])([^"']+)\1/.exec(code.slice(m.index + m[0].length))
+      if (!arg) continue
+      const specifier = arg[2]
+      if (/\$|`/.test(specifier)) continue
+      result.push({
+        specifier,
+        line: i + 1,
+        kind: 'import',
+        relative: true,
+        imported: [],
+      })
+    }
+  }
+  return result
+}
+
+/**
  * 去除 Elixir 行注释（`#`；`?#` 字符字面量与字符串内的 `#` 不算）。
  * @param {string} line - 源码行。
  * @returns {string} 去注释后的行。
@@ -1000,6 +1032,7 @@ export function extractImports(code, lang) {
   if (lang === 'gleam') return extractGleamImports(lines)
   if (lang === 'shell') return extractShellImports(lines)
   if (lang === 'r') return extractRImports(lines)
+  if (lang === 'julia') return extractJuliaImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

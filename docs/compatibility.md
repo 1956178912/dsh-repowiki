@@ -47,6 +47,7 @@
 | Gleam | `type` / `opaque type` / `external type` 容器、`type Name = …` 别名（kind type）、`fn` / `external fn`（跨行签名与单行块体）、顶层 `const`；`pub` 决定导出，函数体内 `let`/匿名函数不登记 | `import package/module`（含 `as` 别名与 `.{type Foo, Foo as F}` 未限定导入，跨行列表拼接到闭合 `}`）经每个 `src/`/`test/` 源根与项目根解析 `<module>.gleam`；`gleam/io` 等外部包不建边；`gleam.toml` 提供项目名/版本/依赖计数，根与嵌套 monorepo 清单聚合依赖（嵌套上限 20，项目名只取根） |
 | Shell | `function foo` / `function foo()` / `foo() {`（含 `{` 写在下一行）与单行函数体；`export`/`readonly`/`declare`/`typeset` 带赋值的显式变量；普通赋值与 `local` 不登记 | `source path` / `. path` 先按脚本目录、再按项目根解析，尝试原路径与 `.sh`/`.bash`；变量/命令替换/通配符参数不建边；`#` 注释、引号（含跨行）与 heredoc 内容在配平前屏蔽 |
 | R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass("Name", …)` / `R6Class("Name", …)` 类及类内方法（method + parent）；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
+| Julia | `module`/`baremodule`、`struct`/`mutable struct`、`abstract type`/`primitive type`、`function name(...)`（`Type.method` → method + parent）、短函数 `name(args) = expr`、`macro`、顶层 `const`；函数/结构体/宏体内部不登记；含 `module` 的文件按 `export` 标记可见性 | `include("path")` 相对引用文件解析（缺省补 `.jl`）；动态参数（`$` 插值/`joinpath`）不建边；`Project.toml` 提供包名/版本与 `[deps]`/`[extras]` 依赖计数 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -104,7 +105,11 @@ R6/setClass 类内 `name = function(...)` 登记为方法（parent 为类名）�
 表达式体按 `)` 所在行结束；`assign()`/`do.call()` 等动态定义不登记；
 普通赋值不登记（只登记函数与类）；`DESCRIPTION` 只读根清单，不聚嵌套包；
 `NAMESPACE` 只解析单行导出调用，`exportPattern` 等动态导出回退 `.` 前缀
-约定（不猜测展开结果）。
+约定（不猜测展开结果）。Julia 为轻量行级解析：块配平按行首关键字加行内
+`do`/`begin`/`let`/`try`/`quote`，`x = if` 等行内控制块不计数（只影响
+`endLine`）；`a[end]`/`x.end` 不计入块结束，推导式 `for` 不计块；短函数
+与 `abstract`/`primitive` 类型按单行处理；`export` 名称全局应用到文件
+（多 module 文件不区分作用域）；`Project.toml` 只读根清单。
 
 ## 升级检查清单
 

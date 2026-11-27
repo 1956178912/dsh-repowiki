@@ -1416,6 +1416,36 @@ test('R：NAMESPACE exportPattern 时保持约定推断', async () => {
   assert.equal(main.symbols.find(s => s.name === '.hidden').exported, false)
 })
 
+test('Julia：include 相对文件解析与 Project.toml 技术栈', async () => {
+  const dir = makeProject({
+    'Project.toml': 'name = "Demo"\nversion = "0.1.0"\n[deps]\nDataFrames = "uuid"\n',
+    'src/Demo.jl': [
+      'module Demo',
+      'include("util.jl")',
+      'export add',
+      'add(x) = x + 1',
+      'end',
+    ].join('\n'),
+    'src/util.jl': 'util_helper(x) = x\n',
+    'test/runtests.jl': 'include("../src/Demo.jl")\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { julia: 3 })
+
+  const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
+  assert.equal(edge('src/Demo.jl', 'src/util.jl')?.line, 2, '同目录 include')
+  assert.equal(edge('test/runtests.jl', 'src/Demo.jl')?.line, 1, '上跳相对路径归一')
+
+  assert.equal(doc.stack.projectName, 'Demo')
+  assert.equal(doc.stack.projectVersion, '0.1.0')
+  assert.equal(doc.stack.dependencyCounts.julia, 1)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'DataFrames' && t.source === 'Project.toml'))
+
+  const demo = doc.files.find(f => f.path === 'src/Demo.jl')
+  assert.ok(demo.symbols.some(s => s.name === 'add' && s.kind === 'function' && s.exported))
+  assert.ok(demo.symbols.some(s => s.name === 'Demo' && s.kind === 'class'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

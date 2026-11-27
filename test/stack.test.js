@@ -334,6 +334,27 @@ test('DESCRIPTION：DCF 续行、依赖去重与版本约束剥离', () => {
   assert.ok(info.technologies.some(t => t.name === 'Rcpp'))
 })
 
+test('Project.toml：Julia 包名/版本与 deps/extras 依赖', () => {
+  const text = [
+    'name = "Demo"',
+    'uuid = "1234"',
+    'version = "0.1.0"',
+    '',
+    '[deps]',
+    'DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"',
+    'Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"',
+    '',
+    '[extras]',
+    'Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"',
+    'DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"',
+  ].join('\n')
+  const info = detectStack({ 'Project.toml': text })
+  assert.equal(info.projectName, 'Demo')
+  assert.equal(info.projectVersion, '0.1.0')
+  assert.equal(info.dependencyCounts.julia, 3, 'deps+extras 去重')
+  assert.ok(info.technologies.some(t => t.name === 'DataFrames' && t.ecosystem === 'julia'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

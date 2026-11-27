@@ -469,6 +469,25 @@ test('R：source 引号路径、动态参数与字符串内伪引用', () => {
   assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
 })
 
+test('Julia：include 引号路径、动态参数与字符串/块注释内伪引用', () => {
+  const code = [
+    'include("util.jl")',
+    "include('src/model.jl')",
+    'include(joinpath(@__DIR__, "dynamic.jl"))',
+    'include("$DIR/var.jl")',
+    '# include("commented.jl")',
+    '#= include("block.jl") =#',
+    'msg = "include(\\"fake.jl\\")"',
+    'using DataFrames',
+  ].join('\n')
+  const imports = extractImports(code, 'julia')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['util.jl', 1],
+    ['src/model.jl', 2],
+  ])
+  assert.ok(imports.every(i => i.kind === 'import' && i.relative === true))
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

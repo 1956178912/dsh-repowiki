@@ -168,6 +168,7 @@ function fenceLang(lang) {
     case 'gleam': return 'gleam'
     case 'shell': return 'bash'
     case 'r': return 'r'
+    case 'julia': return 'julia'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

@@ -2428,6 +2428,257 @@ function extractR(lines) {
 }
 
 /**
+ * 扫描 Julia 源码行：去除 `#` 行注释与可嵌套的 `#= … =#` 块注释，
+ * 并把字符串内容（含跨行 `"` 与三引号 `"""`）替换为空格。返回保留字符串
+ * 内容的 `code` 与掩码行 `masked`（列位置对齐），依赖提取读路径用前者。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 代码行/掩码行。
+ */
+export function juliaScan(lines) {
+  const out = []
+  let blockDepth = 0
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (blockDepth > 0) {
+        if (raw.startsWith('#=', i)) { blockDepth++; masked += '  '; i++; continue }
+        if (raw.startsWith('=#', i)) { blockDepth--; masked += '  '; i++; continue }
+        masked += ' '
+        continue
+      }
+      if (quote === '"""') {
+        if (raw.startsWith('"""', i)) {
+          quote = null
+          code += '"""'
+          masked += '   '
+          i += 2
+          continue
+        }
+        code += ch
+        masked += ' '
+        continue
+      }
+      if (quote) {
+        code += ch
+        if (ch === '\\' && i + 1 < raw.length) {
+          code += raw[i + 1]
+          masked += '  '
+          i++
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      if (raw.startsWith('#=', i)) { blockDepth = 1; masked += '  '; i++; continue }
+      if (ch === '#') break
+      if (raw.startsWith('"""', i)) {
+        quote = '"""'
+        code += '"""'
+        masked += '   '
+        i += 2
+        continue
+      }
+      if (ch === '"' || ch === "'") { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 计算一行 Julia 代码的块深度增量。
+ * - `function`/`begin`/`let`/`try`/`quote` 与 `do`（行内）都开块；
+ * - `struct`/`mutable struct`/`module`/`baremodule`/`macro`/`if`/`for`/
+ *   `while` 只在行首开块（`[... for ...]` 推导式不开块）；
+ * - `abstract type … end` / `primitive type … end` 为单行，整行不计；
+ * - `end` 仅在行首/空白/分号之后计数，`a[end]` 与 `x.end` 不计。
+ * @param {string} masked - 已屏蔽字符串/注释的代码行。
+ * @returns {number} 深度增量。
+ */
+function juliaBlockDelta(masked) {
+  const trimmed = masked.trim()
+  if (trimmed === '') return 0
+  if (/^(?:abstract|primitive)\s+type\b/.test(trimmed)) return 0
+  let delta = (masked.match(/\b(?:function|begin|let|try|quote)\b/g) ?? []).length
+  if (/^(?:struct|mutable\s+struct|module|baremodule|if|for|while|macro)\b/.test(trimmed)) delta++
+  delta += (masked.match(/\bdo\b/g) ?? []).length
+  delta -= (masked.match(/(?:^|[\s;])end\b(?!\s*\])/g) ?? []).length
+  return delta
+}
+
+/**
+ * 计算 Julia 块声明的结束行（`function`/`struct`/`module`/`macro`）。
+ * @param {string[]} maskedLines - 掩码代码行。
+ * @param {number} startIdx - 声明行索引（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function juliaBlockEnd(maskedLines, startIdx) {
+  let depth = 0
+  let opened = false
+  for (let i = startIdx; i < maskedLines.length; i++) {
+    depth += juliaBlockDelta(maskedLines[i])
+    if (depth > 0) opened = true
+    if (opened && depth <= 0) return i + 1
+  }
+  return opened ? maskedLines.length : startIdx + 1
+}
+
+/**
+ * 收集 Julia 文件的 `export` 名称与是否含 `module`。
+ * `export` 支持逗号分隔与以逗号结尾的续行（上限 20 行）。
+ * @param {string[]} maskedLines - 掩码代码行。
+ * @returns {{names:Set<string>, hasModule:boolean}} 导出名与模块标记。
+ */
+function juliaExports(maskedLines) {
+  const names = new Set()
+  let hasModule = false
+  for (let i = 0; i < maskedLines.length; i++) {
+    const line = maskedLines[i].trim()
+    if (/^(?:module|baremodule)\b/.test(line)) hasModule = true
+    const m = /^export\s+(.*)$/.exec(line)
+    if (!m) continue
+    let rest = m[1]
+    let j = i
+    const limit = Math.min(maskedLines.length, i + 20)
+    while (rest.trimEnd().endsWith(',') && j + 1 < limit) {
+      j++
+      rest += ` ${maskedLines[j].trim()}`
+    }
+    for (const part of rest.split(',')) {
+      const name = part.trim()
+      if (name) names.add(name)
+    }
+  }
+  return { names, hasModule }
+}
+
+/**
+ * 提取 Julia 符号：`module`/`baremodule`、`struct`/`mutable struct`、
+ * `abstract type`/`primitive type`、`function name(...)`（含
+ * `Type.method` → method + parent）、短函数 `name(args) = expr`、`macro`
+ * 与顶层 `const`。函数/结构体/宏体内部不扫描，嵌套函数不登记；
+ * 含 `module` 的文件按 `export` 名称标记导出，无 `module` 的脚本默认可见。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractJulia(lines) {
+  const maskedLines = juliaScan(lines).map(row => row.masked)
+  const { names: exportedNames, hasModule } = juliaExports(maskedLines)
+  const symbols = []
+  const fnRe = /^function\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\(/
+  const macroRe = /^macro\s+([A-Za-z_]\w*)\s*\(/
+  const structRe = /^(?:mutable\s+)?struct\s+([A-Za-z_]\w*)/
+  const moduleRe = /^(?:baremodule|module)\s+([A-Za-z_]\w*)/
+  const abstractRe = /^(?:abstract|primitive)\s+type\s+([A-Za-z_]\w*)/
+  const shortFnRe = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)\s*\([^)]*\)\s*=(?!=)/
+  const constRe = /^const\s+([A-Za-z_]\w*)\s*=/
+  const isExported = name => (hasModule ? exportedNames.has(name) : true)
+  let skipUntil = 0
+  for (let i = 0; i < maskedLines.length; i++) {
+    if (i < skipUntil) continue
+    const line = maskedLines[i].trim()
+    if (line === '') continue
+    const module = moduleRe.exec(line)
+    if (module) {
+      symbols.push({
+        name: module[1],
+        kind: 'class',
+        line: i + 1,
+        endLine: juliaBlockEnd(maskedLines, i),
+        exported: isExported(module[1]),
+      })
+      continue // module 内部继续扫描
+    }
+    const fn = fnRe.exec(line)
+    if (fn) {
+      const raw = fn[1]
+      const dot = raw.lastIndexOf('.')
+      const parent = dot > 0 ? raw.slice(0, dot) : undefined
+      const end = juliaBlockEnd(maskedLines, i)
+      symbols.push({
+        name: dot > 0 ? raw.slice(dot + 1) : raw,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: end,
+        exported: parent ? false : isExported(raw),
+        ...(parent ? { parent } : {}),
+      })
+      skipUntil = end
+      continue
+    }
+    const macro = macroRe.exec(line)
+    if (macro) {
+      const end = juliaBlockEnd(maskedLines, i)
+      symbols.push({
+        name: macro[1],
+        kind: 'function',
+        line: i + 1,
+        endLine: end,
+        exported: isExported(macro[1]),
+      })
+      skipUntil = end
+      continue
+    }
+    const struct = structRe.exec(line)
+    if (struct) {
+      const end = juliaBlockEnd(maskedLines, i)
+      symbols.push({
+        name: struct[1],
+        kind: 'class',
+        line: i + 1,
+        endLine: end,
+        exported: isExported(struct[1]),
+      })
+      skipUntil = end
+      continue
+    }
+    const abstract = abstractRe.exec(line)
+    if (abstract) {
+      symbols.push({
+        name: abstract[1],
+        kind: 'class',
+        line: i + 1,
+        endLine: i + 1,
+        exported: isExported(abstract[1]),
+      })
+      continue
+    }
+    const shortFn = shortFnRe.exec(line)
+    if (shortFn) {
+      const raw = shortFn[1]
+      const dot = raw.lastIndexOf('.')
+      const parent = dot > 0 ? raw.slice(0, dot) : undefined
+      symbols.push({
+        name: dot > 0 ? raw.slice(dot + 1) : raw,
+        kind: parent ? 'method' : 'function',
+        line: i + 1,
+        endLine: i + 1,
+        exported: parent ? false : isExported(raw),
+        ...(parent ? { parent } : {}),
+      })
+      continue
+    }
+    const constant = constRe.exec(line)
+    if (constant) {
+      symbols.push({
+        name: constant[1],
+        kind: 'variable',
+        line: i + 1,
+        endLine: i + 1,
+        exported: isExported(constant[1]),
+      })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -2560,6 +2811,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'gleam') return extractGleam(lines)
   if (lang === 'shell') return extractShell(lines)
   if (lang === 'r') return extractR(lines)
+  if (lang === 'julia') return extractJulia(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

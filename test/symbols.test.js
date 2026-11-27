@@ -1151,6 +1151,86 @@ test('R：函数/类声明、无块体函数与注释/字符串屏蔽', () => {
   assert.ok(!byName.has('msg'), '普通赋值不登记')
 })
 
+test('Julia：模块/结构体/函数/短函数/宏与 export', () => {
+  const code = [
+    'module Demo',
+    '',
+    'export add, Point, greet',
+    '',
+    '# function commented() end',
+    '#= block',
+    '   function hidden() end',
+    '=#',
+    'const MAX_SIZE = 10',
+    '',
+    '"""',
+    'function fake()',
+    'end',
+    '"""',
+    'function add(x::Int, y::Int)',
+    '    x + y',
+    'end',
+    '',
+    'struct Point',
+    '    x::Float64',
+    '    y::Float64',
+    'end',
+    '',
+    'mutable struct Counter',
+    '    value::Int',
+    'end',
+    '',
+    'abstract type Shape end',
+    '',
+    'function Base.show(io::IO, p::Point)',
+    '    print(io, p.x)',
+    'end',
+    '',
+    'greet(name) = "Hi $name"',
+    '',
+    'internal(x) = x[end]',
+    '',
+    'macro m(ex)',
+    '    esc(ex)',
+    'end',
+    '',
+    'function outer()',
+    '    inner() = 1',
+    '    inner()',
+    'end',
+    '',
+    'end',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'julia')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Demo').kind, 'class')
+  assert.equal(byName.get('Demo').endLine, 47)
+  assert.equal(byName.get('MAX_SIZE').kind, 'variable')
+  assert.equal(byName.get('MAX_SIZE').exported, false)
+  assert.equal(byName.get('add').kind, 'function')
+  assert.equal(byName.get('add').endLine, 17)
+  assert.equal(byName.get('add').exported, true)
+  assert.equal(byName.get('Point').kind, 'class')
+  assert.equal(byName.get('Point').endLine, 22)
+  assert.equal(byName.get('Point').exported, true)
+  assert.equal(byName.get('Counter').kind, 'class')
+  assert.equal(byName.get('Counter').endLine, 26)
+  assert.equal(byName.get('Shape').kind, 'class')
+  assert.equal(byName.get('Shape').endLine, 28)
+  assert.equal(byName.get('show').kind, 'method')
+  assert.equal(byName.get('show').parent, 'Base')
+  assert.equal(byName.get('show').exported, false)
+  assert.equal(byName.get('greet').kind, 'function')
+  assert.equal(byName.get('greet').exported, true)
+  assert.equal(byName.get('internal').exported, false, '未在 export 中的符号')
+  assert.equal(byName.get('internal').endLine, 36, '短函数单行，a[end] 不干扰')
+  assert.equal(byName.get('m').kind, 'function')
+  assert.ok(!byName.has('fake'), '三引号字符串不产符号')
+  assert.ok(!byName.has('commented') && !byName.has('hidden'), '注释不产符号')
+  assert.ok(!byName.has('inner'), '函数体内嵌套短函数不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

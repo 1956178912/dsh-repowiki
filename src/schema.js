@@ -132,6 +132,7 @@ export const MANIFEST_FILES = {
   'gleam.toml': 'gleam',
   'DESCRIPTION': 'r',
   'NAMESPACE': 'r',
+  'Project.toml': 'julia',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -174,6 +175,7 @@ export const EXTENSION_LANGS = {
   bats: 'shell',
   R: 'r',
   r: 'r',
+  jl: 'julia',
   c: 'c',
   h: 'c',
   cc: 'cpp',

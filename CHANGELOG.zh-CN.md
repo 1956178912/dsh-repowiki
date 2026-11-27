@@ -3,6 +3,23 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.196.0] - 2026-11-28
+
+- **Julia 支持（第 22 种语言）**：`.jl` 提取 `module`/`baremodule`、
+  `struct`/`mutable struct`、`abstract type`/`primitive type`、
+  `function name(...)`（`Type.method` 归为 method + parent）、短函数
+  `name(args) = expr`、`macro` 与顶层 `const`；函数/结构体/宏体内部跳过，
+  嵌套定义不会浮出。`#` 行注释、可嵌套 `#= … =#` 块注释、跨行字符串与
+  三引号字符串在配平前屏蔽，`a[end]`/`x.end` 不会关闭块。含 `module` 的
+  文件以 `export`（逗号分隔、支持续行）作为导出证据，无 module 的脚本
+  全部可见。`include("path")` 相对引用文件解析（缺省补 `.jl`），动态
+  参数不建边。`Project.toml` 提供包名、版本与 `[deps]`/`[extras]` 去重
+  依赖及 Julia 技术映射。Prompt 围栏与面板语言筛选识别 `julia`。
+- **测试**：590 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖全部声明形态、
+  块范围、`Type.method` 归属、export 过滤、注释/块注释/三引号屏蔽、嵌套
+  定义排除、`include` 变体与动态参数跳过、`Project.toml` 依赖去重，以及
+  文件相对/`../` 解析的索引端到端夹具。
+
 ## [0.195.0] - 2026-11-28
 
 - **R6/S4 方法符号**：`R6Class(...)` / `setClass(...)` 内声明的方法

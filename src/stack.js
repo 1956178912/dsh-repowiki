@@ -689,6 +689,48 @@ function rDescriptionInfo(text) {
   }
 }
 
+/** Julia 包名 → 技术展示名（只收录常用框架/库，其余只计数）。 */
+const JULIA_TECH = {
+  DataFrames: 'DataFrames',
+  Plots: 'Plots',
+  Makie: 'Makie',
+  Flux: 'Flux',
+  'DifferentialEquations': 'DifferentialEquations',
+  JuMP: 'JuMP',
+  Distributions: 'Distributions',
+  StatsBase: 'StatsBase',
+  MLJ: 'MLJ',
+  CUDA: 'CUDA',
+  HTTP: 'HTTP',
+  SQLite: 'SQLite',
+  CSV: 'CSV',
+  JSON3: 'JSON3',
+  Pluto: 'Pluto',
+}
+
+/**
+ * 从 Julia `Project.toml` 读取包名、版本与依赖名
+ * （`[deps]`/`[extras]` 段的键；UUID 等根级字段不计）。
+ * @param {string} text - Project.toml 内容。
+ * @returns {{name:string|undefined, version:string|undefined, dependencies:string[]}} 元数据。
+ */
+function juliaProjectInfo(text) {
+  const name = /^\s*name\s*=\s*"([^"]+)"/m.exec(text)?.[1]
+  const version = /^\s*version\s*=\s*"([^"]+)"/m.exec(text)?.[1]
+  const dependencies = []
+  let section = ''
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trim()
+    if (line === '') continue
+    const header = /^\[([^\]]+)\]$/.exec(line)
+    if (header) { section = header[1].trim(); continue }
+    if (section !== 'deps' && section !== 'extras') continue
+    const key = /^([A-Za-z0-9_]+)\s*=/.exec(line)
+    if (key && !dependencies.includes(key[1])) dependencies.push(key[1])
+  }
+  return { name, version, dependencies }
+}
+
 /**
  * 从 build.sbt 提取 libraryDependencies 坐标。
  * @param {string} text - build.sbt 内容。
@@ -878,6 +920,15 @@ export function detectStack(manifests) {
       for (const dep of r.dependencies) {
         const name = R_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'r', source: path })
+      }
+    } else if (path === 'Project.toml') {
+      const julia = juliaProjectInfo(text)
+      info.dependencyCounts.julia = julia.dependencies.length
+      if (!info.projectName && julia.name) info.projectName = julia.name
+      if (!info.projectVersion && julia.version) info.projectVersion = julia.version
+      for (const dep of julia.dependencies) {
+        const name = JULIA_TECH[dep]
+        if (name) info.technologies.push({ name, ecosystem: 'julia', source: path })
       }
     } else if (path === 'CMakeLists.txt' || path.endsWith('/CMakeLists.txt')) {
       const packages = cmakePackages(text)
