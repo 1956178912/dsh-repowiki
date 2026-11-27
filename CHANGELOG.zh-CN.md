@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.167.0] - 2026-11-27
+
+- **Dart 工作区 `package:` 导入**：仓库内任意 pubspec 的包名映射
+  `package:<name>/path.dart` 到对应包的 `lib/path.dart`（根包或嵌套
+  `packages/*`），Flutter monorepo 的本地包之间开始建立依赖边，而不是
+  把全部 `package:` 当外部；同名 pubspec 优先目录更浅者，与 JS 工作区
+  规则一致。外部包与 `dart:` 仍不建边。
+- **测试**：535 例在 LANG=en 与 LANG=zh 下全通过；Dart 索引夹具新增
+  本包与嵌套工作区包的导入，断言两条边、part/import 精确行号与合并后的
+  pub 依赖计数。
+
 ## [0.166.0] - 2026-11-27
 
 - **Dart 支持（第 15 种语言）**：`.dart` 提取 class/mixin/enum/extension

@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.166.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.167.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.166.0）；测试 535/535（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.01%、分支 86.29%、函数 95.33%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.167.0）；测试 535/535（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.03%、分支 86.60%、函数 95.34%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -224,4 +224,4 @@
 | 分页检索 | `searchIndex`/`rankDocuments` 支持 `offset`；`total` 精确、`truncated` 表示本页之后仍有结果；`repowiki-cards` 输出 `offset` 并在文本显示起止区间 | v0.160.0 |
 | 嵌套忽略规则 | 遍历到含 `.gitignore`/`.repowikiignore` 的子目录时读取并追加；规则带 `base` 作用域（锚定/目录/无斜杠都只匹配该子树），更深规则后置优先；不可读规则记入索引告警；字符类 `[abc]`/`[a-z]`/`[!a-z]` 生效，非法范围与含 `/` 的类按字面降级 | v0.161.0 / v0.162.0 |
 | 快照完整性 | `repowiki-export` 每个文件写后回读校验，再写 `_snapshot.json`（路径 + sha256-16 + `partial`）；`repowiki-import` 复制前以 8 路有界并发逐文件校验（上限 2 万），指纹不符/缺失/不可读/路径非法/部分导出默认拒绝，`allowCorrupt=true` 强制；旧快照无清单仍可导入并提示未校验，清单文件不进入资产目录 | v0.163.0 / v0.165.0 |
-| Dart 支持 | 15 语言：class/mixin/enum/extension/extension type/typedef、构造器/方法/getter、顶层函数与变量、`_` 私有；相对 `import`/`export`/`part` 边（含 `show` 符号）；`pubspec.yaml` → `pub` 项目名/依赖计数/技术映射；`dart:`/`package:` 不建边 | v0.166.0 |
+| Dart 支持 | 15 语言：class/mixin/enum/extension/extension type/typedef、构造器/方法/getter、顶层函数与变量、`_` 私有；相对 `import`/`export`/`part` 边（含 `show` 符号）；`pubspec.yaml` → `pub` 项目名/依赖计数/技术映射；`package:<仓库内包名>/x.dart` 解析到 `<包根>/lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边 | v0.166.0 / v0.167.0 |

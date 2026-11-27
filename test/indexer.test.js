@@ -349,6 +349,8 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
     'lib/app.dart': [
       "import 'package:flutter/material.dart';",
       "import 'src/screen.dart' show Screen;",
+      "import 'package:demo_app/src/screen.dart';",
+      "import 'package:shared_ui/widgets/button.dart';",
       "part 'app.g.dart';",
       'class App extends StatelessWidget {',
       '  const App({super.key});',
@@ -369,11 +371,19 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
       "import '../lib/app.dart';",
       'void main() {}',
     ].join('\n'),
+    'packages/shared/pubspec.yaml': [
+      'name: shared_ui',
+      'dependencies:',
+      '  flutter:',
+      '    sdk: flutter',
+    ].join('\n'),
+    'packages/shared/lib/widgets/button.dart': 'class SharedButton {}\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
 
-  assert.deepEqual(doc.stats.languages, { dart: 4 })
+  assert.deepEqual(doc.stats.languages, { dart: 5 })
   assert.ok(!doc.files.some(f => f.path === 'pubspec.yaml'), 'pubspec 只作清单')
+  assert.ok(!doc.files.some(f => f.path === 'packages/shared/pubspec.yaml'), '嵌套 pubspec 只作清单')
   const appSymbols = doc.files.find(f => f.path === 'lib/app.dart').symbols
   assert.ok(appSymbols.some(s => s.name === 'App' && s.kind === 'class'))
   assert.ok(appSymbols.some(s => s.name === 'build' && s.parent === 'App'))
@@ -381,14 +391,19 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('lib/app.dart', 'lib/src/screen.dart')?.line, 2, '相对 import 行号')
-  assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.line, 3, 'part 指令建本地边')
+  assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.line, 5, 'part 指令建本地边')
   assert.equal(edge('test/app_test.dart', 'lib/app.dart')?.line, 2, '../lib 相对路径解析')
+  const selfPackage = doc.edges.find(e => e.from === 'lib/app.dart' && e.to === 'lib/src/screen.dart' && e.line === 3)
+  assert.ok(selfPackage, 'package:<本包>/src/screen.dart 解析到 lib/src/screen.dart')
+  const shared = doc.edges.find(e => e.from === 'lib/app.dart'
+    && e.to === 'packages/shared/lib/widgets/button.dart')
+  assert.equal(shared?.line, 4, '工作区 package: 解析到嵌套包的 lib/')
   assert.ok(!doc.edges.some(e => e.from === 'lib/app.dart' && e.to.includes('flutter')), 'package: 外部依赖不建边')
 
   assert.equal(doc.stack.projectName, 'demo_app')
   assert.ok(doc.stack.technologies.some(t => t.name === 'Flutter' && t.ecosystem === 'pub'))
   assert.ok(doc.stack.technologies.some(t => t.name === 'Provider' && t.ecosystem === 'pub'))
-  assert.equal(doc.stack.dependencyCounts.pub, 3)
+  assert.equal(doc.stack.dependencyCounts.pub, 4, '根包 3 + 嵌套包 1')
 })
 
 test('Swift：本地 target 导入解析到 Sources/<Target> 代表文件', async () => {

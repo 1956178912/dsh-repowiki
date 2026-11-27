@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.167.0] - 2026-11-27
+
+### Added
+
+- **Dart workspace `package:` imports**: pubspec names found anywhere in the
+  repository now map `package:<name>/path.dart` to that package's
+  `lib/path.dart` (root package or nested `packages/*`), so Flutter monorepos
+  get dependency edges between local packages instead of treating every
+  `package:` import as external. Same-name pubspecs prefer the shallowest
+  directory, matching the JavaScript workspace rule. External packages and
+  `dart:` imports still produce no edges.
+
+### Tests
+
+- 535 cases pass (LANG=en and LANG=zh); the Dart indexer fixture now imports
+  its own package and a nested workspace package, asserting both edges, exact
+  part/import line numbers and the combined pub dependency count.
+
 ## [0.166.0] - 2026-11-27
 
 ### Added

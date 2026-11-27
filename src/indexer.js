@@ -474,6 +474,53 @@ function buildWorkspacePackages(manifestTexts) {
 }
 
 /**
+ * 从已读取的 pubspec.yaml 建立 Dart 包索引（包名 → 包根目录）。
+ * 同名包只保留目录最浅的一个（根包优先），保证跨平台确定性。
+ * @param {Record<string,string>} manifestTexts - 相对路径 → 文本。
+ * @returns {Map<string, string>} 包名 → 包根相对目录（根包为空串）。
+ */
+function buildDartPackages(manifestTexts) {
+  const packages = new Map()
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (path.posix.basename(rel) !== 'pubspec.yaml') continue
+    const name = /^name:\s*([^\s#]+)/m.exec(text)?.[1]
+    if (!name) continue
+    const dir = path.posix.dirname(rel)
+    const normalized = dir === '.' ? '' : dir
+    const existing = packages.get(name)
+    if (existing === undefined
+      || dirDepth(normalized) < dirDepth(existing)
+      || (dirDepth(normalized) === dirDepth(existing) && normalized < existing)) {
+      packages.set(name, normalized)
+    }
+  }
+  return packages
+}
+
+/**
+ * 解析 Dart 的 `package:<name>/<path>.dart`：仅当包名来自仓库内
+ * pubspec.yaml 时映射到 `<包根>/lib/<path>`；外部依赖返回 null。
+ * @param {string} specifier - import/export URI。
+ * @param {Map<string,string>} packages - 包名 → 包根目录。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveDartPackage(specifier, packages, indexed) {
+  if (!specifier.startsWith('package:')) return null
+  const rest = specifier.slice('package:'.length)
+  const slash = rest.indexOf('/')
+  if (slash <= 0) return null
+  const name = rest.slice(0, slash)
+  const sub = rest.slice(slash + 1)
+  if (!sub.endsWith('.dart')) return null
+  const dir = packages.get(name)
+  if (dir === undefined) return null
+  const libDir = dir ? `${dir}/lib` : 'lib'
+  const candidate = path.posix.normalize(path.posix.join(libDir, sub))
+  return indexed.has(candidate) ? candidate : null
+}
+
+/**
  * 解析工作区包 import：按最长包名前缀匹配，子路径优先走 package.json 的
  * exports（含通配），其次按包内相对路径落地；包根按 exports → main 等
  * 入口 → src/index → index 依次尝试。
@@ -1224,6 +1271,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots) {
  *   goDirs:Map<string,string>, goModule:string|null, rustRoots:string[],
  *   swiftTargets:Map<string,string>,
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
+ *   dartPackages:Map<string,string>,
  *   pythonRoots:string[], rubyRoots:string[], cppRoots:string[],
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     kotlin:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
@@ -1254,6 +1302,9 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'scala') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.scala)
   if (lang === 'swift') return resolveSwiftSpecifier(imp.specifier, ctx.swiftTargets)
   if (lang === 'dart') {
+    if (imp.specifier.startsWith('package:')) {
+      return resolveDartPackage(imp.specifier, ctx.dartPackages, ctx.indexed)
+    }
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
   if (lang === 'c' || lang === 'cpp') {
@@ -1442,6 +1493,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     swiftTargets: buildSwiftTargets(indexed, parseSwiftTargetPaths(manifestTexts['Package.swift'])),
     jsAliases,
     workspacePackages: buildWorkspacePackages(manifestTexts),
+    dartPackages: buildDartPackages(manifestTexts),
     pythonRoots: buildPythonRoots(indexed, pyprojectRoots(manifestTexts['pyproject.toml'])),
     rubyRoots: buildRubyRoots(indexed),
     cppRoots: buildCppRoots(indexed),

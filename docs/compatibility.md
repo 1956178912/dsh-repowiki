@@ -40,7 +40,7 @@
 | Ruby | class / module / def（含 `self.` 与 `?!=` 后缀/表达式体）/ attr_* / 常量 | `require_relative` 与显式 `./` require 相对文件；裸 `require` 按任意层级 `lib/` 加载路径及项目根解析；gem require 不建边 |
 | Swift | class / struct / actor / enum / protocol / extension / func / init / typealias | `import` 按 `Package.swift` 的 target `path:`（支持多行声明与注释）解析到目标目录代表文件；未声明 path 时回退 `Sources/<Target>`（兼容旧版 `Source/<Target>`）；外部模块不建边 |
 | Scala | class / case class / trait / object / enum / def / given / extension 成员归属 | `import`（分组、`=>` 重命名、`._`/`.*` 通配、`as` 别名）经点分路径后缀匹配；多行参数与跨行声明头（`{`/`=`/`:`）范围正确 |
-| Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`dart:`/`package:` 视为外部不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
+| Dart | class / mixin / enum / extension / extension type / typedef / 构造器 / 方法 / getter / 顶层函数与变量；`_` 前缀标记私有 | 相对 `import`/`export`/`part`（含同目录裸 `x.dart`）与 `show` 符号；`package:<本仓库 pubspec 名>/x.dart` 解析到对应包的 `lib/x.dart`（含嵌套包），外部 `package:`/`dart:` 不建边；`pubspec.yaml` 的 `dependencies`/`dev_dependencies` 计入 pub 技术栈与项目名 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
 
@@ -66,7 +66,7 @@ setuptools/PDM `package-dir`、`packages.find where` 与 poetry `from` 也会
 只按 `lib/` 与项目根推断 `$LOAD_PATH`，不读取 `.ruby-version`、Gemfile 的
 `require_paths` 或运行时 `$LOAD_PATH` 修改。Dart 为轻量行级解析：不解析
 跨行声明头、泛型约束与条件导入；`part of` 不建边（`part` 指令已建），
-`package:`/`dart:` 外部依赖不建边；getter/setter 归为方法，`_` 前缀按
+`package:` 只解析仓库内 pubspec 声明的包（不读 `.dart_tool/package_config.json`），`dart:` 与外部包不建边；getter/setter 归为方法，`_` 前缀按
 Dart 约定标记私有。C/C++ 为轻量行级解析：不展开
 宏与条件编译，不解析多行模板参数、函数指针声明与运算符重载；类内方法
 归属依赖类型块的括号配平，`#define` 生成的声明不会产出符号；`#include`
