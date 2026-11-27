@@ -2,11 +2,13 @@
 /**
  * 再导出链解析（纯函数）。
  *
- * 支持两类能由索引边证明的形态：
+ * 支持三类能由索引边证明的形态：
  * - ES 模块：`export * from './x'` 与同名 `export { x } from './x'`；
  * - Python 包 barrel：`from .core import parse` 会把 `parse` 绑定进当前
  *   模块的命名空间，因此 `from pkg import parse` 可沿 `__init__.py` 归到
- *   `core.py`。
+ *   `core.py`；
+ * - Dart part：`part 'x.dart'` 把 part 文件并入当前库，主库对外导出
+ *   part 内的全部声明（等价于星号再导出，`part` 边本身不声称符号引用）。
  *
  * 别名再导出在 deps 中记录的是原名，无法从边数据恢复导出名，因此不猜测
  * （保守漏报）；barrel 自身导出的同名符号会遮蔽星号来源；多个来源同时
@@ -79,7 +81,8 @@ export function starExportedNamesByFile(files = []) {
  *   `export { x as y } from`；
  * - Python：具名 `from .x import y`（y 进入当前模块命名空间，等价于
  *   同名再导出；`as` 别名记为导出名）；
- * - Rust：`pub use`（别名同样记录）。
+ * - Rust：`pub use`（别名同样记录）；
+ * - Dart：`part 'x.dart'`（part 文件声明并入主库，按星号再导出登记）。
  * @param {ReexportEdge[]} edges - 索引边。
  * @param {Array<{path?:string, lang?:string,
  *   symbols?:Array<{name?:string, default?:boolean}>}>} [files] - 索引文件
@@ -132,6 +135,15 @@ export function buildReexportMaps(edges = [], files = []) {
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     if (edge.from === edge.to) continue
+    // Dart `part 'x.dart'`：主库文件持有 part 文件的全部声明，等价星号
+    // 再导出（part 边不声称符号引用，因此不看 symbols）。
+    if (edge.kind === 'part') {
+      const targets = stars.get(edge.from)
+      if (targets) {
+        if (!targets.includes(edge.to)) targets.push(edge.to)
+      } else stars.set(edge.from, [edge.to])
+      continue
+    }
     // 显式再导出：JS `export-from` 与 Rust `pub use`（kind reexport）
     const explicitReexport = edge.kind === 'export-from' || edge.kind === 'reexport'
     const pythonBarrel = !explicitReexport && pythonFiles.has(edge.from)

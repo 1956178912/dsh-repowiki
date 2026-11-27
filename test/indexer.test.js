@@ -9,6 +9,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import { makeFakeFs } from './fake-fs.mjs'
 import { buildIndex, digestText, stripJsonc } from '../src/indexer.js'
+import { buildReferenceIndex } from '../src/references.js'
 import { INDEX_SCHEMA_VERSION, INDEX_PARSER_VERSION, DIGEST_CHARS, MAX_FILE_BYTES } from '../src/schema.js'
 
 /**
@@ -552,6 +553,7 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
     doc.edges.find(e => e.from === 'lib/app.dart' && e.to === 'lib/src/screen.dart' && e.line === 3)?.symbols,
     ['*'], '无组合子导入按潜在通配写入边',
   )
+  assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.kind, 'part', 'part 记为库合并边')
   assert.deepEqual(edge('lib/app.dart', 'lib/app.g.dart')?.symbols, [], 'part 不声称符号引用')
   assert.equal(edge('lib/app.dart', 'lib/app.g.dart')?.line, 5, 'part 指令建本地边')
   assert.equal(edge('test/app_test.dart', 'lib/app.dart')?.line, 2, '../lib 相对路径解析')
@@ -566,6 +568,34 @@ test('Dart：符号、本地 import/part 边与 pub 技术栈', async () => {
   assert.ok(doc.stack.technologies.some(t => t.name === 'Flutter' && t.ecosystem === 'pub'))
   assert.ok(doc.stack.technologies.some(t => t.name === 'Provider' && t.ecosystem === 'pub'))
   assert.equal(doc.stack.dependencyCounts.pub, 4, '根包 3 + 嵌套包 1')
+})
+
+test('Dart：part 声明经主库归到 part 文件（库合并）', async () => {
+  const dir = makeProject({
+    'lib/widgets.dart': [
+      "part 'widgets.g.dart';",
+      'class Widget {}',
+    ].join('\n'),
+    'lib/widgets.g.dart': "part of 'widgets.dart';\nclass GeneratedHelper {}",
+    'lib/app.dart': [
+      "import 'widgets.dart' show GeneratedHelper;",
+      "import 'widgets.dart';",
+      'class App {}',
+    ].join('\n'),
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+
+  const partEdge = doc.edges.find(e => e.from === 'lib/widgets.dart' && e.to === 'lib/widgets.g.dart')
+  assert.equal(partEdge?.kind, 'part')
+  assert.deepEqual(partEdge?.symbols, [], 'part 边不声称符号引用')
+  assert.ok(!doc.edges.some(e => e.from === 'lib/widgets.g.dart'), 'part of 不建反向边，避免伪循环')
+
+  const refs = buildReferenceIndex(doc.edges, doc.files)
+  const partRefs = refs.get('lib/widgets.g.dart')
+  assert.deepEqual(partRefs?.get('GeneratedHelper'), [{ path: 'lib/app.dart', line: 1 }],
+    '具名导入经主库归到 part 文件')
+  assert.deepEqual(partRefs?.get('*'), [{ path: 'lib/app.dart', line: 2 }],
+    '通配导入把潜在引用传到 part 文件')
 })
 
 test('Swift：本地 target 导入解析到 Sources/<Target> 代表文件', async () => {

@@ -19,8 +19,9 @@ import {
  * @typedef {Object} ImportInfo
  * @property {string} specifier - 源码中的原始模块说明符（如 './foo'、'react'、'.pkg.mod'）。
  * @property {number} line - 语句所在行（1-based）。
- * @property {'import'|'export-from'|'require'|'mod'|'reexport'} kind - 引用形态
- *   （`mod` 仅 Rust：`mod foo;` 模块声明；`reexport` 仅 Rust `pub use`）。
+ * @property {'import'|'export-from'|'require'|'mod'|'reexport'|'part'} kind - 引用形态
+ *   （`mod` 仅 Rust：`mod foo;` 模块声明；`reexport` 仅 Rust `pub use`；
+ *   `part` 仅 Dart：`part 'x.dart';` 把 part 文件并入当前库）。
  * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
  *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
@@ -1698,6 +1699,12 @@ function extractElixirImports(lines) {
 
 /**
  * 提取 Dart 的 import/export/part 引用。
+ *
+ * `part 'x.dart';` 不是导入而是"并入当前库"：part 文件内的声明属于主库
+ * 命名空间，主库对外导入时可见。这里记为独立形态 `kind: 'part'` 且不
+ * 声称符号引用；再导出解析把主库文件视作星号 barrel（见 reexports.js）。
+ * `part of 'x.dart';` 是 part 文件内的反向声明，不产生引用边（避免同一
+ * 库的主文件/part 文件互指形成伪循环）。
  * @param {string[]} lines - 代码行。
  * @returns {ImportInfo[]} 引用记录。
  */
@@ -1744,7 +1751,7 @@ function extractDartImports(lines) {
     result.push({
       specifier,
       line: i + 1,
-      kind: m[1] === 'export' ? 'export-from' : 'import',
+      kind: m[1] === 'part' ? 'part' : (m[1] === 'export' ? 'export-from' : 'import'),
       relative,
       imported,
       ...(hidden && hidden.length > 0 ? { hidden } : {}),

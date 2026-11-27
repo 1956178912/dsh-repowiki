@@ -254,6 +254,22 @@ test('usages：Dart hide 排除被隐藏符号的导入方', () => {
     'hide 排除名不算潜在导入方')
 })
 
+test('usages：Dart part 符号的导入方经主库归因', () => {
+  const edges = [
+    { from: 'lib/widgets.dart', to: 'lib/widgets.g.dart', kind: 'part', line: 1, symbols: [] },
+    { from: 'lib/app.dart', to: 'lib/widgets.dart', kind: 'import', line: 1, symbols: ['GeneratedHelper'] },
+    { from: 'lib/other.dart', to: 'lib/widgets.dart', kind: 'import', line: 1, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'lib/widgets.dart', lang: 'dart', symbols: [{ name: 'Widget', kind: 'class', exported: true }] },
+    { path: 'lib/widgets.g.dart', lang: 'dart', symbols: [{ name: 'GeneratedHelper', kind: 'class', exported: true }] },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'lib/widgets.g.dart', name: 'GeneratedHelper' }, files), [
+    { path: 'lib/app.dart', importLines: [1] },
+    { path: 'lib/other.dart', importLines: [1] },
+  ], 'part 边本身不算使用点，导入方经主库 barrel 归因')
+})
+
 test('usages：Python __all__ 收窄星号导入方', () => {
   const edges = [
     { from: 'pkg/__init__.py', to: 'pkg/core.py', kind: 'import', line: 1, symbols: ['*'] },

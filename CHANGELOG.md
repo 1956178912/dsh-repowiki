@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.270.0] - 2026-11-28
+
+### Added
+
+- **Dart `part` library merging**: `part 'x.dart';` now produces a distinct
+  `part` edge, and the library file acts as a star re-export barrel. Named or
+  wildcard imports of the library resolve declarations that live in part
+  files for references, lexical usages and symbol impact, so generated
+  `*.g.dart` symbols are attributed to the part file instead of the library.
+  `part of` creates no reverse edge, keeping the file graph acyclic.
+- Parser v26 re-parses cached imports.
+
+### Tests
+
+- 822 cases pass (LANG=en); new extraction, index-level reference and usage
+  assertions for part-declared symbols.
+
 ## [0.269.0] - 2026-11-28
 
 ### Changed

@@ -173,7 +173,8 @@ test('Dart：import/export/part 的通配、show/hide 与 as 前缀', () => {
   assert.deepEqual(bySpec.get('src/e.dart').imported, ['E'], 'export show 记再导出名')
   assert.equal(bySpec.get('src/f.dart').kind, 'export-from')
   assert.deepEqual(bySpec.get('src/f.dart').imported, ['*'], '无组合子 export 记星号再导出')
-  assert.deepEqual(bySpec.get('app.g.dart').imported, [], 'part 是同一编译单元')
+  assert.equal(bySpec.get('app.g.dart').kind, 'part', 'part 是库合并而非导入')
+  assert.deepEqual(bySpec.get('app.g.dart').imported, [], 'part 不声称符号引用')
   assert.ok(!bySpec.has('commented/out.dart'))
 })
 
@@ -513,10 +514,12 @@ test('Dart：import/export/part 提取相对语义与 show 符号', () => {
     ['package:flutter/material.dart', 2, false, 'import'],
     ['src/b.dart', 3, true, 'import'],
     ['src/api.dart', 4, true, 'export-from'],
-    ['app.g.dart', 5, true, 'import'],
+    ['app.g.dart', 5, true, 'part'],
   ])
   assert.deepEqual(imports[2].imported, ['B', 'C'])
   assert.deepEqual(imports[3].imported, ['Api'])
+  assert.deepEqual(imports[4].imported, [], 'part 指令不声称符号引用')
+  assert.ok(!imports.some(i => i.specifier === 'main.dart'), 'part of 反向声明不建引用')
   assert.ok(!imports.some(i => i.specifier === 'commented.dart'), '注释不提取')
 })
 
