@@ -90,7 +90,29 @@ test('computeComplexity：endLine 越过文件尾时截断', () => {
   assert.equal(result.max, 2)
 })
 
+test('computeComplexity：highTotal 精确、high 按 limit 截断', () => {
+  const lines = ['function f() {']
+  for (let i = 0; i < 12; i++) lines.push('  if (x) { return 1 }')
+  lines.push('}')
+  const files = [{ path: 'a.js', symbols: [{ name: 'f', kind: 'function', line: 1, endLine: lines.length }] }]
+  const sources = [{ path: 'a.js', text: lines.join('\n') }]
+  const bounded = computeComplexity(files, sources, { threshold: 5, limit: 2 })
+  assert.equal(bounded.highTotal, 1, '只有一个函数达到阈值')
+  assert.equal(bounded.high.length, 1)
+
+  const manyFiles = Array.from({ length: 4 }, (_, index) => ({
+    path: `f${index}.js`,
+    symbols: [{ name: `f${index}`, kind: 'function', line: 1, endLine: lines.length }],
+  }))
+  const manySources = manyFiles.map(file => ({ path: file.path, text: lines.join('\n') }))
+  const capped = computeComplexity(manyFiles, manySources, { threshold: 5, limit: 2 })
+  assert.equal(capped.highTotal, 4, 'highTotal 不受明细上限影响')
+  assert.equal(capped.high.length, 2)
+})
+
 test('computeComplexity：空输入返回零值', () => {
   const result = computeComplexity([], [])
-  assert.deepEqual(result, { total: 0, threshold: COMPLEXITY_THRESHOLD, average: 0, max: 0, high: [] })
+  assert.deepEqual(result, {
+    total: 0, threshold: COMPLEXITY_THRESHOLD, average: 0, max: 0, highTotal: 0, high: [],
+  })
 })

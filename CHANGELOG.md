@@ -5,6 +5,38 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.233.0] - 2026-11-28
+
+### Added
+
+- **`repowiki-status` compares against the architecture baseline**: the tool
+  now builds the same fact snapshot as `verify:arch`
+  (`architectureFactsSnapshot`) from the cycles, layer pairs, unresolved
+  imports, duplicates, complexity and fan-in it already computed, reads
+  `.dsh-repowiki/arch-baseline.json`, and reports `archBaseline`
+  (`exists`, `schemaVersion`, `ok`, `regressionTotal`, bounded
+  `regressions` with stable kinds, `improvements`) plus a one-line
+  `Arch baseline:` summary. New regressions add a warning; an invalid or
+  unsupported baseline is reported as unusable instead of crashing; a
+  missing baseline stays silent apart from the line. Baseline warnings are
+  excluded from the hygiene component so a ratchet failure does not
+  double-penalize the health score.
+- **Exact high-complexity totals**: `computeComplexity` now returns
+  `highTotal` (exact) alongside the bounded `high` list, and status uses it
+  in the warning, the rendered line, the health input and the baseline
+  ceiling, so a project with more than ten high-complexity functions no
+  longer reports "10".
+- **Exact per-layer-pair counts**: `evaluateLayers` returns `pairs`
+  (`from → to` counts) that are never truncated, so status and the CI gate
+  compare identical numbers even when the violation detail list is capped.
+
+### Tests
+
+- 728 cases pass (LANG=en and LANG=zh); new coverage for `highTotal`,
+  truncation-proof layer pairs, facts-snapshot parity between status and
+  the CLI, and status baseline states (missing, matching, regressed,
+  invalid JSON, unsupported version).
+
 ## [0.232.0] - 2026-11-28
 
 ### Added

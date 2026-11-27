@@ -78,6 +78,7 @@ function layerOf(layers, rel) {
  * @param {{limit?:number}} [opts] - 明细上限。
  * @returns {{total:number, truncated:boolean, checkedEdges:number, unknownRefs:string[],
  *   violations:Array<{from:string, fromLayer:string, to:string, toLayer:string, line:number}>,
+ *   pairs:Array<{from:string, to:string, count:number}>,
  *   layers:Array<{name:string, paths:string[], mayDependOn:string[], files:number}>}} 检查结果。
  */
 export function evaluateLayers(layers, edges, files = [], opts = {}) {
@@ -110,6 +111,9 @@ export function evaluateLayers(layers, edges, files = [], opts = {}) {
   let checkedEdges = 0
   /** @type {Array<{from:string, fromLayer:string, to:string, toLayer:string, line:number}>} */
   const violations = []
+  // 层对精确计数（明细有上限，计数不受影响；基线比较依赖它）
+  /** @type {Map<string, {from:string, to:string, count:number}>} */
+  const pairCounts = new Map()
   for (const edge of edges) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue
     const from = assign(edge.from)
@@ -120,6 +124,10 @@ export function evaluateLayers(layers, edges, files = [], opts = {}) {
     const allowed = layerByName.get(from.layer)?.mayDependOn ?? []
     if (allowed.includes(to.layer)) continue
     total++
+    const pairKey = `${from.layer}\u0000${to.layer}`
+    const pair = pairCounts.get(pairKey)
+    if (pair) pair.count++
+    else pairCounts.set(pairKey, { from: from.layer, to: to.layer, count: 1 })
     if (violations.length < limit) {
       violations.push({
         from: edge.from,
@@ -146,6 +154,8 @@ export function evaluateLayers(layers, edges, files = [], opts = {}) {
     checkedEdges,
     unknownRefs,
     violations,
+    pairs: [...pairCounts.values()]
+      .sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to)),
     layers: layers.map(layer => ({
       name: layer.name,
       paths: [...layer.paths],

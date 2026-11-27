@@ -53,9 +53,10 @@ function countBranches(lines, startLine, endLine) {
  * @param {Array<{path:string, symbols?:Array}>} files - 索引文件条目。
  * @param {Array<{path:string, text:string}>} sources - 已读取的源码。
  * @param {{threshold?:number, limit?:number}} [opts] - 阈值与明细上限。
- * @returns {{total:number, threshold:number, average:number, max:number,
+ * @returns {{total:number, threshold:number, average:number, max:number, highTotal:number,
  *   high:Array<{path:string, name:string, line:number, endLine:number, complexity:number}>}}
- *   统计结果：`total` 为参与统计的函数数，`high` 有界。
+ *   统计结果：`total` 为参与统计的函数数，`highTotal` 为达到阈值的精确函数数，
+ *   `high` 为有界明细。
  */
 export function computeComplexity(files, sources, opts = {}) {
   const threshold = Number.isInteger(opts.threshold) && opts.threshold > 0
@@ -112,6 +113,8 @@ export function computeComplexity(files, sources, opts = {}) {
     threshold,
     average: total > 0 ? Math.round((sum / total) * 100) / 100 : 0,
     max,
+    // 明细有界，但调用方（健康分、架构基线）需要精确计数
+    highTotal: high.length,
     high: high.slice(0, limit),
   }
 }

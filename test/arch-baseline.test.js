@@ -6,8 +6,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   snapshotArchitecture, normalizeBaseline, compareArchitecture,
-  MAX_BASELINE_CYCLES,
+  architectureFactsSnapshot, MAX_BASELINE_CYCLES,
 } from '../src/arch-baseline.js'
+import { evaluateLayers } from '../src/layers.js'
+import { findImportCycles } from '../src/cycles.js'
+import { findUnresolvedImports } from '../src/unresolved.js'
+import { findDuplicates } from '../src/duplicates.js'
+import { computeComplexity } from '../src/complexity.js'
+import { topDependents, MAX_HUB_ENTRIES } from '../src/references.js'
 import { ARCH_BASELINE_SCHEMA_VERSION } from '../src/schema.js'
 
 /** 造一个含循环、坏导入与跨层边的索引。 */
@@ -364,4 +370,66 @@ test('arch-baseline：缺少上限/分值时跳过对应比较', () => {
   const result = compareArchitecture(baseline, current)
   assert.equal(result.ok, true)
   assert.deepEqual(result.regressions, [])
+})
+
+test('arch-baseline：按事实生成的快照与按索引生成的快照逐字段一致', () => {
+  const index = sampleIndex()
+  const sources = sampleSources()
+  const layers = LAYERS
+  const fromIndex = snapshotArchitecture({
+    index,
+    layers,
+    sources,
+    opts: { duplicateMinLines: 8, complexityThreshold: 15 },
+  })
+  // 模拟 repowiki-status 的路径：先算好事实，再交给 architectureFactsSnapshot
+  const layerReport = evaluateLayers(layers, index.edges, index.files)
+  const cycleResult = findImportCycles(index.edges, { limit: MAX_BASELINE_CYCLES })
+  const unresolved = findUnresolvedImports(index.files, index.edges, { limit: 200 })
+  const duplicates = findDuplicates(sources, { windowLines: 8 })
+  const complexity = computeComplexity(index.files, sources, { threshold: 15 })
+  const fromFacts = architectureFactsSnapshot({
+    files: index.files,
+    edges: index.edges.length,
+    layerReport,
+    cycles: cycleResult.cycles,
+    unresolved,
+    duplicates,
+    complexity,
+    hubs: topDependents(index.edges, MAX_HUB_ENTRIES),
+    config: { duplicateMinLines: 8, complexityThreshold: 15 },
+    truncated: { cycles: cycleResult.truncated, unresolvedImports: unresolved.total > unresolved.details.length },
+  })
+  assert.deepEqual(fromFacts, fromIndex)
+})
+
+test('arch-baseline：事实快照使用精确 highTotal 而非有界明细长度', () => {
+  const snapshot = architectureFactsSnapshot({
+    files: [{ path: 'a.js', symbols: [] }],
+    edges: 0,
+    cycles: [],
+    unresolved: { details: [] },
+    duplicates: { total: 2 },
+    complexity: {
+      high: [{ path: 'a.js', name: 'f', line: 1, endLine: 9, complexity: 30 }],
+      highTotal: 5,
+      max: 30,
+    },
+    hubs: [],
+    config: { duplicateMinLines: 8, complexityThreshold: 15 },
+  })
+  assert.equal(snapshot.ceilings.highComplexity, 5)
+  assert.equal(snapshot.ceilings.duplicateBlocks, 2)
+  assert.equal(snapshot.ceilings.maxComplexity, 30)
+})
+
+test('arch-baseline：事实快照容忍缺省输入', () => {
+  const snapshot = architectureFactsSnapshot({ config: {} })
+  assert.deepEqual(snapshot.cycles, [])
+  assert.deepEqual(snapshot.layerViolations, [])
+  assert.deepEqual(snapshot.unresolvedImports, [])
+  assert.deepEqual(snapshot.ceilings, { duplicateBlocks: 0, highComplexity: 0, maxComplexity: 0 })
+  assert.deepEqual(snapshot.totals, { files: 0, edges: 0, symbols: 0 })
+  assert.deepEqual(snapshot.config, { duplicateMinLines: 0, complexityThreshold: 0 })
+  assert.equal(snapshot.architectureScore, 100)
 })

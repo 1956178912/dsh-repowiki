@@ -48,6 +48,31 @@ test('evaluateLayers：同层允许、mayDependOn 允许、未声明跨层违规
   assert.deepEqual(report.layers.map(l => [l.name, l.files]), [
     ['ui', 2], ['core', 1], ['data', 1],
   ])
+  // 层对计数始终精确，且按 from/to 排序（架构基线比较依赖）
+  assert.deepEqual(report.pairs, [
+    { from: 'core', to: 'ui', count: 1 },
+    { from: 'data', to: 'core', count: 1 },
+  ])
+})
+
+test('evaluateLayers：明细截断时层对计数仍精确', () => {
+  const layers = normalizeLayers([
+    { name: 'ui', paths: ['src/ui'] },
+    { name: 'core', paths: ['src/core'] },
+  ])
+  const edges = [
+    { from: 'src/ui/a.ts', to: 'src/core/b.ts' },
+    { from: 'src/ui/c.ts', to: 'src/core/b.ts' },
+    { from: 'src/core/b.ts', to: 'src/ui/a.ts' },
+  ]
+  const report = evaluateLayers(layers, edges, [], { limit: 1 })
+  assert.equal(report.total, 3)
+  assert.equal(report.violations.length, 1)
+  assert.equal(report.truncated, true)
+  assert.deepEqual(report.pairs, [
+    { from: 'core', to: 'ui', count: 1 },
+    { from: 'ui', to: 'core', count: 2 },
+  ])
 })
 
 test('evaluateLayers：最长前缀优先与未知层引用', () => {

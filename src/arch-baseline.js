@@ -94,7 +94,122 @@ function comparePairs(a, b) {
 }
 
 /**
- * 从索引事实生成架构基线快照。
+ * 由**已经算好的架构事实**生成基线快照（status 与 CLI 共用，避免两套口径）。
+ *
+ * `repowiki-status` 为了展示已经计算过循环/分层/坏导入/重复/复杂度，这里
+ * 不再重算，只做归一化与评分；`snapshotArchitecture` 则在 CLI 侧先算事实
+ * 再调用本函数。两条路径对同一索引必须给出逐字段相同的结果。
+ * @param {object} facts - 架构事实。
+ * @param {Array} [facts.files] - 索引文件条目（用于规模统计）。
+ * @param {number} [facts.edges] - 依赖边数量（用于规模统计）。
+ * @param {{total?:number, pairs?:Array<{from:string,to:string,count:number}>, violations?:Array}} [facts.layerReport]
+ *   - `evaluateLayers` 的结果；优先使用精确的 `pairs`。
+ * @param {Array<{files:string[], size:number}>} [facts.cycles] - 循环组（`findImportCycles` 输出）。
+ * @param {{details?:Array, total?:number}} [facts.unresolved] - `findUnresolvedImports` 输出。
+ * @param {{total?:number}} [facts.duplicates] - `findDuplicates` 输出。
+ * @param {{high?:Array, highTotal?:number, max?:number}} [facts.complexity] - `computeComplexity` 输出。
+ * @param {Array<{path:string, dependents:number}>} [facts.hubs] - fan-in 排名。
+ * @param {{duplicateMinLines:number, complexityThreshold:number}} facts.config - 生效阈值。
+ * @param {{cycles?:boolean, unresolvedImports?:boolean}} [facts.truncated] - 输入是否被截断。
+ * @returns {ArchitectureSnapshot} 基线快照。
+ */
+export function architectureFactsSnapshot(facts) {
+  const files = Array.isArray(facts.files) ? facts.files : []
+  const cycles = (Array.isArray(facts.cycles) ? facts.cycles : [])
+    .map(cycle => {
+      const members = [...new Set((cycle.files ?? []).filter(name => typeof name === 'string' && name !== ''))]
+      return members.sort()
+    })
+    .filter(members => members.length >= 2)
+    .sort((a, b) => a.join(KEY_SEP).localeCompare(b.join(KEY_SEP)))
+  const layerViolations = (Array.isArray(facts.layerReport?.pairs)
+    ? facts.layerReport.pairs
+    : pairCountsFrom(facts.layerReport?.violations))
+    .map(pair => ({ from: pair.from, to: pair.to, count: countOf(pair.count) }))
+    .sort(comparePairs)
+    .slice(0, MAX_BASELINE_LAYER_PAIRS)
+  const unresolvedMap = new Map()
+  for (const detail of Array.isArray(facts.unresolved?.details) ? facts.unresolved.details : []) {
+    if (!detail || typeof detail.path !== 'string' || typeof detail.specifier !== 'string') continue
+    unresolvedMap.set(`${detail.path}${KEY_SEP}${detail.specifier}`, {
+      path: detail.path,
+      specifier: detail.specifier,
+    })
+  }
+  const unresolvedImports = [...unresolvedMap.values()]
+    .sort((a, b) => a.path.localeCompare(b.path) || a.specifier.localeCompare(b.specifier))
+    .slice(0, MAX_BASELINE_UNRESOLVED)
+  const duplicateBlocks = countOf(facts.duplicates?.total)
+  const highComplexity = Number.isInteger(facts.complexity?.highTotal)
+    ? countOf(facts.complexity?.highTotal)
+    : (Array.isArray(facts.complexity?.high) ? facts.complexity.high.length : 0)
+  const maxComplexity = countOf(facts.complexity?.max)
+  const hubs = Array.isArray(facts.hubs) ? facts.hubs : []
+  // 只取架构分量：文档/Wiki 资产状态与架构门禁无关，避免基线随资产生成漂移
+  const health = assessHealth({
+    coverage: { eligible: 0, documented: 0, fresh: 0, stale: 0, percent: 100 },
+    wiki: { count: 0, stale: 0, orphaned: 0 },
+    cycles: cycles.map(members => ({ files: members, size: members.length })),
+    hubs,
+    layers: { total: countOf(facts.layerReport?.total) },
+    duplicates: { total: duplicateBlocks },
+    complexity: { high: highComplexity },
+    warnings: [],
+    skipped: 0,
+  })
+  const architectureScore = clampScore(
+    health.components.find(component => component.key === 'architecture')?.score ?? 100,
+  )
+  let symbols = 0
+  for (const file of files) {
+    if (Array.isArray(file?.symbols)) symbols += file.symbols.length
+  }
+  return {
+    schemaVersion: ARCH_BASELINE_SCHEMA_VERSION,
+    config: {
+      duplicateMinLines: countOf(facts.config?.duplicateMinLines),
+      complexityThreshold: countOf(facts.config?.complexityThreshold),
+    },
+    totals: {
+      files: files.length,
+      edges: Number.isInteger(facts.edges) ? countOf(facts.edges) : 0,
+      symbols,
+    },
+    cycles,
+    layerViolations,
+    unresolvedImports,
+    ceilings: {
+      duplicateBlocks,
+      highComplexity,
+      maxComplexity,
+    },
+    architectureScore,
+    truncated: {
+      cycles: facts.truncated?.cycles === true,
+      unresolvedImports: facts.truncated?.unresolvedImports === true,
+    },
+  }
+}
+
+/**
+ * 从违规明细聚合层对计数（仅在调用方没有提供 `pairs` 时兜底）。
+ * @param {Array<{fromLayer:string, toLayer:string}>} [violations] - 违规明细。
+ * @returns {Array<{from:string, to:string, count:number}>} 层对计数（未排序）。
+ */
+function pairCountsFrom(violations) {
+  const pairCounts = new Map()
+  for (const violation of Array.isArray(violations) ? violations : []) {
+    if (!violation || typeof violation.fromLayer !== 'string' || typeof violation.toLayer !== 'string') continue
+    const key = `${violation.fromLayer}${KEY_SEP}${violation.toLayer}`
+    const bucket = pairCounts.get(key)
+    if (bucket) bucket.count++
+    else pairCounts.set(key, { from: violation.fromLayer, to: violation.toLayer, count: 1 })
+  }
+  return [...pairCounts.values()]
+}
+
+/**
+ * 从索引与源码生成架构基线快照（CLI 入口；status 走 `architectureFactsSnapshot`）。
  * @param {object} input - 输入事实。
  * @param {{files?:Array, edges?:Array}} [input.index] - 索引内容（files/edges）。
  * @param {Array<{name:string, paths:string[], mayDependOn:string[]}>} [input.layers]
@@ -117,88 +232,30 @@ export function snapshotArchitecture(input = {}) {
     ? /** @type {number} */ (input.opts?.complexityThreshold)
     : COMPLEXITY_THRESHOLD
 
-  // 分层违规：明细上限放开，才能得到每一层对的精确计数
-  const layerReport = layers.length > 0
-    ? evaluateLayers(layers, edges, files, { limit: Number.MAX_SAFE_INTEGER })
-    : null
-  const pairCounts = new Map()
-  for (const violation of layerReport?.violations ?? []) {
-    const key = `${violation.fromLayer}${KEY_SEP}${violation.toLayer}`
-    const bucket = pairCounts.get(key)
-    if (bucket) bucket.count++
-    else pairCounts.set(key, { from: violation.fromLayer, to: violation.toLayer, count: 1 })
-  }
-  const layerViolations = [...pairCounts.values()]
-    .sort(comparePairs)
-    .slice(0, MAX_BASELINE_LAYER_PAIRS)
-
+  const layerReport = layers.length > 0 ? evaluateLayers(layers, edges, files) : null
   const cycleResult = findImportCycles(edges, { limit: MAX_BASELINE_CYCLES })
-  const cycles = cycleResult.cycles
-    .map(cycle => {
-      const members = [...new Set(cycle.files.filter(name => typeof name === 'string' && name !== ''))]
-      return members.sort()
-    })
-    .filter(members => members.length >= 2)
-    .sort((a, b) => a.join(KEY_SEP).localeCompare(b.join(KEY_SEP)))
-
   const unresolvedResult = findUnresolvedImports(files, edges, { limit: MAX_BASELINE_UNRESOLVED })
-  const unresolvedMap = new Map()
-  for (const detail of unresolvedResult.details) {
-    unresolvedMap.set(`${detail.path}${KEY_SEP}${detail.specifier}`, {
-      path: detail.path,
-      specifier: detail.specifier,
-    })
-  }
-  const unresolvedImports = [...unresolvedMap.values()]
-    .sort((a, b) => a.path.localeCompare(b.path) || a.specifier.localeCompare(b.specifier))
-
   const duplicates = sources.length >= 2
     ? findDuplicates(sources, { windowLines })
     : { total: 0 }
-  // 复杂度明细上限放开，得到精确的高复杂度函数数（health 只用计数）
   const complexity = sources.length > 0
-    ? computeComplexity(files, sources, { threshold, limit: Number.MAX_SAFE_INTEGER })
-    : { total: 0, high: [], max: 0 }
-  const hubs = topDependents(edges, MAX_HUB_ENTRIES)
-  // 只取架构分量：文档/Wiki 资产状态与架构门禁无关，避免基线随资产生成漂移
-  const health = assessHealth({
-    coverage: { eligible: 0, documented: 0, fresh: 0, stale: 0, percent: 100 },
-    wiki: { count: 0, stale: 0, orphaned: 0 },
-    cycles: cycles.map(members => ({ files: members, size: members.length })),
-    hubs,
-    layers: { total: layerReport?.total ?? 0 },
-    duplicates: { total: duplicates.total },
-    complexity: { high: complexity.high.length },
-    warnings: [],
-    skipped: 0,
-  })
-  const architectureScore = clampScore(
-    health.components.find(component => component.key === 'architecture')?.score ?? 100,
-  )
-
-  let symbols = 0
-  for (const file of files) {
-    if (Array.isArray(file?.symbols)) symbols += file.symbols.length
-  }
-
-  return {
-    schemaVersion: ARCH_BASELINE_SCHEMA_VERSION,
+    ? computeComplexity(files, sources, { threshold })
+    : { total: 0, high: [], highTotal: 0, max: 0 }
+  return architectureFactsSnapshot({
+    files,
+    edges: edges.length,
+    layerReport,
+    cycles: cycleResult.cycles,
+    unresolved: unresolvedResult,
+    duplicates,
+    complexity,
+    hubs: topDependents(edges, MAX_HUB_ENTRIES),
     config: { duplicateMinLines: windowLines, complexityThreshold: threshold },
-    totals: { files: files.length, edges: edges.length, symbols },
-    cycles,
-    layerViolations,
-    unresolvedImports,
-    ceilings: {
-      duplicateBlocks: countOf(duplicates.total),
-      highComplexity: complexity.high.length,
-      maxComplexity: countOf(complexity.max),
-    },
-    architectureScore,
     truncated: {
       cycles: cycleResult.truncated === true,
       unresolvedImports: unresolvedResult.total > unresolvedResult.details.length,
     },
-  }
+  })
 }
 
 /**

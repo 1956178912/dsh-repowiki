@@ -15,6 +15,8 @@ import { repowikiMemoryTool } from '../src/tool-memory.js'
 import { writeCard, writeWikiManifest } from '../src/knowledge.js'
 import { encodeFrontmatter } from '../src/util.js'
 import { citationDigest } from '../src/citation-digest.js'
+import { verifyArchitecture } from '../scripts/verify-arch.mjs'
+import { ARCH_BASELINE_FILE, ASSET_DIR } from '../src/schema.js'
 
 /** 最小 ctx。 */
 function makeCtx(dir) {
@@ -780,4 +782,79 @@ test('repowiki-status：引用内容漂移（清单 v3 指纹）', async () => {
   const legacy = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
   assert.equal(legacy.citationDrift, undefined)
   assert.ok(!repowikiStatusTool(ctx).output.render({}, legacy)[0].text.includes('Citation drift'))
+})
+
+test('repowiki-status：无架构基线时明确提示缺失', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-baseline-none-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() { return 1 }\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.deepEqual(out.archBaseline, { exists: false })
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /Arch baseline: missing/)
+})
+
+test('repowiki-status：基线与当前事实一致时 OK，新增循环后报回归', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-baseline-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), "import { b } from './b'\nexport function a() { return b() }\n")
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), 'export function b() { return 1 }\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const seeded = await verifyArchitecture({ root: dir, update: true })
+  assert.equal(seeded.ok, true)
+
+  const clean = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(clean.archBaseline.exists, true)
+  assert.equal(clean.archBaseline.ok, true)
+  assert.equal(clean.archBaseline.regressionTotal, 0)
+  const cleanText = repowikiStatusTool(ctx).output.render({}, clean)[0].text
+  assert.match(cleanText, /Arch baseline: OK \(no new regressions\)/)
+  assert.ok(!clean.warnings.some(w => /architecture regression/.test(w)))
+
+  // 直接改索引：新增一对互相 import 的文件（不重跑索引，等价于手工更新产物）
+  const indexPath = path.join(dir, ASSET_DIR, 'index.json')
+  const index = JSON.parse(nodefs.readFileSync(indexPath, 'utf8'))
+  index.files.push(
+    { path: 'c.ts', lang: 'typescript', digest: 'c1', symbols: [], imports: [], lines: 1 },
+    { path: 'd.ts', lang: 'typescript', digest: 'd1', symbols: [], imports: [], lines: 1 },
+  )
+  index.edges.push(
+    { from: 'c.ts', to: 'd.ts', line: 1, kind: 'import' },
+    { from: 'd.ts', to: 'c.ts', line: 1, kind: 'import' },
+  )
+  nodefs.writeFileSync(indexPath, JSON.stringify(index, null, 2))
+  nodefs.writeFileSync(path.join(dir, 'c.ts'), "import './d'\n")
+  nodefs.writeFileSync(path.join(dir, 'd.ts'), "import './c'\n")
+
+  const regressed = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(regressed.archBaseline.exists, true)
+  assert.equal(regressed.archBaseline.ok, false)
+  assert.ok(regressed.archBaseline.regressionTotal >= 1)
+  assert.equal(regressed.archBaseline.regressions[0].kind, 'cycle')
+  assert.ok(regressed.warnings.some(w => /architecture regression\(s\) vs \.dsh-repowiki\/arch-baseline\.json/.test(w)))
+  const text = repowikiStatusTool(ctx).output.render({}, regressed)[0].text
+  assert.match(text, /Arch baseline: \d+ new regression\(s\) — e\.g\. new import cycle group: c\.ts ↔ d\.ts/)
+})
+
+test('repowiki-status：坏基线 JSON 与不支持的版本都报告不可用', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-baseline-bad-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() { return 1 }\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const baselinePath = path.join(dir, ASSET_DIR, ARCH_BASELINE_FILE)
+
+  nodefs.writeFileSync(baselinePath, '{ broken')
+  const broken = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.deepEqual(broken.archBaseline, { exists: true, ok: false, error: 'invalid JSON' })
+  assert.ok(broken.warnings.some(w => /is not valid JSON/.test(w)))
+  assert.match(repowikiStatusTool(ctx).output.render({}, broken)[0].text, /Arch baseline: unusable \(invalid JSON\)/)
+
+  nodefs.writeFileSync(baselinePath, JSON.stringify({ schemaVersion: 99, cycles: [] }))
+  const outdated = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(outdated.archBaseline.exists, true)
+  assert.equal(outdated.archBaseline.ok, false)
+  assert.match(outdated.archBaseline.error, /unsupported architecture baseline schemaVersion/)
+  assert.ok(outdated.warnings.some(w => /schemaVersion/.test(w)))
+  assert.match(repowikiStatusTool(ctx).output.render({}, outdated)[0].text, /Arch baseline: unusable/)
 })

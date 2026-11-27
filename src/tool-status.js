@@ -14,7 +14,7 @@ import { listMemory } from './memory.js'
 import { readPlan, selectCandidates } from './config.js'
 import { documentationCoverage, assessHealth } from './health.js'
 import { pendingLocks } from './lock.js'
-import { INDEX_REL_PATH, SUPPORTED_LOCALES, ASSET_DIR, INDEX_PARSER_VERSION } from './schema.js'
+import { INDEX_REL_PATH, SUPPORTED_LOCALES, ASSET_DIR, INDEX_PARSER_VERSION, ARCH_BASELINE_FILE } from './schema.js'
 import { resolveContentLocale } from './locale.js'
 import { summarizeModuleRelations } from './modules.js'
 import { findImportCycles } from './cycles.js'
@@ -28,7 +28,11 @@ import { moduleCoupling } from './coupling.js'
 import { evaluateLayers } from './layers.js'
 import { findDuplicates, MAX_DUPLICATE_FILES } from './duplicates.js'
 import { computeComplexity } from './complexity.js'
-import { findUnresolvedImports } from './unresolved.js'
+import { findUnresolvedImports, MAX_UNRESOLVED_DETAILS } from './unresolved.js'
+import {
+  architectureFactsSnapshot, normalizeBaseline, compareArchitecture,
+  MAX_BASELINE_CYCLES, MAX_BASELINE_UNRESOLVED,
+} from './arch-baseline.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
@@ -69,8 +73,96 @@ async function readStatusSources(fs, root, files, limit = MAX_DUPLICATE_FILES) {
   return sources
 }
 
+/**
+ * 把当前架构事实与架构基线比较（只读；缺失基线不是错误）。
+ * @param {FsService} fs - ctx.fs。
+ * @param {string} root - 项目根。
+ * @param {object} facts - `architectureFactsSnapshot` 的输入事实。
+ * @returns {Promise<{info:object, warnings:string[]}>} 对照结果与告警。
+ */
+async function compareWithBaseline(fs, root, facts) {
+  const read = await readArchBaseline(fs, root)
+  if (!read.exists) return { info: { exists: false }, warnings: [] }
+  let raw
+  try {
+    raw = JSON.parse(read.text ?? '')
+  } catch {
+    return {
+      info: { exists: true, ok: false, error: 'invalid JSON' },
+      warnings: [`${ASSET_DIR}/${ARCH_BASELINE_FILE} is not valid JSON; run verify:arch --update.`],
+    }
+  }
+  const { baseline, problems } = normalizeBaseline(raw)
+  const baselineWarnings = problems.map(
+    message => `${ASSET_DIR}/${ARCH_BASELINE_FILE}: ${message}`,
+  )
+  if (!baseline) {
+    return {
+      info: { exists: true, ok: false, error: problems[0] ?? 'unusable baseline' },
+      warnings: baselineWarnings,
+    }
+  }
+  const comparison = compareArchitecture(baseline, architectureFactsSnapshot(facts))
+  if (comparison.regressions.length > 0) {
+    baselineWarnings.push(
+      `${comparison.regressions.length} architecture regression(s) vs ${ASSET_DIR}/${ARCH_BASELINE_FILE}; run verify:arch for details.`,
+    )
+  }
+  return {
+    info: {
+      exists: true,
+      schemaVersion: baseline.schemaVersion,
+      ok: comparison.ok,
+      regressionTotal: comparison.regressions.length,
+      improvements: comparison.improvements.length,
+      regressions: comparison.regressions.slice(0, 10).map(item => ({
+        kind: item.kind,
+        message: item.message,
+      })),
+    },
+    warnings: baselineWarnings,
+  }
+}
+
 /** 状态报告里展示的循环依赖组数上限。 */
 const STATUS_CYCLE_GROUPS = 10
+
+/**
+ * 读取架构基线文件（缺失/坏 JSON 分开报告；不抛错）。
+ * @param {FsService} fs - ctx.fs。
+ * @param {string} root - 项目根。
+ * @returns {Promise<{exists:boolean, text:string|null, error:string}>} 读取结果。
+ */
+async function readArchBaseline(fs, root) {
+  const rel = `${ASSET_DIR}/${ARCH_BASELINE_FILE}`
+  try {
+    return { exists: true, text: await fs.readText(await fs.resolve(rel, { cwd: root })), error: '' }
+  } catch {
+    // 与索引读取一致：不可读按缺失处理，不阻断诊断
+    return { exists: false, text: null, error: '' }
+  }
+}
+
+/**
+ * 渲染架构基线对照结果。
+ * @param {{exists:boolean, ok?:boolean, error?:string, regressionTotal?:number,
+ *   improvements?:number, regressions?:Array<{message:string}>}} info - 基线对照。
+ * @returns {string} 单行文本。
+ */
+function formatArchBaseline(info) {
+  if (!info?.exists) return 'missing (run verify:arch --update to freeze current findings)'
+  if (typeof info.error === 'string' && info.error) return `unusable (${info.error})`
+  if (typeof info.ok !== 'boolean') return 'unusable'
+  if (info.ok) {
+    const fixed = info.improvements ?? 0
+    return fixed > 0
+      ? `OK — ${fixed} fixed finding(s); run verify:arch --update to tighten`
+      : 'OK (no new regressions)'
+  }
+  const total = info.regressionTotal ?? 0
+  const example = info.regressions?.[0]?.message
+  return `${total} new regression(s)${example ? ` — e.g. ${example}` : ''}`
+}
 
 /** 渲染循环组时每组的展示文件数（完整数据在结构化输出里）。 */
 const CYCLE_RENDER_FILES = 3
@@ -182,8 +274,11 @@ const DESCRIPTION = [
   'Ca/Ce coupling and instability are reported for cross-module imports; and architecture layers',
   'declared in repowiki-plan.json are checked so cross-layer imports outside mayDependOn are listed',
   'as violations; cross-file duplicate code candidates are reported from bounded line-window',
-  'fingerprints, function-level complexity is estimated from symbol ranges, and relative imports',
-  'without a resolved edge are listed as broken-reference candidates. Use it to diagnose',
+  'fingerprints, function-level complexity is estimated from symbol ranges (with an exact',
+  'high-complexity total), relative imports without a resolved edge are listed as',
+  'broken-reference candidates, and the current facts are compared with the architecture',
+  'baseline written by verify:arch --update so new cycle/layer/import/duplicate/complexity/score',
+  'regressions surface without running CI. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. The weighted health score also counts',
   'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
@@ -727,8 +822,22 @@ export function repowikiStatusTool(ctx) {
                   required: ['name', 'paths', 'mayDependOn', 'files'],
                 },
               },
+              pairs: {
+                type: 'array',
+                description: 'Exact violating-edge counts per from→to layer pair, sorted by layer names. Unlike violations this is never truncated, so baselines and ratchets compare exact numbers.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    from: { type: 'string' },
+                    to: { type: 'string' },
+                    count: { type: 'integer' },
+                  },
+                  required: ['from', 'to', 'count'],
+                },
+              },
             },
-            required: ['total', 'truncated', 'checkedEdges', 'unknownRefs', 'violations', 'layers'],
+            required: ['total', 'truncated', 'checkedEdges', 'unknownRefs', 'violations', 'layers', 'pairs'],
           },
           duplicates: {
             type: 'object',
@@ -776,6 +885,7 @@ export function repowikiStatusTool(ctx) {
               threshold: { type: 'integer', description: 'Complexity at which a function enters high (default 15).' },
               average: { type: 'number', description: 'Mean complexity (2 decimals).' },
               max: { type: 'integer' },
+              highTotal: { type: 'integer', description: 'Functions at or above the threshold (exact, even when the detail list is capped).' },
               high: {
                 type: 'array',
                 description: 'Functions at or above the threshold (up to 10, highest first).',
@@ -793,7 +903,34 @@ export function repowikiStatusTool(ctx) {
                 },
               },
             },
-            required: ['total', 'threshold', 'average', 'max', 'high'],
+            required: ['total', 'threshold', 'average', 'max', 'highTotal', 'high'],
+          },
+          archBaseline: {
+            type: 'object',
+            description: 'Comparison of the current architecture facts against .dsh-repowiki/arch-baseline.json (written by verify:arch --update). Only new regressions fail; a missing baseline is reported, not treated as an error. Facts use the same architectureFactsSnapshot path as the CI gate.',
+            additionalProperties: false,
+            properties: {
+              exists: { type: 'boolean' },
+              schemaVersion: { type: 'integer' },
+              ok: { type: 'boolean', description: 'True when no new regression exists. Omitted when the baseline is missing or unusable.' },
+              error: { type: 'string', description: 'Why the baseline cannot be compared (invalid JSON or unsupported schemaVersion).' },
+              regressionTotal: { type: 'integer', description: 'New regressions (exact, even when the detail list is capped).' },
+              improvements: { type: 'integer', description: 'Findings that disappeared or decreased; run verify:arch --update to tighten the baseline.' },
+              regressions: {
+                type: 'array',
+                description: 'Up to 10 new regressions with stable kinds: cycle, layer, unresolved, ceiling, score.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    kind: { type: 'string', enum: ['cycle', 'layer', 'unresolved', 'ceiling', 'score'] },
+                    message: { type: 'string' },
+                  },
+                  required: ['kind', 'message'],
+                },
+              },
+            },
+            required: ['exists'],
           },
           unresolved: {
             type: 'object',
@@ -822,7 +959,7 @@ export function repowikiStatusTool(ctx) {
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
-        required: ['root', 'assetDir', 'locale', 'index', 'cards', 'wiki', 'coverage', 'memory', 'plan', 'lock', 'warnings', 'durationMs'],
+        required: ['root', 'assetDir', 'locale', 'index', 'cards', 'wiki', 'coverage', 'memory', 'plan', 'lock', 'archBaseline', 'warnings', 'durationMs'],
       },
       render: (_args, value) => [{
         type: 'text',
@@ -871,7 +1008,7 @@ export function repowikiStatusTool(ctx) {
             ? value.coreFiles.map(entry => `${entry.path} (${entry.score.toFixed(4)})`).join('; ')
             : '(none)'}`,
           ...(value.complexity
-            ? [`Complexity: ${value.complexity.total} function(s), avg ${value.complexity.average}, max ${value.complexity.max}${value.complexity.high.length > 0 ? ` — ${value.complexity.high.length} ≥ ${value.complexity.threshold} (e.g. ${value.complexity.high[0].path}#${value.complexity.high[0].name} ${value.complexity.high[0].complexity})` : ''}`]
+            ? [`Complexity: ${value.complexity.total} function(s), avg ${value.complexity.average}, max ${value.complexity.max}${value.complexity.highTotal > 0 ? ` — ${value.complexity.highTotal} ≥ ${value.complexity.threshold} (e.g. ${value.complexity.high[0].path}#${value.complexity.high[0].name} ${value.complexity.high[0].complexity})` : ''}`]
             : []),
           ...(value.unresolved
             ? [`Unresolved imports: ${value.unresolved.total === 0
@@ -888,6 +1025,7 @@ export function repowikiStatusTool(ctx) {
               ? `(none, ${value.layers.checkedEdges} cross-layer edge(s) checked)`
               : `${value.layers.total} violation(s)${value.layers.truncated ? ' (bounded)' : ''} — e.g. ${value.layers.violations[0].fromLayer} → ${value.layers.violations[0].toLayer}: ${value.layers.violations[0].from} → ${value.layers.violations[0].to}`}`]
             : []),
+          `Arch baseline: ${formatArchBaseline(value.archBaseline)}`,
           ...(value.unusedExports
             ? [`Unused export candidates: ${value.unusedExports.total === 0
               ? '(none)'
@@ -1186,9 +1324,13 @@ export function repowikiStatusTool(ctx) {
       if (layerReport && layerReport.total > 0) {
         warnings.push(`${layerReport.total} cross-layer import edge(s) violate the declared layers; see status.layers.`)
       }
-      // 未解析相对导入：坏路径/被排除目标的直接信号（不读源码）
-      const unresolved = index
-        ? findUnresolvedImports(index.files ?? [], index.edges ?? [])
+      // 未解析相对导入：坏路径/被排除目标的直接信号（不读源码）。基线对照
+      // 需要与 verify:arch 相同的明细上限，输出仍按展示上限截断。
+      const unresolvedRaw = index
+        ? findUnresolvedImports(index.files ?? [], index.edges ?? [], { limit: MAX_BASELINE_UNRESOLVED })
+        : null
+      const unresolved = unresolvedRaw
+        ? { ...unresolvedRaw, details: unresolvedRaw.details.slice(0, MAX_UNRESOLVED_DETAILS) }
         : null
       if (unresolved && unresolved.total > 0) {
         warnings.push(`${unresolved.total} relative import(s) could not be resolved; see status.unresolved.`)
@@ -1206,17 +1348,44 @@ export function repowikiStatusTool(ctx) {
       const complexity = statusSources.length > 0
         ? computeComplexity(index?.files ?? [], statusSources, { threshold: plan.complexityThreshold })
         : null
-      if (complexity && complexity.high.length > 0) {
-        warnings.push(`${complexity.high.length} function(s) reach complexity ≥ ${complexity.threshold}; see status.complexity.`)
+      if (complexity && complexity.highTotal > 0) {
+        warnings.push(`${complexity.highTotal} function(s) reach complexity ≥ ${complexity.threshold}; see status.complexity.`)
       }
 
       const git = await readGitInfo(fs, root)
       const moduleDependencies = summarizeModuleRelations(
         index?.files ?? [], index?.edges ?? [], STATUS_MODULE_RELATIONS,
       )
-      const { cycles } = findImportCycles(index?.edges ?? [], { limit: STATUS_CYCLE_GROUPS })
+      // 循环组保留全量用于基线身份比较，展示仍按既有上限截断
+      const cycleResult = findImportCycles(index?.edges ?? [], { limit: MAX_BASELINE_CYCLES })
+      const cycles = cycleResult.cycles.slice(0, STATUS_CYCLE_GROUPS)
       // 文件级 hub：被最多不同文件 import 的目标（改动风险最高的入口）
       const hubs = topDependents(index?.edges ?? [], MAX_HUB_ENTRIES)
+      // 架构基线对照：与 verify:arch 共用 architectureFactsSnapshot 口径；
+      // 告警单独收集，不计入健康分的卫生分量（架构分量已反映事实）
+      const baselineComparison = index
+        ? await compareWithBaseline(fs, root, {
+          files: index.files ?? [],
+          edges: (index.edges ?? []).length,
+          layerReport,
+          cycles: cycleResult.cycles,
+          unresolved: unresolvedRaw,
+          duplicates: duplicates ?? { total: 0 },
+          complexity: complexity ?? { high: [], highTotal: 0, max: 0 },
+          hubs,
+          config: {
+            duplicateMinLines: plan.duplicateMinLines,
+            complexityThreshold: plan.complexityThreshold,
+          },
+          truncated: {
+            cycles: cycleResult.truncated === true,
+            unresolvedImports: unresolvedRaw
+              ? unresolvedRaw.total > unresolvedRaw.details.length
+              : false,
+          },
+        })
+        : { info: { exists: false }, warnings: [] }
+      const baselineWarnings = baselineComparison.warnings
       // PageRank 核心文件：把"被核心模块依赖"的间接重要性计入，与纯 fan-in 互补。
       // 无边时不排名（没有结构信号，列出全库文件没有意义）。
       const coreFiles = (index?.edges ?? []).length > 0
@@ -1250,11 +1419,11 @@ export function repowikiStatusTool(ctx) {
             untracked: citationCoverage?.untracked ?? 0,
             unchecked: (citationRanges?.unchecked ?? 0) + (citationDrift?.unchecked ?? 0),
           },
-          cycles,
+          cycles: cycleResult.cycles,
           hubs,
           layers: layerReport ? { total: layerReport.total } : undefined,
           duplicates: duplicates ? { total: duplicates.total } : undefined,
-          complexity: complexity ? { high: complexity.high.length } : undefined,
+          complexity: complexity ? { high: complexity.highTotal } : undefined,
           warnings: warnings.filter(message => !citationWarnings.includes(message)),
           skipped: index.stats?.skipped ?? 0,
         })
@@ -1327,7 +1496,8 @@ export function repowikiStatusTool(ctx) {
         topDependents: hubs,
         coreFiles,
         ...(unused ? { unusedExports: unused } : {}),
-        warnings,
+        archBaseline: baselineComparison.info,
+        warnings: [...warnings, ...baselineWarnings],
         durationMs: Date.now() - startedAt,
       }
     },

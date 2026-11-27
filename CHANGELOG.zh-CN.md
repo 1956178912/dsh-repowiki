@@ -3,6 +3,25 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.233.0] - 2026-11-28
+
+- **`repowiki-status` 对照架构基线**：工具用与 `verify:arch` 相同的
+  `architectureFactsSnapshot`，把已算好的循环/层对/坏导入/重复/复杂度/
+  fan-in 压成快照，读取 `.dsh-repowiki/arch-baseline.json` 后输出
+  `archBaseline`（`exists`、`schemaVersion`、`ok`、`regressionTotal`、
+  有界 `regressions`（稳定 kind）与 `improvements`），并渲染
+  `Arch baseline:` 行；新增退化同时给出告警，坏 JSON/不支持版本报告为
+  不可用而不崩溃，缺失基线只在行内提示。基线告警不计入健康分的卫生
+  分量，避免棘轮失败被双重扣分。
+- **高复杂度精确计数**：`computeComplexity` 新增 `highTotal`（精确），
+  与有界 `high` 明细分离；status 的告警、渲染行、健康分输入与基线上限
+  均改用精确值——高复杂度函数超过 10 个时不再显示为"10"。
+- **层对精确计数**：`evaluateLayers` 新增 `pairs`（`from → to` 计数），
+  不受违规明细上限影响，status 与 CI 门禁比较的是同一组数字。
+- **测试**：728 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖 `highTotal`、
+  明细截断下的层对计数、status 与 CLI 的事实快照一致性，以及 status
+  基线缺失/一致/退化/坏 JSON/不支持版本五种状态。
+
 ## [0.232.0] - 2026-11-28
 
 - **架构基线棘轮（`verify:arch`）**：新增 `scripts/verify-arch.mjs`，把
