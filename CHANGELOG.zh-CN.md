@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.217.0] - 2026-11-28
+
+- **Groovy 支持（第 30 种语言）**：`.groovy` 提取顶层 `class`/`interface`/
+  `trait`/`enum` 容器与第一层方法（容忍注解与 `public`/`private`/`static`/
+  `final`/`abstract`/`synchronized` 修饰符），以及 Gradle/Jenkinsfile 风格
+  的顶层 `def` 脚本方法；`private`/`protected` 成员标记为非导出，控制流
+  调用不会被误识别为方法。
+- **Groovy 导入**：`import a.b.C` 经与 Java 源码共享的点分模块路径解析，
+  Groovy 可导入 Java 类（反之亦然）；`import static a.b.C.member` 去掉
+  末段成员，边落到定义文件。`//`、`/* … */` 注释与单/双/三引号字符串
+  （含插值文本）在两种提取前统一屏蔽，内部花括号与调用不破坏范围、也不
+  登记符号。
+- **测试**：635 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖类/trait/方法/
+  脚本函数、可见性、屏蔽与两种 import 形式，含 Groovy→Java 点分解析。
+
 ## [0.216.0] - 2026-11-28
 
 - **索引规模/性能回归守卫**：每次测试都会索引一个 300 文件的合成

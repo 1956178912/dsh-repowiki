@@ -1699,6 +1699,40 @@ test('HCL：resource/data/module/variable 与块范围', () => {
   assert.ok(!byName.has('hidden'), '注释内块不登记')
 })
 
+test('Groovy：class/trait/方法/脚本函数与可见性', () => {
+  const code = [
+    '// class Hidden {}',
+    'class Pipeline {',
+    '    String name',
+    '    def run(String cmd) {',
+    '        sh cmd',
+    '    }',
+    '    private void secret() {}',
+    '    static Pipeline create() { return null }',
+    '}',
+    '',
+    'trait Loggable {',
+    '    def log(msg) { println msg }',
+    '}',
+    '',
+    'def deploy(env) {',
+    '    echo env',
+    '}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'groovy')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('Pipeline').kind, 'class')
+  assert.equal(byName.get('Pipeline').endLine, 9)
+  assert.equal(byName.get('run').kind, 'method')
+  assert.equal(byName.get('run').parent, 'Pipeline')
+  assert.equal(byName.get('secret').exported, false)
+  assert.equal(byName.get('create').kind, 'method')
+  assert.equal(byName.get('Loggable').kind, 'class')
+  assert.equal(byName.get('log').kind, 'method')
+  assert.equal(byName.get('deploy').kind, 'function')
+  assert.ok(!byName.has('Hidden'), '注释内类不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

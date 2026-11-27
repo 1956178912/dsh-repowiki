@@ -201,6 +201,7 @@ export const EXTENSION_LANGS = {
   cljs: 'clojure',
   cljc: 'clojure',
   tf: 'hcl',
+  groovy: 'groovy',
   c: 'c',
   h: 'c',
   cc: 'cpp',

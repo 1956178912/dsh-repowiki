@@ -615,6 +615,20 @@ test('HCL：module source 相对路径与外部排除', () => {
   ])
 })
 
+test('Groovy：import 与 static import', () => {
+  const code = [
+    'import com.example.Pipeline',
+    'import static com.example.Utils.trim',
+    '// import hidden.Nope',
+    'def s = "import fake.Nope"',
+  ].join('\n')
+  const imports = extractImports(code, 'groovy')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['com.example.Pipeline', 1],
+    ['com.example.Utils', 2],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

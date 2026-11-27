@@ -350,6 +350,7 @@ const LANGUAGE_LABELS = {
   solidity: 'Solidity',
   clojure: 'Clojure',
   hcl: 'HCL',
+  groovy: 'Groovy',
   c: 'C',
   cpp: 'C++',
 }

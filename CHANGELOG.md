@@ -5,6 +5,30 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.217.0] - 2026-11-28
+
+### Added
+
+- **Groovy indexing (30th language)**: `.groovy` files produce top-level
+  `class`/`interface`/`trait`/`enum` containers and first-level methods
+  (annotations and `public`/`private`/`static`/`final`/`abstract`/
+  `synchronized` modifiers tolerated), plus Gradle/Jenkinsfile-style
+  top-level `def` methods. `private`/`protected` members are marked
+  non-exported; control-flow calls are never mistaken for methods.
+- **Groovy imports**: `import a.b.C` resolves through dotted module paths
+  shared with Java sources, so a Groovy file can import a Java class (and
+  vice versa). `import static a.b.C.member` drops its trailing member so
+  the edge lands on the defining file. `//` and `/* … */` comments plus
+  single/double/triple-quoted strings (including interpolation text) are
+  masked before either extraction, so braces and calls inside them never
+  break ranges or register symbols.
+
+### Tests
+
+- 635 cases pass (LANG=en and LANG=zh); new coverage for classes,
+  traits, methods, script functions, visibility, masking and both import
+  forms, including a Groovy→Java dotted resolution case.
+
 ## [0.216.0] - 2026-11-28
 
 ### Added

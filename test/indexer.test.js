@@ -1725,6 +1725,22 @@ test('规模与性能回归：300 文件合成仓库', async () => {
   assert.ok(elapsed < 5000, `索引耗时异常：${elapsed}ms`)
 })
 
+test('Groovy：点分 import 解析到 Groovy/Java 文件', async () => {
+  const dir = makeProject({
+    'src/com/example/Pipeline.groovy': 'package com.example\nclass Pipeline { def run() {} }\n',
+    'src/com/example/Utils.java': 'package com.example;\npublic class Utils {}\n',
+    'src/App.groovy': 'import com.example.Pipeline\nimport static com.example.Utils.trim\n\ndef main() {}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { groovy: 2, java: 1 })
+
+  const edges = doc.edges.filter(e => e.from === 'src/App.groovy')
+  assert.deepEqual(edges.map(e => [e.line, e.to]).sort(), [
+    [1, 'src/com/example/Pipeline.groovy'],
+    [2, 'src/com/example/Utils.java'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

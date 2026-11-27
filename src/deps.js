@@ -10,7 +10,7 @@
 import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
-  clojureScan, hclScan,
+  clojureScan, hclScan, groovyScan,
 } from './symbols.js'
 
 /**
@@ -1152,6 +1152,33 @@ function extractHclImports(lines) {
 }
 
 /**
+ * 提取 Groovy 的 `import` / `import static` 引用：静态导入去掉末段成员
+ * 名，保留类路径；注释/字符串内的伪 import 由 `groovyScan` 屏蔽。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractGroovyImports(lines) {
+  const result = []
+  const masked = groovyScan(lines)
+  const push = (specifier, line, imported) => {
+    if (!specifier) return
+    result.push({ specifier, line, kind: 'import', relative: false, imported })
+  }
+  for (let i = 0; i < masked.length; i++) {
+    const code = masked[i].trim()
+    const staticImport = /^import\s+static\s+([\w$]+(?:\.[\w$]+)+)/.exec(code)
+    if (staticImport) {
+      const parts = staticImport[1].split('.')
+      push(parts.slice(0, -1).join('.'), i + 1, [parts[parts.length - 1]])
+      continue
+    }
+    const m = /^import\s+([\w$]+(?:\.[\w$]+)+)(?:\s+as\s+\w+)?/.exec(code)
+    if (m) push(m[1], i + 1, [m[1].split('.').pop()])
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1264,6 +1291,7 @@ export function extractImports(code, lang) {
   if (lang === 'solidity') return extractSolidityImports(lines)
   if (lang === 'clojure') return extractClojureImports(lines)
   if (lang === 'hcl') return extractHclImports(lines)
+  if (lang === 'groovy') return extractGroovyImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -3930,6 +3930,115 @@ function extractHcl(lines) {
 }
 
 /**
+ * 扫描 Groovy 源码行：`//` 行注释截断、`/* … *\/` 块注释与单/双引号
+ * 字符串（含三引号）内容替换为空格。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行。
+ */
+export function groovyScan(lines) {
+  const out = []
+  let inBlock = false
+  let quote = null
+  for (const raw of lines) {
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') { inBlock = false; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (quote) {
+        if (quote.length === 3) {
+          if (raw.startsWith(quote, i)) { masked += quote; i += 2; quote = null; continue }
+          masked += ' '
+          continue
+        }
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === quote) { quote = null; masked += ch }
+        else masked += ' '
+        continue
+      }
+      if (ch === '/' && next === '/') break
+      if (ch === '/' && next === '*') { inBlock = true; i++; masked += '  '; continue }
+      if (ch === '"' || ch === "'") {
+        const triple = ch.repeat(3)
+        if (raw.startsWith(triple, i)) { quote = triple; masked += triple; i += 2; continue }
+        quote = ch
+        masked += ch
+        continue
+      }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/** Groovy 控制流/调用关键字——禁止被误识别为方法名。 */
+const GROOVY_KEYWORDS = new Set([
+  'if', 'else', 'for', 'while', 'switch', 'case', 'catch', 'finally', 'try',
+  'return', 'new', 'throw', 'assert', 'println', 'print', 'do', 'def', 'in',
+  'synchronized', 'super', 'this',
+])
+
+/**
+ * 提取 Groovy 符号：`class`/`interface`/`trait`/`enum`（class）与顶层
+ * 脚本方法/类内方法（function/method）。只识别顶层类与第一层方法；
+ * 方法体内部、闭包赋值与关键字调用不登记；`private`/`protected` 非导出。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractGroovy(lines) {
+  const masked = groovyScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const classes = []
+  let depth = 0
+  for (let i = 0; i < masked.length; i++) {
+    while (classes.length > 0 && classes[classes.length - 1].end <= i + 1) classes.pop()
+    const line = masked[i].trim()
+    if (line === '') { depth += braceDeltaOf(masked[i]); continue }
+    const parent = classes.length > 0 ? classes[classes.length - 1].name : undefined
+    const exported = !/\b(?:private|protected)\b/.test(line)
+
+    if (depth === 0) {
+      const typeMatch = /^(?:(?:public|private|protected|abstract|final|static)\s+)*(?:class|interface|trait|enum)\s+([A-Za-z_$][\w$]*)/.exec(line)
+      if (typeMatch) {
+        const end = findBlockEnd(masked, i)
+        symbols.push({ name: typeMatch[1], kind: 'class', line: i + 1, endLine: end, exported })
+        classes.push({ name: typeMatch[1], end })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+      // 顶层脚本方法（Jenkinsfile/Gradle 风格的 `def name(...)`）
+      const scriptFn = /^def\s+([A-Za-z_$][\w$]*)\s*\(/.exec(line)
+      if (scriptFn) {
+        symbols.push({
+          name: scriptFn[1], kind: 'function', line: i + 1,
+          endLine: findBlockEnd(masked, i), exported,
+        })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+    } else if (depth === 1 && parent) {
+      const fn = /^(?:(?:public|private|protected|static|final|abstract|synchronized|native|def)\s+)*(?:[A-Za-z_$][\w$<>[\],.?]*\s+)?([A-Za-z_$][\w$]*)\s*\(/.exec(line)
+      if (fn && !GROOVY_KEYWORDS.has(fn[1])) {
+        symbols.push({
+          name: fn[1], kind: 'method', line: i + 1,
+          endLine: findBlockEnd(masked, i), exported, parent,
+        })
+        depth += braceDeltaOf(masked[i])
+        continue
+      }
+    }
+    depth += braceDeltaOf(masked[i])
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4070,6 +4179,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'solidity') return extractSolidity(lines)
   if (lang === 'clojure') return extractClojure(lines)
   if (lang === 'hcl') return extractHcl(lines)
+  if (lang === 'groovy') return extractGroovy(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

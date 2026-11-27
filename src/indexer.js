@@ -2233,7 +2233,8 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates) {
  *   dottedPaths:{csharp:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     kotlin:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
  *     php:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
- *     scala:{byDotted:Map<string,string>, byClass:Map<string,string[]>}}}} ctx - 解析上下文。
+ *     scala:{byDotted:Map<string,string>, byClass:Map<string,string[]>},
+ *     groovy:{byDotted:Map<string,string>, byClass:Map<string,string[]>}}}} ctx - 解析上下文。
  * @returns {string|null} 命中的目标文件；外部或无法解析返回 null。
  */
 function resolveImportEdge(lang, fromRel, imp, ctx) {
@@ -2272,6 +2273,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'clojure') return resolveClojureSpecifier(imp.specifier, fromRel, ctx.clojureRoots, ctx.indexed)
   if (lang === 'hcl') return resolveHclModule(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'groovy') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.groovy)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)
@@ -2570,6 +2572,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
       kotlin: buildDottedPaths(indexed, ['.kt']),
       php: buildDottedPaths(indexed, ['.php'], { lowercase: true }),
       scala: buildDottedPaths(indexed, ['.scala']),
+      groovy: buildDottedPaths(indexed, ['.groovy', '.java']),
     },
   }
   /** Go internal 可见性违规（去重后进入 warnings）。 */
