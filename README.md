@@ -8,7 +8,7 @@ English | [中文](README.zh-CN.md)
 
 > Design basis: an internal review of the repository-wiki / knowledge-cards feature porting plan (the review document itself is not part of this repository). Hard constraint: zero third-party dsh plugins; every capability comes from official dsh mechanisms.
 
-## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/duplicate-page/stale-card/memory notices, index-version/range-unverified strictness, relative-link/page-path/duplicate-page integrity (wiki pages and project files), status missing-page/invalid-path/duplicate-page counts, missing/failed-page and invalid-path health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.158.0)
+## Current stage: Phases 1–4 complete — 11 tools over a zero-dependency symbol index, 14-language indexing with SFC/workspace/build-file resolution, panel card/Wiki/memory views with deep links, core-file ranking and citation-issue badges, locale-aware asset fallback, documentation health with wiki citation integrity, line-range validation and content-drift digests, drift-aware incremental synthesis, citation-aware health scoring, citation digest coverage with reasons and panel tooltips, bounded concurrent digest verification, page-level coverage details, a CI wiki freshness gate with card/memory stale detection, page integrity checks, persisted generation-failure reporting, structured problem codes and `--require`, panel generation-failure/missing-page/invalid-path/duplicate-page/stale-card/memory notices, index-version/range-unverified strictness, relative-link/page-path/duplicate-page integrity (wiki pages and project files), status missing-page/invalid-path/duplicate-page counts, missing/failed-page and invalid-path health scoring, bounded-concurrency gate reads and a self-testing CI fixture job, an untracked-citation filter, a conservative unused-export audit, module coupling/instability metrics, symbol-aware change impact with lexical usage evidence and affected-test routing, PageRank core-file ranking, and budgeted task context packs with symbol anchors (v0.159.0)
 
 | Capability | Description |
 |---|---|
@@ -163,7 +163,7 @@ Roadmap:
 - **Git provenance without a subprocess**: `index.json` carries `git.branch` / `git.commit` parsed from `.git/HEAD`, loose refs, `packed-refs` and worktree `commondir` files; non-repositories simply omit the field.
 - **Concurrent-write safety** (ADR-0005): the six mutating tools queue per resolved asset root through an in-process promise-chain lock; extract/generate perform model calls outside the lock and re-check freshness inside the write critical section; extraction can dispatch up to 4 model calls in parallel (`concurrency`) with bounded retries (`attempts`) while writes remain serialized; different repositories never block each other, and read-only queries stay lock-free.
 - **Zero-dependency ranking**: BM25 over cards/wiki/accepted memory with Latin words plus CJK unigrams/bigrams; no embeddings, no vector store.
-- **Reverse references on demand**: `src/references.js` inverts `index.edges` (`target file → symbol → importing sites`) at query time; schema v5 edges carry the import line, so results are `path:Lx` precise, bounded and explicitly import-level.
+- **Reverse references on demand**: `src/references.js` inverts `index.edges` (`target file → symbol → importing sites`) at query time; schema v6 edges carry the import line, so results are `path:Lx` precise, bounded and explicitly import-level.
 - **Wiki citations on demand**: `src/wiki-references.js` inverts the wiki manifest (`source file → pages/sections`); manifest v2 stores per-section sources, so "which docs cite this file" is answered without re-reading wiki pages.
 
 ## Client UI (web)
@@ -336,7 +336,7 @@ src/memory.js          Session memory entries (write/list/status)
 src/tool-memory.js     repowiki-memory tool
 src/tool-edit.js       repowiki-edit tool
 src/types.d.ts         Shared TypeScript declarations for ctx.fs / tools
-test/                  Unit and integration tests (522 cases)
+test/                  Unit and integration tests (523 cases)
 ```
 
 ## License

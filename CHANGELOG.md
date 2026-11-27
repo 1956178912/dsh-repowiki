@@ -5,6 +5,32 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.159.0] - 2026-11-27
+
+### Fixed
+
+- **Compatibility matrix drift**: `docs/compatibility.md` still declared index
+  schema v5 and wiki manifest v2 long after the code moved to v6/v3. The table
+  now documents the current formats: line counts, edge lines, skipped-file
+  stats, manifest `inputDigest`/`memoryDigest`, `citationDigests`,
+  `citationMisses`, `failed`/`failedTotal`, plan fields and legacy-read
+  behavior. The runbook no longer claims old indexes upgrade to v3.
+- Current descriptions in both READMEs now refer to schema v6 edges instead of
+  v5 (historical roadmap entries still say v5, which is when lines were added).
+
+### Added
+
+- `KNOWLEDGE_INDEX_SCHEMA_VERSION` and `WIKI_MANIFEST_SCHEMA_VERSION` constants
+  in `src/schema.js`; extraction and generation write them instead of inline
+  literals.
+- A docs-consistency test binds every asset version in the compatibility
+  matrix to those constants, so a future bump cannot leave the matrix stale.
+
+### Tests
+
+- 523 cases pass (LANG=en and LANG=zh); the new guard fails if the matrix and
+  code constants diverge.
+
 ## [0.158.0] - 2026-11-27
 
 ### Fixed

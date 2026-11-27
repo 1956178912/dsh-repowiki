@@ -178,6 +178,19 @@ export const PY_PATH_CANDIDATES = ['.py', '']
  */
 export const CARD_SCHEMA_VERSION = 1
 
+/**
+ * 知识清单（knowledge/<locale>/_index.json）的 schemaVersion。
+ * v2 增加 lastRun 最近运行快照；v1 仍可读。
+ */
+export const KNOWLEDGE_INDEX_SCHEMA_VERSION = 2
+
+/**
+ * Wiki 清单（wiki/<locale>/_index.json）的 schemaVersion。
+ * v2 增加章节级 sections，v3 增加输入/记忆指纹、引用指纹与失败页；
+ * 读取侧按可得字段降级。
+ */
+export const WIKI_MANIFEST_SCHEMA_VERSION = 3
+
 /** 知识卡片目录名（相对资产目录）：knowledge/{locale}/。 */
 export const KNOWLEDGE_DIR = 'knowledge'
 

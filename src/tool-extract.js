@@ -8,7 +8,7 @@
  */
 
 import {
-  MAX_SOURCE_CHARS, MAX_CARDS_PER_RUN_DEFAULT,
+  MAX_SOURCE_CHARS, MAX_CARDS_PER_RUN_DEFAULT, KNOWLEDGE_INDEX_SCHEMA_VERSION,
 } from './schema.js'
 import {
   resolveAssetRoot, readIndex,
@@ -362,7 +362,7 @@ export function repowikiExtractTool(ctx) {
               .map(m => ({ ...m, cards: m.cards.sort() }))
             const generatedAt = new Date().toISOString()
             return writeKnowledgeIndex(fs, root, locale, {
-              schemaVersion: 2,
+              schemaVersion: KNOWLEDGE_INDEX_SCHEMA_VERSION,
               locale,
               generatedAt,
               modules,

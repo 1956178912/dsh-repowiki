@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.159.0] - 2026-11-27
+
+- **修复**：`docs/compatibility.md` 长期停留在索引 v5/清单 v2，实际已是
+  v6/v3；兼容矩阵补齐行数、边行号、跳过文件、清单指纹/失败页等字段与
+  旧资产读取降级说明，Runbook 不再声称旧索引升级到 v3。
+- **增强**：`src/schema.js` 新增 `KNOWLEDGE_INDEX_SCHEMA_VERSION` 与
+  `WIKI_MANIFEST_SCHEMA_VERSION` 常量，抽取/生成不再写内联数字。
+- **门禁**：新增文档一致性测试，把兼容矩阵中的资产版本与代码常量绑定，
+  今后改常量忘改文档会直接失败。
+- **测试**：523 例在 LANG=en 与 LANG=zh 下全通过。
+
 ## [0.158.0] - 2026-11-27
 
 - **修复**：`repowiki-status` 的 `wiki.invalid` 曾把每个正常页面都误报为

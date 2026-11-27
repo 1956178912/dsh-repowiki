@@ -12,7 +12,7 @@ repowiki-status          # 索引/卡片/Wiki/记忆/plan/锁 一览
 |---|---|---|
 | 面板显示“尚未生成知识库” | `status.index.exists=false` | 先 `repowiki-index`，再 `repowiki-extract` |
 | 面板一直“读取失败: workspace-file/not-found” | 该工作区没有会话，或 `.dsh-repowiki/` 不在工作区根 | 在该工作区打开一次会话；确认资产目录位置 |
-| 索引存在但工具提示不兼容 | `status.index.compatible=false` | `repowiki-index` 重建（v2 会自动升级到 v3） |
+| 索引存在但工具提示不兼容 | `status.index.compatible=false` | `repowiki-index` 重建（可读 v2–v5，重建后写 v6） |
 | 卡片“待更新”很多 | `status.cards.stale` | 重新 `repowiki-extract`；人工卡受 `manuallyEdited` 保护 |
 | 卡片“孤儿” | `status.cards.orphaned` | 源文件已删除/重命名；确认后可人工删除对应卡片 |
 | Wiki 页顺序错乱/缺页 | `status.wiki.manifest=false` | `repowiki-generate` 重写 `wiki/<locale>/_index.json` |

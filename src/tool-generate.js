@@ -7,7 +7,7 @@
  */
 
 import {
-  MAX_CARDS_IN_PROMPT, MAX_MEMORIES_IN_PROMPT,
+  MAX_CARDS_IN_PROMPT, MAX_MEMORIES_IN_PROMPT, WIKI_MANIFEST_SCHEMA_VERSION,
 } from './schema.js'
 import {
   resolveAssetRoot, readIndex,
@@ -613,7 +613,7 @@ export function repowikiGenerateTool(ctx) {
         citationCoverage = summarizeCitationCoverage({ pages: manifestPages })
         try {
           manifest = await writeWikiManifest(fs, root, locale, {
-            schemaVersion: 3,
+            schemaVersion: WIKI_MANIFEST_SCHEMA_VERSION,
             generatedAt,
             inputDigest,
             // 记忆指纹：面板/状态只读卡片指纹判陈旧，生成侧用它做增量短路

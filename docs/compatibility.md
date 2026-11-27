@@ -15,12 +15,13 @@
 
 | 文件 | 版本 | 读取兼容 |
 |---|---|---|
-| `index.json` | schemaVersion 5 | 可读 v2–v4（内存补模块树/语言分布/Git，下次 index 升 v5）；新增 `edges[].line`（import 行号）与 `stats.skipped` / `stats.skippedTooLarge`（不可读/超大文件计数）；未知版本拒绝 |
-| 卡片 frontmatter | 1 | 版本不符按坏卡跳过 |
-| Wiki frontmatter | 1（新增可选 `inputDigest`） | 缺字段按旧页处理 |
+| `index.json` | schemaVersion 6 | 可读 v2–v5（内存补模块树/语言分布/Git，下次 index 写 v6）；v6 增加 `files[].lines`（行数快照）与 `edges[].line`（import/use/require 行号），`stats.skipped` / `stats.skippedTooLarge` 记录不可读/超大文件；旧索引无行数时行号越界检查降级为 `citation/range-unchecked`；未知版本拒绝 |
+| 卡片 frontmatter | 1 | 版本不符按坏卡跳过；`manuallyEdited` 卡片不被自动刷新 |
+| Wiki 页面 frontmatter | 1 | `schemaVersion`/`title`/`slug`/`locale`/`generatedAt`，可选 `inputDigest`；缺字段按旧页处理 |
 | `knowledge/<locale>/_index.json` | 2（v1 可读） | 模块→卡片 + `lastRun` 最近运行快照；缺失不影响读取 |
-| `wiki/<locale>/_index.json` | 2（v1 可读） | 页面级 `sources` + 章节级 `sections` + 可选 `memoryDigest`（生成增量短路）；v1 反查降级为页面级；缺失时面板回退文件枚举 |
-| 记忆 frontmatter | 1 | 新增可选 `reviewedAt` |
+| `wiki/<locale>/_index.json` | 3（v1/v2 可读） | v1 页面级 `sources`；v2 增加章节级 `sections`；v3 增加 `inputDigest`/`memoryDigest`（生成增量短路与陈旧检测）、`citationDigests`/`citationMisses`（引用内容指纹与未覆盖原因）、`failed`/`failedTotal`（上次生成失败页）；旧清单按可得字段降级 |
+| 记忆 frontmatter | 1 | `status` 为 `pending`/`accepted`/`rejected`；可选 `reviewedAt` |
+| `repowiki-plan.json` | 无版本字段 | `exclude`/`includeOnly`/`maxCardsPerRun`/`cardComplexityThreshold`/`concurrency`/`attempts`；损坏时回退默认值并告警 |
 
 ## 语言覆盖
 
