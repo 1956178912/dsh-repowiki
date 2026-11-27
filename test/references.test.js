@@ -205,6 +205,72 @@ test('buildReferenceIndex：Python __all__ 收窄星号再导出的潜在引用'
   assert.equal(refs.get('pkg/core.py').get('hidden'), undefined, '__all__ 排除名不被星号引用')
 })
 
+test('buildReferenceIndex：Rust/Go 通配导入只触达公开模块级符号', () => {
+  const edges = [
+    { from: 'src/app.rs', to: 'src/lib.rs', line: 1, symbols: ['*'] },
+    { from: 'main.go', to: 'pkg/util.go', line: 2, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+    {
+      path: 'src/lib.rs',
+      lang: 'rust',
+      symbols: [
+        { name: 'PublicFn', kind: 'function', exported: true },
+        { name: 'private_fn', kind: 'function', exported: false },
+        { name: 'run', kind: 'method', exported: true, parent: 'Thing' },
+      ],
+    },
+    { path: 'main.go', lang: 'go', symbols: [] },
+    {
+      path: 'pkg/util.go',
+      lang: 'go',
+      symbols: [
+        { name: 'Exported', kind: 'function', exported: true },
+        { name: 'hidden', kind: 'function', exported: false },
+        { name: 'Run', kind: 'method', exported: true, parent: 'Server' },
+      ],
+    },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/lib.rs').get('PublicFn'), [{ path: 'src/app.rs', line: 1 }])
+  assert.equal(refs.get('src/lib.rs').get('private_fn'), undefined, '私有项不是可导入符号')
+  assert.equal(refs.get('src/lib.rs').get('run'), undefined, '方法不是可通配导入项')
+  assert.equal(refs.get('src/lib.rs').get('*'), undefined, '已按可见名展开')
+  assert.deepEqual(refs.get('pkg/util.go').get('Exported'), [{ path: 'main.go', line: 2 }])
+  assert.equal(refs.get('pkg/util.go').get('hidden'), undefined, 'Go 小写标识符不导出')
+  assert.equal(refs.get('pkg/util.go').get('Run'), undefined)
+
+  const withoutFiles = buildReferenceIndex(edges)
+  assert.deepEqual(withoutFiles.get('src/lib.rs').get('*'), [{ path: 'src/app.rs', line: 1 }],
+    '无符号表时保留通配保守行为')
+})
+
+test('buildReferenceIndex：Rust 星号再导出链不被可见名展开截断', () => {
+  const edges = [
+    { from: 'src/app.rs', to: 'src/lib.rs', line: 1, symbols: ['*'] },
+    { from: 'src/lib.rs', to: 'src/core.rs', kind: 'reexport', line: 1, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+    { path: 'src/lib.rs', lang: 'rust', symbols: [] },
+    {
+      path: 'src/core.rs',
+      lang: 'rust',
+      symbols: [
+        { name: 'CoreFn', kind: 'function', exported: true },
+        { name: 'private_core', kind: 'function', exported: false },
+      ],
+    },
+  ]
+  const refs = buildReferenceIndex(edges, files)
+  assert.deepEqual(refs.get('src/core.rs').get('*'), [{ path: 'src/app.rs', line: 1 }],
+    'barrel 目标保持通配，下游再导出符号仍能归因')
+  assert.deepEqual(refs.get('src/core.rs').get('CoreFn'), [{ path: 'src/lib.rs', line: 1 }])
+  assert.equal(refs.get('src/core.rs').get('private_core'), undefined,
+    '再导出边按可见名展开，私有项不归因')
+})
+
 test('buildReferenceIndex：Dart hide 的星号导入排除指定符号', () => {
   const edges = [
     { from: 'lib/app.dart', to: 'lib/src/a.dart', kind: 'import', line: 1, symbols: ['*'], hidden: ['Hidden'] },

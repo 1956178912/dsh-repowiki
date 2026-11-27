@@ -271,6 +271,31 @@ test('usages：Dart part 符号的导入方经主库归因', () => {
   ], 'part 边本身不算使用点，导入方经主库 barrel 归因')
 })
 
+test('usages：Rust/Go 通配导入不触达私有项与方法', () => {
+  const edges = [
+    { from: 'src/app.rs', to: 'src/lib.rs', line: 1, symbols: ['*'] },
+  ]
+  const files = [
+    { path: 'src/app.rs', lang: 'rust', symbols: [] },
+    {
+      path: 'src/lib.rs',
+      lang: 'rust',
+      symbols: [
+        { name: 'PublicFn', kind: 'function', exported: true },
+        { name: 'private_fn', kind: 'function', exported: false },
+        { name: 'run', kind: 'method', exported: true, parent: 'Thing' },
+      ],
+    },
+  ]
+  assert.deepEqual(usageImporters(edges, { path: 'src/lib.rs', name: 'PublicFn' }, files), [
+    { path: 'src/app.rs', importLines: [1] },
+  ])
+  assert.deepEqual(usageImporters(edges, { path: 'src/lib.rs', name: 'private_fn' }, files), [],
+    '私有项没有潜在导入方')
+  assert.deepEqual(usageImporters(edges, { path: 'src/lib.rs', name: 'run' }, files), [],
+    '方法不是可通配导入项')
+})
+
 test('usages：Dart part 分组只由 part 边构建', () => {
   const siblings = dartLibrarySiblings([
     { from: 'lib/a.dart', to: 'lib/a.g.dart', kind: 'part' },

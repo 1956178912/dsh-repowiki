@@ -15,7 +15,7 @@
 
 import {
   barrelFiles, buildReexportMaps, exportedNamesByFile, reexportTargets, resolveReexportOrigins,
-  starExportedNamesByFile,
+  starExportedNamesByFile, wildcardImportedNamesByFile,
 } from './reexports.js'
 
 /** 单次检索返回的反向引用条目上限（与其它有界输出一致）。 */
@@ -61,6 +61,11 @@ export function buildReferenceIndex(edges = [], files = []) {
     files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
   )
   const pythonStarVisibility = starExportedNamesByFile(files)
+  // Rust/Go 通配导入只触达公开模块级项（私有项与方法不是可导入符号）
+  const wildcardImports = wildcardImportedNamesByFile(files)
+  // barrel 目标不能按目标自身符号表展开：它还要转发下游再导出符号
+  const maps = files.length > 0 ? buildReexportMaps(edges, files) : null
+  const barrels = maps ? new Set(barrelFiles(maps)) : new Set()
   /** @type {Map<string, Set<string>>|null} 惰性导出名表（Dart `hide` 展开用）。 */
   let starDefinitions = null
   /** @type {Map<string, Map<string, Map<string, ReferenceSite>>>} */
@@ -83,6 +88,16 @@ export function buildReferenceIndex(edges = [], files = []) {
       names = [...(starDefinitions.get(edge.to) ?? [])].filter(name => !hiddenSet.has(name))
       if (names.length === 0) continue
     }
+    // Rust/Go 通配导入：私有项与方法不是可导入符号，按目标可见名展开；
+    // 无目标符号信息或目标是 barrel 时保留 `*`（后者由下方再导出链处理）。
+    if (names.length === 1 && names[0] === '*' && !barrels.has(edge.to)
+      && !(Array.isArray(edge.hidden) && edge.hidden.length > 0)) {
+      const visible = wildcardImports.get(edge.to)
+      if (visible) {
+        names = [...visible]
+        if (names.length === 0) continue
+      }
+    }
     const line = Number.isInteger(edge.line) && edge.line > 0 ? edge.line : undefined
     /** @type {ReferenceSite} */
     const site = { path: edge.from, ...(line ? { line } : {}) }
@@ -104,9 +119,7 @@ export function buildReferenceIndex(edges = [], files = []) {
   // barrel 再导出链：把 `import { x } from './barrel'` 的引用归到真实定义文件
   if (files.length > 0) {
     const definitions = exportedNamesByFile(files)
-    const maps = buildReexportMaps(edges, files)
-    const barrels = new Set(barrelFiles(maps))
-    if (barrels.size > 0) {
+    if (maps && barrels.size > 0) {
       /** @type {Map<string, IndexEdge[]>} */
       const byBarrel = new Map()
       for (const edge of edges) {

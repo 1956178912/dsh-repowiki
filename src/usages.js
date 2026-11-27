@@ -10,7 +10,9 @@
  * 明显噪声而不假装精确。
  */
 
-import { dartLibrarySiblings, reexportImportSites, starExportedNamesByFile } from './reexports.js'
+import {
+  dartLibrarySiblings, reexportImportSites, starExportedNamesByFile, wildcardImportedNamesByFile,
+} from './reexports.js'
 
 /** 单次影响面分析返回的使用点条目上限。 */
 export const MAX_USAGE_ENTRIES = 100
@@ -192,6 +194,8 @@ export function usageImporters(edges = [], symbol, files = []) {
     files.filter(file => file && file.path && file.lang === 'python').map(file => file.path),
   )
   const pythonStarVisibility = starExportedNamesByFile(files)
+  // Rust/Go 通配导入只触达公开模块级项：私有项/方法没有潜在导入方
+  const wildcardImports = wildcardImportedNamesByFile(files)
   /** @type {Map<string, {lines:Set<number>, names:Set<string>}>} */
   const byPath = new Map()
   /**
@@ -224,6 +228,9 @@ export function usageImporters(edges = [], symbol, files = []) {
       && !pythonStarVisibility.get(edge.to).has(symbol.name)) continue
     // Dart `hide`：星号导入的排除名不算潜在导入方
     if (names.includes('*') && Array.isArray(edge.hidden) && edge.hidden.includes(symbol.name)) continue
+    // Rust/Go 通配导入不触达私有项与方法：显式具名边不受影响
+    const wildcardVisible = wildcardImports.get(edge.to)
+    if (wildcardVisible && !names.includes(symbol.name) && !wildcardVisible.has(symbol.name)) continue
     // 再导出边上的 aliases 是导出名映射，不是导入方本地绑定名
     const reexportEdge = edge.kind === 'export-from' || edge.kind === 'reexport'
     const aliases = reexportEdge

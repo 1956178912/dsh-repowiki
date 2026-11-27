@@ -76,6 +76,37 @@ export function starExportedNamesByFile(files = []) {
 }
 
 /**
+ * 通配导入可触达的符号名（模块级导入语义）。
+ *
+ * - Rust `use a::*` 只导入 `pub` 项；
+ * - Go `import . "pkg"` 只导入首字母大写的包级标识符；
+ *
+ * 两类语言都不导入 impl/接收者方法（方法不是可导入项），因此 kind 为
+ * `method` 的符号即使标记导出也不进入集合。其他语言的通配规则各不相同
+ * （JS 命名空间、Python `__all__`、Dart 组合子），不在此表登记。
+ * @param {Array<{path?:string, lang?:string,
+ *   symbols?:Array<{name?:string, kind?:string, exported?:boolean}>}>} [files]
+ *   索引文件。
+ * @returns {Map<string, Set<string>>} 文件 → 可被通配导入的名字（含空集）。
+ */
+export function wildcardImportedNamesByFile(files = []) {
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map()
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string') continue
+    if (file.lang !== 'rust' && file.lang !== 'go') continue
+    const names = new Set()
+    for (const symbol of Array.isArray(file.symbols) ? file.symbols : []) {
+      if (!symbol || typeof symbol.name !== 'string' || symbol.name === '') continue
+      if (symbol.kind === 'method' || symbol.exported === false) continue
+      names.add(symbol.name)
+    }
+    out.set(file.path, names)
+  }
+  return out
+}
+
+/**
  * 汇总再导出边：
  * - JS/TS：`export * from`、同名 `export { x } from` 与别名
  *   `export { x as y } from`；

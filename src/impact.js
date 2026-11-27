@@ -14,7 +14,7 @@
 import { findImportCycles } from './cycles.js'
 import { buildWikiReferenceIndex, wikiReferencesFor } from './wiki-references.js'
 import { collectAffectedTests } from './test-files.js'
-import { reexportImportSites } from './reexports.js'
+import { reexportImportSites, wildcardImportedNamesByFile } from './reexports.js'
 
 /** 单次返回的传递依赖方上限。 */
 export const MAX_IMPACT_ENTRIES = 100
@@ -329,6 +329,8 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
   const directSymbolsByPath = new Map()
   /** @type {Map<string, {path:string, line:number, symbols:Set<string>}>} */
   const referenceSites = new Map()
+  // Rust/Go 通配导入只触达公开模块级项：私有项/方法不算受影响的导入
+  const wildcardImports = wildcardImportedNamesByFile(files)
   /** @type {Map<string, IndexEdge[]>} */
   const byTo = new Map()
   for (const edge of edges) {
@@ -340,9 +342,11 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
     if (!names) continue
     const edgeSymbols = (Array.isArray(edge.symbols) ? edge.symbols : [])
       .filter(name => typeof name === 'string')
-    // 命名空间导入/`export *` 通配符：目标文件里被选中的符号都可能受影响
+    // 命名空间导入/`export *` 通配符：目标文件里被选中的符号都可能受影响；
+    // Rust/Go 通配只触达公开模块级项，私有项/方法不进入影响面
+    const wildcardVisible = wildcardImports.get(edge.to)
     const imported = edgeSymbols.includes('*')
-      ? [...names]
+      ? [...names].filter(name => !wildcardVisible || edgeSymbols.includes(name) || wildcardVisible.has(name))
       : edgeSymbols.filter(name => names.has(name))
     if (imported.length === 0) continue
     let direct = directSymbolsByPath.get(edge.from)

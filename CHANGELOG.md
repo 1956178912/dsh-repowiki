@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.272.0] - 2026-11-28
+
+### Fixed
+
+- **Rust/Go wildcard visibility**: `use a::*` (including `pub use a::*`) and
+  Go dot imports (`import . "pkg"`) used to attribute every symbol of the
+  target file, including private items and impl/receiver methods, which are
+  not importable. References, lexical usage importers and symbol impact now
+  expand the wildcard to the target's exported module-level names; methods
+  and `exported: false` symbols no longer receive potential references.
+- Wildcards targeting a re-export barrel keep the `*` form so downstream
+  re-exported symbols are still found (Rust glob re-export chains stay
+  intact), and indexes without symbol tables keep the conservative `*`
+  behavior.
+
+### Tests
+
+- 829 cases pass (LANG=en); new reference, usage-importer and symbol-impact
+  assertions for Rust/Go wildcard visibility plus a Rust star re-export
+  chain regression test.
+
 ## [0.271.0] - 2026-11-28
 
 ### Added

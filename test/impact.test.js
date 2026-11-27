@@ -136,6 +136,32 @@ test('impact：命名空间导入按通配符纳入符号级影响', () => {
   assert.deepEqual(result.references, [{ path: 'ns.ts', line: 1, symbols: ['a1'] }])
 })
 
+test('impact：Rust/Go 通配导入只计入公开模块级符号', () => {
+  const files = [
+    {
+      path: 'src/lib.rs',
+      lang: 'rust',
+      symbols: [
+        { name: 'PublicFn', kind: 'function', exported: true },
+        { name: 'private_fn', kind: 'function', exported: false },
+        { name: 'run', kind: 'method', exported: true, parent: 'Thing' },
+      ],
+    },
+  ]
+  const result = computeSymbolImpact(
+    [{ from: 'src/app.rs', to: 'src/lib.rs', line: 1, symbols: ['*'] }],
+    [
+      { path: 'src/lib.rs', name: 'PublicFn' },
+      { path: 'src/lib.rs', name: 'private_fn' },
+      { path: 'src/lib.rs', name: 'run' },
+    ],
+    1, 10, files,
+  )
+  assert.equal(result.direct, 1)
+  assert.deepEqual(result.impacted, [{ path: 'src/app.rs', depth: 1, symbols: ['PublicFn'] }])
+  assert.deepEqual(result.references, [{ path: 'src/app.rs', line: 1, symbols: ['PublicFn'] }])
+})
+
 test('impact：barrel 再导出链把最终导入方与中间 barrel 计入直接影响', () => {
   const edges = [
     { from: 'index.ts', to: 'core.ts', kind: 'export-from', line: 1, symbols: ['*'] },
