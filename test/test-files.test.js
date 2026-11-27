@@ -16,6 +16,7 @@ test('test-files：常见测试路径命中', () => {
     'src/test_utils.py', 'src/FooTest.java', 'src/FooTests.cs',
     'src/FooSpec.scala', 'src/FooTests.swift', 'src/FooIT.java',
     'src\\win\\a.test.js',
+    'test/my_app/accounts_test.exs', 'apps/web/test/web/router_test.exs',
   ]
   for (const path of hits) assert.equal(isTestPath(path), true, path)
 })

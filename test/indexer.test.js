@@ -1147,16 +1147,26 @@ test('Elixir：defmodule 模块索引解析 alias/import，mix.exs 技术栈', a
       '  end',
       'end',
     ].join('\n'),
+    'test/my_app/accounts_test.exs': [
+      'defmodule MyApp.AccountsTest do',
+      '  use ExUnit.Case, async: true',
+      '  alias MyApp.Accounts',
+      '  test "list" do',
+      '    assert Accounts.list() == []',
+      '  end',
+      'end',
+    ].join('\n'),
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
-  assert.deepEqual(doc.stats.languages, { elixir: 7 })
+  assert.deepEqual(doc.stats.languages, { elixir: 8 }, '含 .exs 测试文件')
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('lib/my_app/accounts.ex', 'lib/my_app/repo.ex')?.line, 2, 'alias 边与行号')
   assert.equal(edge('lib/my_app/accounts.ex', 'lib/my_app/helpers.ex')?.line, 3, 'import 边')
   assert.equal(edge('lib/my_app/caller.ex', 'lib/my_app/nested.ex')?.line, 2, '嵌套模块 alias 解析到声明文件')
   assert.equal(edge('apps/web/lib/web/endpoint.ex', 'apps/web/lib/web/router.ex')?.line, 2, 'umbrella 布局按 defmodule 解析')
-  assert.equal(doc.edges.length, 4, '外部 Ecto/Plug 不建边')
+  assert.equal(edge('test/my_app/accounts_test.exs', 'lib/my_app/accounts.ex')?.line, 3, '.exs 测试文件也建立依赖边')
+  assert.equal(doc.edges.length, 5, '外部 Ecto/Plug/ExUnit 不建边')
 
   const accounts = doc.files.find(f => f.path === 'lib/my_app/accounts.ex')
   assert.ok(accounts.symbols.some(s => s.name === 'MyApp.Accounts' && s.kind === 'class'))

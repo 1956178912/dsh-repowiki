@@ -3,6 +3,18 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.179.0] - 2026-11-28
+
+- **Elixir `.exs` 文件进入索引**：测试文件（`test/**/*_test.exs`）、脚本与
+  `config/*.exs` 现在参与符号索引，测试文件里的 `alias`/`use` 也会产生
+  依赖边，`repowiki-impact` 因此能把 Elixir 测试列入受影响测试
+  （`test/` 路径与 `*_test.exs` 已有测试启发式）。根 `mix.exs` 仍按清单
+  处理，不会被重复计入源码。
+- **测试**：561 例在 LANG=en 与 LANG=zh 下全通过；Elixir 夹具新增
+  `test/my_app/accounts_test.exs`（断言其到源模块的 alias 边、elixir 文件
+  数为 8、外部 `ExUnit.Case` 不建边），测试路径启发式也固定 Elixir 测试
+  路径识别。
+
 ## [0.178.0] - 2026-11-28
 
 - **Elixir umbrella 依赖聚合**：嵌套 `apps/*/mix.exs`（单次最多 20 个）

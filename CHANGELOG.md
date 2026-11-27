@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.179.0] - 2026-11-28
+
+### Added
+
+- **Elixir `.exs` files are indexed**: test files (`test/**/*_test.exs`),
+  scripts and `config/*.exs` now enter the symbol index, so `alias`/`use`
+  references inside test files produce edges and `repowiki-impact` can route
+  affected Elixir tests (`test/` paths and `*_test.exs` are already test
+  heuristics). The root `mix.exs` stays a manifest rather than a source
+  file, so no double counting.
+
+### Tests
+
+- 561 cases pass (LANG=en and LANG=zh); the Elixir fixture now includes
+  `test/my_app/accounts_test.exs` (asserting its alias edge to the source
+  module, the elixir file count of 8 and external `ExUnit.Case` staying
+  edge-free), and the test-path heuristics pin Elixir test paths.
+
 ## [0.178.0] - 2026-11-28
 
 ### Added
