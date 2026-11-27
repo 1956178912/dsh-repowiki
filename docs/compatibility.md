@@ -35,8 +35,8 @@
 | Go | func / 接收者方法 / struct / interface / 别名 / 导出常量变量 | 根与嵌套 `go.mod`（多模块仓库，单次上限 20）的 module 前缀 → 包目录代表文件；跨 `internal` 边界的导入以 `warnings` 报告（根 `internal/` 不受限） |
 | Rust | fn / impl 与 trait 方法 / struct / enum / trait / type / const | `mod`、`crate::`、`self::`、`super::`（crate 根 + 模块约定）；`use other_crate::…` 经嵌套 `Cargo.toml` 的包名（`-`→`_`）与 `path` 依赖映射到 workspace crate 的 `src/` 子模块，回退 `lib.rs`/`main.rs` 入口；`pub use` 记为 `reexport`（含 `::*`，`as` 别名记录原名→导出名）；普通 `use … as` 同样记录原名→本地名（引用归原名、使用点按本地名），`use crate::Foo` 在模块路径未命中时仅对入口公开符号/再导出名回退入口；外部 crate 与笔误路径不建边 |
 | Java | class / interface / enum / record / 构造器 / 第一层方法 | 包后缀匹配（含通配符与 static 成员导入） |
-| C# | class / interface / struct / record / enum / 第一层方法 / 构造器 | `using`（global/static/别名）经点分路径索引 |
-| Kotlin | class / data class / enum class / object / interface / fun / 构造器 | `import`（含 `.*` 与 `as`）经点分路径索引 |
+| C# | class / interface / struct / record / enum / 第一层方法 / 构造器 | `using`（global/static/别名）经点分路径索引；`using Alias = A.B.C;` 记录原名与本地别名（解析器 v16），`using static` 不产生别名，泛型/元组别名不登记 |
+| Kotlin | class / data class / enum class / object / interface / fun / 构造器 | `import`（含 `.*` 与 `as`）经点分路径索引；`import a.b.C as D` 的引用归到 C，D 作为词法使用点扫描名（解析器 v16） |
 | PHP | class / interface / trait / enum / 方法 / 顶层函数 | `use`（分组/function/const/别名）大小写不敏感；根与嵌套 `composer.json` 的 `autoload`/`autoload-dev` `psr-4` 前缀映射优先（字符串/数组目录、空前缀兜底、最长前缀优先），未命中回退命名空间后缀；字面量 `require`/`include` |
 | Ruby | class / module / def（含 `self.` 与 `?!=` 后缀/表达式体）/ attr_* / 常量 | `require_relative` 与显式 `./` require 相对文件；裸 `require` 按任意层级 `lib/` 加载路径及项目根解析；gem require 不建边 |
 | Swift | class / struct / actor / enum / protocol / extension / func / init / typealias | `import` 按 `Package.swift` 的 target `path:`（支持多行声明与注释）解析到目标目录代表文件；未声明 path 时回退 `Sources/<Target>`（兼容旧版 `Source/<Target>`）；外部模块不建边 |

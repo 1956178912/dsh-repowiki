@@ -24,9 +24,9 @@ import {
  * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
  *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
- * @property {Array<{from:string, to:string}>} [aliases] - 再导出别名：
- *   `from` 为目标符号原名，`to` 为 barrel 导出的名字（仅 export-from /
- *   Rust pub use / Python from-import 记录）。
+ * @property {Array<{from:string, to:string}>} [aliases] - 导入/再导出别名：
+ *   `from` 为目标符号原名，`to` 为本地绑定名或 barrel 导出名（JS/Rust/
+ *   Python 再导出与导入、C#/Kotlin 导入别名）。
  */
 
 /**
@@ -458,12 +458,20 @@ function extractCSharpImports(lines) {
     if (!m) continue
     const specifier = m.groups.path
     const segments = specifier.split('.')
+    const original = segments[segments.length - 1]
+    // `using Alias = App.Models.User;`：引用归到原名，别名进入 aliases，
+    // 词法使用点按本地名扫描（与 JS/Rust 导入别名同一约定）
+    const alias = m.groups.alias
+    const aliases = alias && original && alias !== original
+      ? [{ from: original, to: alias }]
+      : []
     result.push({
       specifier,
       line: i + 1,
       kind: 'import',
       relative: true,
-      imported: [segments[segments.length - 1]],
+      imported: original ? [original] : [],
+      ...(aliases.length > 0 ? { aliases } : {}),
     })
   }
   return result
@@ -477,16 +485,21 @@ function extractCSharpImports(lines) {
 function extractKotlinImports(lines) {
   const result = []
   for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*import\s+(?<path>[\w.]+(?:\.\*)?)\s*(?:as\s+\w+)?\s*$/.exec(lines[i])
+    const m = /^\s*import\s+(?<path>[\w.]+(?:\.\*)?)\s*(?:as\s+(?<alias>[A-Za-z_]\w*))?\s*$/.exec(lines[i])
     if (!m) continue
     const specifier = m.groups.path
     const last = specifier.split('.').pop()
+    const named = Boolean(last && last !== '*')
+    // `import a.b.C as D`：引用归到 C，本地名 D 进入 aliases 供使用点扫描
+    const alias = m.groups.alias
+    const aliases = named && alias && alias !== last ? [{ from: last, to: alias }] : []
     result.push({
       specifier,
       line: i + 1,
       kind: 'import',
       relative: true,
-      imported: last && last !== '*' ? [last] : [],
+      imported: named ? [last] : [],
+      ...(aliases.length > 0 ? { aliases } : {}),
     })
   }
   return result

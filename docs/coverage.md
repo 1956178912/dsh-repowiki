@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.259.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.260.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.259.0）；测试 812/812（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 87.88%、函数 95.46%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.260.0）；测试 813/813（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.13%、分支 87.91%、函数 95.46%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| C#/Kotlin 导入别名 | `extractCSharpImports` 对 `using Alias = App.Models.User;` 保持 `imported: ['User']` 并写 `aliases: [{from:'User', to:'Alias'}]`；`extractKotlinImports` 对 `import a.b.C as D` 同理。引用/影响面按原名归因，`usageImporters` 取 `aliases` 的本地名作为词法扫描名；`using static`、`.*` 通配符不产生别名，C# 泛型/元组别名形态不登记（不猜测）；解析器 v16 | v0.260.0 |
 | Python `__all__` 星号可见性 | `src/symbols.js` 的 `pythonAllNames` 解析模块级 `__all__`（`=`/`+=`、`append`/`extend`、跨行列表/元组，上限 20 行），无声明时按下划线前缀判定；符号标记 `starExported`。`src/reexports.js` 的 `starExportedNamesByFile` 产出可见名集合，`resolveReexportOrigins` 的星号队列项按可见名收窄，具名/别名路径不受影响、`default` 不沿星号下传；`src/references.js`/`src/usages.js` 的 Python `*` 边展开为可见名，被排除符号无潜在引用；`__all__` 声明行加入导入块起始跳过规则；解析器 v15 | v0.259.0 |
 | 导入别名证据 | JS/TS `import { x as y }` 与 Rust 普通 `use … as` 记录 `imported` 原名与 `aliases [{from:x,to:y}]`（parser v14）；引用/影响面按原名归因，`usageImporters` 只从非再导出边读取 aliases 作为本地扫描名，`reexportImportSites` 亦优先用导入边别名；再导出边别名不会被误当本地绑定 | v0.258.0 |
 | 默认导入 barrel | `resolveDefaultImportSymbols` 对 `default:Local` 标记：同名导出优先；否则 `resolveReexportOrigins(edge.to,'default')` 解析具名默认/再导出链，直连目标写入真实符号并记录本地别名，经 barrel 时保留 `default` 导出名并记录别名；`export *` 不转发 default；解析不到丢弃标记保留文件级边；usageImporters/reexportImportSites 把本地别名传给词法扫描 | v0.257.0 |

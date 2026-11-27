@@ -226,8 +226,24 @@ test('C#：using / global using / static / 别名', () => {
   assert.ok(bySpec.has('System.Math'), 'using static 路径')
   assert.deepEqual(bySpec.get('System.Math').imported, ['Math'])
   assert.ok(bySpec.has('App.Models.User'), '别名右侧路径')
+  assert.deepEqual(bySpec.get('App.Models.User').imported, ['User'], '别名导入仍归到原名')
+  assert.deepEqual(bySpec.get('App.Models.User').aliases, [{ from: 'User', to: 'Alias' }],
+    'using 别名进入 aliases')
+  assert.equal(bySpec.get('System.Math').aliases, undefined, 'using static 不产生别名')
   assert.ok(!bySpec.has('Commented.Out'), '注释不提取')
   assert.ok(refs.every(r => r.relative), '统一作为本地解析候选')
+})
+
+test('C#：泛型/元组别名不做猜测', () => {
+  const code = [
+    'using Pair = (int a, int b);',
+    'using ListOfInts = System.Collections.Generic.List<int>;',
+    'using Plain = App.Models.Widget;',
+  ].join('\n')
+  const refs = extractImports(code, 'csharp')
+
+  assert.equal(refs.length, 1, '泛型/元组别名形态不登记')
+  assert.deepEqual(refs[0].aliases, [{ from: 'Widget', to: 'Plain' }])
 })
 
 test('Kotlin：import / 通配符 / as 别名', () => {
@@ -245,6 +261,9 @@ test('Kotlin：import / 通配符 / as 别名', () => {
   assert.ok(bySpec.has('com.acme.util.*'))
   assert.deepEqual(bySpec.get('com.acme.util.*').imported, [])
   assert.equal(refs.filter(r => r.specifier === 'com.acme.util.Helper').length, 2, '别名导入仍是同一路径')
+  const aliased = refs.find(r => Array.isArray(r.aliases))
+  assert.deepEqual(aliased.imported, ['Helper'], 'Kotlin 别名导入归到原名')
+  assert.deepEqual(aliased.aliases, [{ from: 'Helper', to: 'H' }], 'Kotlin as 别名进入 aliases')
   assert.ok(!bySpec.has('commented.out'))
 })
 

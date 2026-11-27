@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.260.0] - 2026-11-28
+
+### Added
+
+- **C#/Kotlin import aliases**: `using Alias = App.Models.User;` and Kotlin
+  `import a.b.C as D` keep the original symbol name for references and
+  impact, and record the local binding in edge `aliases` so lexical usage
+  scans search the alias instead of the definition name. `using static` and
+  wildcard imports stay alias-free, and generic/tuple C# aliases are not
+  guessed. Parser v16 re-parses cached imports.
+
+### Tests
+
+- 813 cases pass (LANG=en); new assertions for C#/Kotlin alias metadata,
+  edge propagation and unsupported alias shapes.
+
 ## [0.259.0] - 2026-11-28
 
 ### Added

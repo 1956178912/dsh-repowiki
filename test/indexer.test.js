@@ -245,6 +245,7 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
     'src/App/Models/User.cs': 'namespace App.Models;\npublic class User {}\n',
     'src/App/Services/UserService.cs': [
       'using App.Models;',
+      'using U = App.Models.User;',
       'namespace App.Services;',
       'public class UserService {',
       '  public int Add(int a, int b) { return a + b; }',
@@ -253,6 +254,7 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
     'src/main/kotlin/com/acme/App.kt': [
       'package com.acme',
       'import com.acme.util.Helper',
+      'import com.acme.util.Helper as H',
       'class App {',
       '  fun run() {}',
       '}',
@@ -271,6 +273,14 @@ test('C#/Kotlin/PHP：符号、本地依赖边与 Composer 技术栈', async () 
   assert.equal(edge('app/Services/UserService.php', 'app/Services/bootstrap.php')?.line, 4, 'PHP __DIR__ require')
   assert.equal(edge('src/App/Services/UserService.cs', 'src/App/Models/User.cs')?.line, 1, 'C# using 行号')
   assert.equal(edge('src/main/kotlin/com/acme/App.kt', 'src/main/kotlin/com/acme/util/Helper.kt')?.line, 2, 'Kotlin import 行号')
+  assert.deepEqual(
+    doc.edges.find(e => e.from === 'src/App/Services/UserService.cs' && e.aliases)?.aliases,
+    [{ from: 'User', to: 'U' }], 'C# using 别名写入边',
+  )
+  assert.deepEqual(
+    doc.edges.find(e => e.from === 'src/main/kotlin/com/acme/App.kt' && e.aliases)?.aliases,
+    [{ from: 'Helper', to: 'H' }], 'Kotlin as 别名写入边',
+  )
 
   assert.equal(doc.stack.projectName, 'acme/app')
   assert.ok(doc.stack.technologies.some(t => t.name === 'Laravel' && t.ecosystem === 'composer'))
