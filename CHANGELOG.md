@@ -5,6 +5,27 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.226.0] - 2026-11-28
+
+### Added
+
+- **Duplicate-code detection**: `repowiki-status` reads up to 150 indexed
+  files with 8-way bounded concurrency (files over 400 lines are skipped
+  and counted), normalizes whitespace per line and fingerprints every
+  8-line window; windows shared by at least two files are merged into
+  blocks (adjacent windows extend the block) and reported as
+  `duplicates` with exact totals, up to 20 groups and 5 locations each.
+- **Signal discipline**: blank-only windows are ignored, repetition
+  inside a single file never counts, and a duplicate block is described
+  as a review lead rather than a semantic clone verdict; a positive total
+  also raises a warning and adds a `Duplicates:` line to the text report.
+
+### Tests
+
+- 672 cases pass (LANG=en and LANG=zh); new coverage for whitespace
+  normalization, cross-file merging, single-file/short-block exclusion,
+  blank windows, group caps, line caps and status integration.
+
 ## [0.225.0] - 2026-11-28
 
 ### Added

@@ -26,12 +26,44 @@ import { wikiGraphText } from './wiki-graph.js'
 import { unusedExports } from './unused-exports.js'
 import { moduleCoupling } from './coupling.js'
 import { evaluateLayers } from './layers.js'
+import { findDuplicates, MAX_DUPLICATE_FILES } from './duplicates.js'
 import { digestText, cwdOf } from './util.js'
 import { getLocale } from './spawn.js'
 import { readGitInfo } from './git.js'
 
 /** 状态报告里展示的模块依赖热点条数上限。 */
 const STATUS_MODULE_RELATIONS = 10
+
+/** 重复代码检测的并发读取数。 */
+const DUPLICATE_READ_CONCURRENCY = 8
+
+/**
+ * 并发读取重复检测所需的源码（数量与行数上限由 findDuplicates 兜底）。
+ * @param {FsService} fs - ctx.fs。
+ * @param {string} root - 项目根。
+ * @param {Array<{path:string}>} files - 索引文件（已按路径排序）。
+ * @returns {Promise<Array<{path:string, text:string}>>} 读取成功的源码，按路径排序。
+ */
+async function readDuplicateSources(fs, root, files) {
+  const targets = files.slice(0, MAX_DUPLICATE_FILES)
+  const sources = []
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < targets.length) {
+      const file = targets[cursor++]
+      if (!file || typeof file.path !== 'string') continue
+      try {
+        const text = await fs.readText(await fs.resolve(file.path, { cwd: root }))
+        sources.push({ path: file.path, text })
+      } catch {
+        // 不可读文件跳过，不阻断诊断
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: DUPLICATE_READ_CONCURRENCY }, worker))
+  sources.sort((a, b) => a.path.localeCompare(b.path))
+  return sources
+}
 
 /** 状态报告里展示的循环依赖组数上限。 */
 const STATUS_CYCLE_GROUPS = 10
@@ -145,7 +177,8 @@ const DESCRIPTION = [
   'evidence are reported conservatively (files with any unnamed inbound edge are skipped); module',
   'Ca/Ce coupling and instability are reported for cross-module imports; and architecture layers',
   'declared in repowiki-plan.json are checked so cross-layer imports outside mayDependOn are listed',
-  'as violations. Use it to diagnose',
+  'as violations; cross-file duplicate code candidates are reported from bounded line-window',
+  'fingerprints. Use it to diagnose',
   'why a panel or tool looks out of',
   'date before re-running index/extract/generate. The weighted health score also counts',
   'citation defects (missing paths, out-of-range lines, content drift) against the wiki',
@@ -692,6 +725,43 @@ export function repowikiStatusTool(ctx) {
             },
             required: ['total', 'truncated', 'checkedEdges', 'unknownRefs', 'violations', 'layers'],
           },
+          duplicates: {
+            type: 'object',
+            description: 'Cross-file duplicate code candidates from normalized line-window fingerprints. Present when at least two indexed files were readable; totals are exact and groups are bounded. A candidate is a review lead, not a semantic clone verdict.',
+            additionalProperties: false,
+            properties: {
+              total: { type: 'integer', description: 'Merged duplicate block groups (exact, even when detail is truncated).' },
+              windowLines: { type: 'integer', description: 'Fingerprint window size in lines.' },
+              filesScanned: { type: 'integer' },
+              filesSkipped: { type: 'integer', description: 'Files skipped by the count or line caps.' },
+              groups: {
+                type: 'array',
+                description: 'Duplicate blocks (up to 20 groups, 5 locations each).',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    lines: { type: 'integer' },
+                    occurrences: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          path: { type: 'string' },
+                          start: { type: 'integer' },
+                          end: { type: 'integer' },
+                        },
+                        required: ['path', 'start', 'end'],
+                      },
+                    },
+                  },
+                  required: ['lines', 'occurrences'],
+                },
+              },
+            },
+            required: ['total', 'windowLines', 'filesScanned', 'filesSkipped', 'groups'],
+          },
           warnings: { type: 'array', items: { type: 'string' } },
           durationMs: { type: 'integer' },
         },
@@ -743,6 +813,11 @@ export function repowikiStatusTool(ctx) {
           `Core files (PageRank): ${value.coreFiles.length > 0
             ? value.coreFiles.map(entry => `${entry.path} (${entry.score.toFixed(4)})`).join('; ')
             : '(none)'}`,
+          ...(value.duplicates
+            ? [`Duplicates: ${value.duplicates.total === 0
+              ? `(none, ${value.duplicates.filesScanned} file(s) scanned)`
+              : `${value.duplicates.total} block(s) of ≥${value.duplicates.windowLines} lines${value.duplicates.groups.length > 0 ? ` — e.g. ${value.duplicates.groups[0].occurrences.map(o => `${o.path}:${o.start}-${o.end}`).join(' ↔ ')}` : ''}`}`]
+            : []),
           ...(value.layers
             ? [`Layers: ${value.layers.total === 0
               ? `(none, ${value.layers.checkedEdges} cross-layer edge(s) checked)`
@@ -1046,6 +1121,14 @@ export function repowikiStatusTool(ctx) {
       if (layerReport && layerReport.total > 0) {
         warnings.push(`${layerReport.total} cross-layer import edge(s) violate the declared layers; see status.layers.`)
       }
+      // 重复代码：需要读取源码，仅在索引至少两个文件时执行（有界并发 + 上限）
+      const duplicateSources = index && (index.files ?? []).length >= 2
+        ? await readDuplicateSources(fs, root, index.files ?? [])
+        : []
+      const duplicates = duplicateSources.length >= 2 ? findDuplicates(duplicateSources) : null
+      if (duplicates && duplicates.total > 0) {
+        warnings.push(`${duplicates.total} cross-file duplicate block(s) detected; see status.duplicates.`)
+      }
 
       const git = await readGitInfo(fs, root)
       const moduleDependencies = summarizeModuleRelations(
@@ -1125,6 +1208,7 @@ export function repowikiStatusTool(ctx) {
         },
         coverage,
         ...(layerReport ? { layers: layerReport } : {}),
+        ...(duplicates ? { duplicates } : {}),
         ...(health ? { health } : {}),
         wiki: {
           count: wikiPages.length,

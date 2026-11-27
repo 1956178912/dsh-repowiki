@@ -69,6 +69,44 @@ test('repowiki-status：plan 分层规则报告跨层违规', async () => {
   assert.match(rendered[0].text, /Layers: 1 violation/)
 })
 
+test('repowiki-status：跨文件重复代码块进入报告与渲染', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-dup-'))
+  const block = [
+    'export function shared(a: number, b: number) {',
+    '  const total = a + b',
+    '  if (total > 0) {',
+    '    console.log("positive")',
+    '  }',
+    '  return total',
+    '}',
+    '',
+    'export const extra = 1',
+    'export const label = "demo"',
+  ].join('\n')
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), block)
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), block)
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+
+  assert.ok(out.duplicates)
+  assert.equal(out.duplicates.total, 1)
+  assert.equal(out.duplicates.filesScanned, 2)
+  assert.deepEqual(out.duplicates.groups[0].occurrences.map(o => o.path), ['a.ts', 'b.ts'])
+  assert.ok(out.warnings.some(w => /duplicate block/.test(w)))
+  const rendered = repowikiStatusTool(ctx).output.render({}, out)
+  assert.match(rendered[0].text, /Duplicates: 1 block/)
+})
+
+test('repowiki-status：单文件项目不输出重复区块', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-dupsingle-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export const a = 1\n')
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const out = await repowikiStatusTool(ctx).execute({ locale: 'zh' }, fakeExec)
+  assert.equal(out.duplicates, undefined)
+})
+
 test('repowiki-status：未声明 layers 时不输出分层区块', async () => {
   const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-status-nolayers-'))
   nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function a() {}\n')
