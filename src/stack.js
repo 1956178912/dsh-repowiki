@@ -473,15 +473,20 @@ function bundlerDeps(text) {
 }
 
 /**
- * 从 Package.swift 提取远端包依赖（仓库名小写归一）。
+ * 从 Package.swift 提取包依赖：远端 `url:` 取仓库名，本地 `path:` 取目录名
+ * （小写归一）；同一条 `.package(...)` 只取一种来源。
  * @param {string} text - Package.swift 内容。
- * @returns {{name:string}[]} 仓库名列表。
+ * @returns {{name:string}[]} 仓库/目录名列表。
  */
 function swiftPackageDeps(text) {
   const deps = []
-  for (const m of text.matchAll(/\.package\s*\([^)]*?url:\s*"([^"]+)"/g)) {
-    const repo = /([^/]+?)(?:\.git)?\/?$/.exec(m[1])?.[1]
-    if (repo) deps.push({ name: repo.toLowerCase() })
+  for (const m of text.matchAll(/\.package\s*\([^)]*?(?:url:\s*"([^"]+)"|path:\s*"([^"]+)")/g)) {
+    const remote = typeof m[1] === 'string' ? m[1] : ''
+    const local = typeof m[2] === 'string' ? m[2] : ''
+    const name = remote
+      ? /([^/]+?)(?:\.git)?\/?$/.exec(remote)?.[1]
+      : local.replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean).pop()
+    if (name) deps.push({ name: name.toLowerCase() })
   }
   return deps
 }

@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.248.0] - 2026-11-28
+
+- **SwiftPM 本地包**：`Package.swift` 的 `.package(path: "../LocalCore")`
+  与远端 `url:` 包一起计入 `dependencyCounts.swiftpm`，名称取目录 basename
+  （小写、去尾部斜杠）。本地包名不映射到臆造的技术名；`SWIFT_TECH` 仍只
+  作用于远端仓库。
+- **测试**：773 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖远端/本地混合
+  Package.swift 依赖与不猜技术名。
+
 ## [0.247.0] - 2026-11-28
 
 - **JSON podspec 元数据**：`*.podspec.json`（CocoaPods JSON 规格）与 Ruby

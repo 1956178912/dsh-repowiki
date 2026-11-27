@@ -1,6 +1,6 @@
 {
   "name": "dsh-repowiki",
-  "version": "0.247.0",
+  "version": "0.248.0",
   "private": true,
   "description": "Symbol-level repository knowledge index, task context packs, impact analysis, cards and wiki for DeepSeek Harness",
   "license": "MIT",

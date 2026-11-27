@@ -593,3 +593,22 @@ test('podspec.json：JSON 规格名称/版本/依赖与 subspec 依赖', () => {
   const broken = detectStack({ 'Broken.podspec.json': '{not json' })
   assert.equal(broken.dependencyCounts.cocoapods, 0, '坏 JSON 不抛错也不计数')
 })
+
+test('Package.swift：本地 path 包计入 swiftpm 依赖计数', () => {
+  const manifest = [
+    'let package = Package(',
+    '  name: "Demo",',
+    '  dependencies: [',
+    '    .package(url: "https://github.com/vapor/vapor.git", from: "4.0.0"),',
+    '    .package(path: "../LocalCore"),',
+    '    .package(path: "./Modules/Shared/"),',
+    '  ]',
+    ')',
+  ].join('\n')
+  const info = detectStack({ 'Package.swift': manifest })
+  assert.equal(info.projectName, 'Demo')
+  assert.equal(info.dependencyCounts.swiftpm, 3, '远端 1 + 本地 2')
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('Vapor'))
+  assert.equal(names.includes('localcore'), false, '本地包不臆造技术名')
+})

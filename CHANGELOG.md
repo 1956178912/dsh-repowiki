@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.248.0] - 2026-11-28
+
+### Added
+
+- **SwiftPM local packages**: `Package.swift` `.package(path: "../LocalCore")`
+  entries now count toward `dependencyCounts.swiftpm` alongside remote `url:`
+  packages, using the directory basename (lowercased, trailing slashes
+  stripped). Local package names are never mapped to a guessed technology;
+  the verified `SWIFT_TECH` map still applies to remote repositories only.
+
+### Tests
+
+- 773 cases pass (LANG=en and LANG=zh); new coverage for mixed remote/local
+  Package.swift dependencies and the no-guessed-technology rule.
+
 ## [0.247.0] - 2026-11-28
 
 ### Added
