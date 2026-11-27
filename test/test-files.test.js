@@ -17,6 +17,7 @@ test('test-files：常见测试路径命中', () => {
     'src/FooSpec.scala', 'src/FooTests.swift', 'src/FooIT.java',
     'src\\win\\a.test.js',
     'test/my_app/accounts_test.exs', 'apps/web/test/web/router_test.exs',
+    'src/demo_SUITE.erl', 'src/demo_tests.erl', 'R/test-api.R', 'runtests.jl',
   ]
   for (const path of hits) assert.equal(isTestPath(path), true, path)
 })
@@ -25,6 +26,7 @@ test('test-files：非测试路径不误判', () => {
   const misses = [
     'src/latest.ts', 'src/contest.js', 'src/testing.ts', 'src/attestation.go',
     'src/testdata/a.go', 'src/tests-utils/a.ts', 'src/Testament.java',
+    'src/suite.erl', 'R/api.R', 'src/core.jl',
     'README.md', '', null, undefined,
   ]
   for (const path of misses) assert.equal(isTestPath(path), false, String(path))

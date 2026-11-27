@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.211.0] - 2026-11-28
+
+- **跨语言测试路径**：受影响测试路由新增 Erlang `*_SUITE.erl`
+  （common_test）与 `*_tests.erl`（eunit）、R testthat `test-*.R`
+  （大小写）与 Julia `runtests.jl`，与既有测试目录、`*.test.*`/
+  `*.spec.*`、`test_*`/`*_test.*`、`*_spec.rb` 及 JVM/C#/Swift 命名
+  并列；`suite.erl`、`api.R`、`core.jl` 等近似形态仍不误判。
+- **测试**：619 例在 LANG=en 与 LANG=zh 下全通过；启发式夹具覆盖三种
+  新约定与近似负例。
+
 ## [0.210.0] - 2026-11-28
 
 - **语言接入完整性守卫**：`test/docs-consistency.test.js` 遍历

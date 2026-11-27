@@ -18,8 +18,9 @@ const TEST_DIRECTORIES = new Set([
 /**
  * 是否为测试文件（路径启发式）。
  * 命中任一规则即视为测试：测试目录下的文件、`*.test.*` / `*.spec.*`、
- * Python/Ruby/Go 的 `test_*` / `*_test.*` / `*_spec.rb`，以及
- * `FooTest`/`FooTests`/`FooSpec`/`FooIT` 形式的 JVM/C#/Swift 文件。
+ * Python/Ruby/Go 的 `test_*` / `*_test.*` / `*_spec.rb`、JVM/C#/Swift 的
+ * `FooTest`/`FooTests`/`FooSpec`/`FooIT`，以及 Erlang `*_SUITE.erl` /
+ * `*_tests.erl`、R testthat `test-*.R` 与 Julia `runtests.jl`。
  * @param {unknown} value - 文件路径。
  * @returns {boolean} 是否为测试文件。
  */
@@ -34,6 +35,9 @@ export function isTestPath(value) {
   if (/^(?:test_.+|.+_test)\.[A-Za-z0-9]+$/i.test(file)) return true
   if (/_spec\.rb$/i.test(file)) return true
   if (/(?:Test|Tests|Spec|IT)\.(?:java|kt|kts|cs|scala|swift)$/.test(file)) return true
+  if (/_(?:SUITE|tests)\.erl$/i.test(file)) return true
+  if (/^test-.+\.[Rr]$/.test(file)) return true
+  if (/^runtests\.jl$/i.test(file)) return true
   return false
 }
 

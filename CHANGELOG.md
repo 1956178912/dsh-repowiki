@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.211.0] - 2026-11-28
+
+### Added
+
+- **Cross-language test paths**: the affected-test routing heuristic now
+  recognises Erlang `*_SUITE.erl` (common_test) and `*_tests.erl` (eunit),
+  R testthat `test-*.R` (both cases) and Julia `runtests.jl`, alongside the
+  existing test directories, `*.test.*`/`*.spec.*`, `test_*`/`*_test.*`,
+  `*_spec.rb` and JVM/C#/Swift naming. False positives (`suite.erl`,
+  `api.R`, `core.jl`) stay non-test.
+
+### Tests
+
+- 619 cases pass (LANG=en and LANG=zh); the heuristic fixtures now cover
+  the three new conventions and their near-miss negatives.
+
 ## [0.210.0] - 2026-11-28
 
 ### Added
