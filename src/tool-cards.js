@@ -18,6 +18,10 @@ import {
 import { rankDocuments } from './search.js'
 import { buildReferenceIndex, referencesFor, importsFor, dependentsFor, MAX_IMPORT_DEPTH, MAX_IMPORT_ENTRIES } from './references.js'
 import { buildWikiReferenceIndex, wikiReferencesFor } from './wiki-references.js'
+import {
+  findSymbolUsages, usageImporters, selectUsageFiles,
+  MAX_USAGE_ENTRIES, MAX_USAGES_PER_SYMBOL,
+} from './usages.js'
 import { getLocale } from './spawn.js'
 import { cwdOf } from './util.js'
 
@@ -36,7 +40,10 @@ const DESCRIPTION = [
   'named symbols), the complement of reverse references; depth=2..3 expands those edges into',
   'transitive dependencies (bounded, nearest hop wins). Set dependents=true for the reverse view:',
   'which files import each matched file, and with depth=2..3 which files transitively depend on it',
-  '(the impact surface of a change).',
+  '(the impact surface of a change). Set usages=true to locate lexical usage sites of matched',
+  'symbols inside their direct named importers (identifier-boundary matches; import lines, import',
+  'blocks and whole-line comments are skipped; bounded by 5 symbols, 20 files and 100 sites;',
+  'unreadable importers are reported as unknown, never as unused).',
 ].join(' ')
 
 /**
@@ -64,6 +71,136 @@ function formatEdgeEntries(entries, arrow, deepArrow) {
 function formatReferenceSite(site) {
   const path = typeof site?.path === 'string' ? site.path : ''
   return typeof site?.line === 'number' && site.line > 0 ? `${path}:L${site.line}` : path
+}
+
+/** 单次 cards 查询最多扫描的匹配符号数（其余计入 skipped）。 */
+const MAX_CARD_USAGE_TARGETS = 5
+
+/**
+ * 收集命中符号的词法使用点。
+ *
+ * 只在**直接具名导入方**里定位：依赖边必须显式列出该符号，副作用导入与
+ * 引用同文件其他符号的边不算证据。读取文件数、每符号站点数与总站点数
+ * 均有上限；读取失败的文件逐个披露（unknown，不是未使用），因文件上限
+ * 未扫描的导入方计入 `skippedFiles` 并把相关符号标记为 truncated。
+ * @param {any} fs - ctx.fs 服务。
+ * @param {string} root - 项目根。
+ * @param {Array<{from:string, to:string, line?:number, symbols?:string[]}>} edges - 索引依赖边。
+ * @param {Array<{path:string, symbols?:Array<{name:string}>}>} matches - searchIndex 命中。
+ * @returns {Promise<{entries:Array, skipped:number, skippedFiles:number, truncated:boolean}>}
+ *   逐符号使用点、目标数缺口、文件数缺口与截断标记。
+ */
+async function collectSymbolUsages(fs, root, edges, matches) {
+  /** @type {Array<{path:string, name:string}>} */
+  const targets = []
+  for (const match of matches) {
+    for (const symbol of match.symbols ?? []) {
+      if (typeof symbol?.name !== 'string' || symbol.name === '') continue
+      targets.push({ path: match.path, name: symbol.name })
+    }
+  }
+  const selected = targets.slice(0, MAX_CARD_USAGE_TARGETS)
+  const skipped = Math.max(0, targets.length - selected.length)
+  if (selected.length === 0) return { entries: [], skipped: 0, skippedFiles: 0, truncated: false }
+
+  /** @type {Map<string, {symbols:Set<string>, importLines:Set<number>}>} */
+  const byFile = new Map()
+  /** 目标键（定义路径 + 符号名）→ 该定义的直接具名导入方。 */
+  const targetKey = target => `${target.path}\u0000${target.name}`
+  /** @type {Map<string, Array<{path:string, importLines:number[]}>>} */
+  const importersByTarget = new Map()
+  for (const target of selected) {
+    const importers = usageImporters(edges, target)
+    importersByTarget.set(targetKey(target), importers)
+    for (const importer of importers) {
+      let entry = byFile.get(importer.path)
+      if (!entry) {
+        entry = { symbols: new Set(), importLines: new Set() }
+        byFile.set(importer.path, entry)
+      }
+      entry.symbols.add(target.name)
+      for (const line of importer.importLines) entry.importLines.add(line)
+    }
+  }
+  const selection = selectUsageFiles([...byFile.keys()].map(path => ({ path })))
+  const selectedFiles = new Set(selection.scanned)
+  const skippedFiles = new Set([...byFile.keys()].filter(path => !selectedFiles.has(path)))
+  /** @type {Map<string, Array<{path:string, line:number, text:string}>>} */
+  const sitesByName = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const scannedByName = new Map()
+  /** @type {Map<string, string[]>} */
+  const unreadableByName = new Map()
+  /** @type {Set<string>} */
+  const truncatedNames = new Set()
+  let budget = MAX_USAGE_ENTRIES
+
+  for (const path of selection.scanned) {
+    const entry = byFile.get(path)
+    if (!entry) continue
+    let source
+    try {
+      source = await fs.readText(await fs.resolve(path, { cwd: root }))
+    } catch {
+      for (const name of entry.symbols) {
+        const list = unreadableByName.get(name) ?? []
+        list.push(path)
+        unreadableByName.set(name, list)
+      }
+      continue
+    }
+    for (const name of [...entry.symbols].sort()) {
+      const scanned = scannedByName.get(name) ?? new Set()
+      scanned.add(path)
+      scannedByName.set(name, scanned)
+      if (budget <= 0) {
+        truncatedNames.add(name)
+        continue
+      }
+      const found = findSymbolUsages(source, name, {
+        skipLines: entry.importLines,
+        limit: Math.min(MAX_USAGES_PER_SYMBOL, budget),
+      })
+      const sites = sitesByName.get(name) ?? []
+      for (const site of found.usages) sites.push({ path, ...site })
+      sitesByName.set(name, sites)
+      budget -= found.usages.length
+      if (found.truncated) truncatedNames.add(name)
+    }
+  }
+  for (const target of selected) {
+    const importers = importersByTarget.get(targetKey(target)) ?? []
+    if (importers.some(importer => skippedFiles.has(importer.path))) truncatedNames.add(target.name)
+  }
+
+  const entries = selected.map(target => {
+    const seen = new Set()
+    const importers = []
+    for (const importer of importersByTarget.get(targetKey(target)) ?? []) {
+      const lines = Array.isArray(importer.importLines) && importer.importLines.length > 0
+        ? importer.importLines
+        : [undefined]
+      for (const line of lines) {
+        const key = `${importer.path}\u0000${line ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        importers.push({
+          path: importer.path,
+          ...(typeof line === 'number' ? { line } : {}),
+        })
+      }
+    }
+    return {
+      path: target.path,
+      symbol: target.name,
+      importers,
+      usages: sitesByName.get(target.name) ?? [],
+      filesScanned: scannedByName.get(target.name)?.size ?? 0,
+      unreadable: [...new Set(unreadableByName.get(target.name) ?? [])].sort(),
+      truncated: truncatedNames.has(target.name),
+    }
+  })
+  return { entries, skipped, skippedFiles: selection.skipped, truncated: truncatedNames.size > 0 }
 }
 
 /**
@@ -137,6 +274,10 @@ export function repowikiCardsTool(ctx) {
       depth: {
         type: 'integer',
         description: 'With imports=true or dependents=true, expand transitive dependencies/dependents up to N hops (1-3, default 1). Nearest hop wins when a file is reachable at several depths.',
+      },
+      usages: {
+        type: 'boolean',
+        description: 'Also locate lexical usage sites of matched symbols inside their direct named importers. Evidence is lexical (same-name entities and trailing comments cannot be distinguished), covers only languages whose import edges carry named symbols, and is bounded to 5 symbols / 20 files / 100 sites. Default false.',
       },
       locale: {
         type: 'string',
@@ -325,6 +466,52 @@ export function repowikiCardsTool(ctx) {
             },
           },
           dependentsTruncated: { type: 'boolean', description: 'True when more dependents exist than were returned.' },
+          symbolUsages: {
+            type: 'array',
+            description: 'Lexical usage evidence for matched symbols when usages=true (direct named importers only).',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                path: { type: 'string', description: 'File that defines/owns the symbol.' },
+                symbol: { type: 'string' },
+                importers: {
+                  type: 'array',
+                  description: 'Direct named importers whose sources were considered, sorted by path then line.',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      path: { type: 'string' },
+                      line: { type: 'integer', description: '1-based line of the import statement.' },
+                    },
+                    required: ['path'],
+                  },
+                },
+                usages: {
+                  type: 'array',
+                  description: 'Identifier-boundary matches inside importer sources; import lines and whole-line comments are excluded.',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      path: { type: 'string' },
+                      line: { type: 'integer' },
+                      text: { type: 'string', description: 'Trimmed source line, truncated to 200 characters.' },
+                    },
+                    required: ['path', 'line', 'text'],
+                  },
+                },
+                filesScanned: { type: 'integer', description: 'Importer files successfully read for this symbol.' },
+                unreadable: { type: 'array', items: { type: 'string' }, description: 'Importer paths that could not be read; their usage sites are unknown, not absent.' },
+                truncated: { type: 'boolean', description: 'True when this symbol hit the per-symbol/total site cap or had an importer skipped by the file cap.' },
+              },
+              required: ['path', 'symbol', 'importers', 'usages', 'filesScanned', 'unreadable', 'truncated'],
+            },
+          },
+          symbolUsagesSkipped: { type: 'integer', description: 'Matched symbols not scanned because of the 5-symbol cap.' },
+          symbolUsagesSkippedFiles: { type: 'integer', description: 'Importer files not read because of the 20-file cap.' },
+          symbolUsagesTruncated: { type: 'boolean', description: 'True when usage sites or importer files hit their caps.' },
         },
         required: ['indexed', 'matches', 'total', 'truncated', 'offset'],
       },
@@ -367,7 +554,17 @@ export function repowikiCardsTool(ctx) {
         const dependentLines = Array.isArray(value.dependents) && value.dependents.length > 0
           ? `\nDependents:\n${formatEdgeEntries(value.dependents, '←', '⇠')}${value.dependentsTruncated ? '\n… more dependent entries omitted' : ''}`
           : ''
-        return [{ type: 'text', text: [...lines, ...knowledgeLines].join('\n') + tail + knowledgeTail + memoryLine + localeLine + referenceLines + wikiLines + importLines + dependentLines + (value.hint ? `\n${value.hint}` : '') }]
+        const usageLines = Array.isArray(value.symbolUsages) && value.symbolUsages.length > 0
+          ? `\nUsages:\n${value.symbolUsages.map((entry) => {
+            const head = `- ${entry.symbol} in ${entry.path} — ${entry.usages.length} site(s) in ${entry.filesScanned} file(s)${entry.importers.length === 0 ? ' (no named importer)' : ''}${entry.truncated ? ' [truncated]' : ''}`
+            const sites = entry.usages.slice(0, 5).map(site => `  ${site.path}:L${site.line}: ${site.text}`)
+            const unreadable = entry.unreadable.length > 0
+              ? [`  unreadable: ${entry.unreadable.join(', ')} (usage unknown, not absent)`]
+              : []
+            return [head, ...sites, ...unreadable].join('\n')
+          }).join('\n')}${value.symbolUsagesTruncated ? '\n… more usage sites or importer files omitted' : ''}${value.symbolUsagesSkipped > 0 ? `\n… ${value.symbolUsagesSkipped} matched symbol(s) not scanned (cap 5)` : ''}`
+          : ''
+        return [{ type: 'text', text: [...lines, ...knowledgeLines].join('\n') + tail + knowledgeTail + memoryLine + localeLine + referenceLines + wikiLines + importLines + dependentLines + usageLines + (value.hint ? `\n${value.hint}` : '') }]
       },
     },
     async execute(args, _exec) {
@@ -483,6 +680,12 @@ export function repowikiCardsTool(ctx) {
         dependentResult = dependentsFor(index.edges, matches, MAX_IMPORT_ENTRIES, depth)
       }
 
+      // 词法使用点：在直接具名导入方里按标识符边界定位出现行（有界读取）
+      let usageResult = null
+      if (args.usages === true) {
+        usageResult = await collectSymbolUsages(fs, root, index.edges ?? [], matches)
+      }
+
       // Wiki 引用反查：命中文件被哪些 Wiki 页面/章节引用
       let wikiReferenceResult = null
       let wikiHint = ''
@@ -541,6 +744,12 @@ export function repowikiCardsTool(ctx) {
         ...(referenceResult ? { references: referenceResult.references, referencesTruncated: referenceResult.truncated } : {}),
         ...(importResult ? { imports: importResult.imports, importsTruncated: importResult.truncated } : {}),
         ...(dependentResult ? { dependents: dependentResult.dependents, dependentsTruncated: dependentResult.truncated } : {}),
+        ...(usageResult ? {
+          symbolUsages: usageResult.entries,
+          symbolUsagesSkipped: usageResult.skipped,
+          symbolUsagesSkippedFiles: usageResult.skippedFiles,
+          symbolUsagesTruncated: usageResult.truncated,
+        } : {}),
         ...(wikiReferenceResult
           ? { wikiReferences: wikiReferenceResult.wikiReferences, wikiReferencesTruncated: wikiReferenceResult.truncated }
           : {}),
@@ -550,7 +759,7 @@ export function repowikiCardsTool(ctx) {
       card: 'generic',
       title: 'Search repository knowledge',
       kind: 'search',
-      rawInput: { query: args.query ?? '', kind: args.kind ?? '', path: args.path ?? '', module: args.module ?? '', lang: args.lang ?? '', exportedOnly: args.exportedOnly ?? false, target: args.target ?? 'symbols', includeMemory: args.includeMemory ?? false, references: args.references ?? false, wikiReferences: args.wikiReferences ?? false, imports: args.imports ?? false, dependents: args.dependents ?? false, depth: args.depth ?? 1, locale: args.locale ?? 'auto' },
+      rawInput: { query: args.query ?? '', kind: args.kind ?? '', path: args.path ?? '', module: args.module ?? '', lang: args.lang ?? '', exportedOnly: args.exportedOnly ?? false, target: args.target ?? 'symbols', includeMemory: args.includeMemory ?? false, references: args.references ?? false, wikiReferences: args.wikiReferences ?? false, imports: args.imports ?? false, dependents: args.dependents ?? false, usages: args.usages ?? false, depth: args.depth ?? 1, locale: args.locale ?? 'auto' },
     }),
     presentResult: (_args, result) => {
       // 官方渲染词汇：发现型搜索用 card:'search'，按文件分组显示匹配

@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.238.0] - 2026-11-28
+
+- **`repowiki-cards` 的符号使用点证据**：`usages=true` 回答"这个符号在哪被
+  使用"。它把 import 级证据（`edge.symbols`）与导入方源码中的标识符边界
+  匹配结合，排除 import 语句/块与整行注释，输出 `symbolUsages`：定义文件、
+  导入位置（`{path, line}`）、使用点（`{path, line, text}`）、已扫描文件数
+  与不可读导入方。扫描上限为 5 个符号、20 个导入方文件、100 个站点
+  （单符号 10 个）。
+- **如实披露不完整**：不可读导入方列为 unknown（不是未使用），超出上限的
+  符号与文件分别计入 `symbolUsagesSkipped` / `symbolUsagesSkippedFiles`，
+  单符号 `truncated` 标记站点/文件上限导致的截断；import 边不带具名符号的
+  语言不会伪报零使用。
+- **测试**：756 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖使用点与注释/
+  import 排除、不可读导入方、5 符号目标上限、单符号站点上限、20 文件上限
+  与 docs 目标的空结果。
+
 ## [0.237.0] - 2026-11-28
 
 - **Verilog/SystemVerilog 支持（第 40/41 种语言）**：`.v`/`.vh` 与

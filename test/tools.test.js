@@ -718,3 +718,93 @@ test('repowiki-cards execute：target=docs/all 走 BM25 正文检索', async () 
   assert.deepEqual(noQuery.knowledge, [])
   assert.match(noQuery.hint, /query is required/)
 })
+
+test('repowiki-cards execute：usages=true 返回具名导入方的词法使用点', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-usages-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parseThing() { return 1 }\n')
+  nodefs.writeFileSync(
+    path.join(dir, 'b.ts'),
+    "import { parseThing } from './a'\n// parseThing appears in a comment\nexport const value = parseThing()\n",
+  )
+  nodefs.writeFileSync(path.join(dir, 'c.ts'), "import { parseThing } from './a'\nexport const other = 1\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  // 索引建好后再删掉一个导入方：读取失败必须披露为 unknown，而不是未使用
+  nodefs.unlinkSync(path.join(dir, 'c.ts'))
+  const cards = repowikiCardsTool(ctx)
+
+  const plain = await cards.execute({ query: 'parseThing' }, fakeExec)
+  assert.equal(plain.symbolUsages, undefined, '默认不扫使用点')
+
+  const out = await cards.execute({ query: 'parseThing', usages: true }, fakeExec)
+  assert.deepEqual(out.symbolUsages, [{
+    path: 'a.ts',
+    symbol: 'parseThing',
+    importers: [{ path: 'b.ts', line: 1 }, { path: 'c.ts', line: 1 }],
+    usages: [{ path: 'b.ts', line: 3, text: 'export const value = parseThing()' }],
+    filesScanned: 1,
+    unreadable: ['c.ts'],
+    truncated: false,
+  }], '注释行与 import 行被排除，不可读文件单独披露')
+  assert.equal(out.symbolUsagesSkipped, 0)
+  assert.equal(out.symbolUsagesSkippedFiles, 0)
+  assert.equal(out.symbolUsagesTruncated, false)
+
+  const rendered = cards.output.render({}, out)
+  assert.match(rendered[0].text, /Usages:/)
+  assert.match(rendered[0].text, /parseThing in a\.ts — 1 site\(s\) in 1 file\(s\)/)
+  assert.match(rendered[0].text, /unreadable: c\.ts \(usage unknown, not absent\)/)
+
+  const docs = await cards.execute({ query: 'parseThing', target: 'docs', usages: true }, fakeExec)
+  assert.deepEqual(docs.symbolUsages, [], 'docs 检索无符号命中时返回空数组')
+})
+
+test('repowiki-cards execute：usages 的目标数与站点数有界', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-usages-cap-'))
+  const names = ['fn1', 'fn2', 'fn3', 'fn4', 'fn5', 'fn6']
+  nodefs.writeFileSync(
+    path.join(dir, 'a.ts'),
+    names.map(name => `export function ${name}() { return 1 }`).join('\n') + '\n',
+  )
+  const body = [
+    `import { ${names.join(', ')} } from './a'`,
+    ...Array.from({ length: 12 }, (_, i) => `export const v${i} = fn1()`),
+  ].join('\n') + '\n'
+  nodefs.writeFileSync(path.join(dir, 'b.ts'), body)
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'fn', usages: true }, fakeExec)
+  assert.equal(out.symbolUsages.length, 5, '最多扫描 5 个符号')
+  assert.equal(out.symbolUsagesSkipped, 1, '第 6 个符号计入缺口')
+  const first = out.symbolUsages.find(entry => entry.symbol === 'fn1')
+  assert.equal(first.usages.length, 10, '单符号站点上限 10')
+  assert.equal(first.truncated, true)
+  assert.equal(out.symbolUsagesTruncated, true)
+  const rendered = cards.output.render({}, out)
+  assert.match(rendered[0].text, /1 matched symbol\(s\) not scanned \(cap 5\)/)
+  assert.match(rendered[0].text, /\[truncated\]/)
+})
+
+test('repowiki-cards execute：usages 的导入方文件数有界并标记截断', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-usages-files-'))
+  nodefs.writeFileSync(path.join(dir, 'a.ts'), 'export function parse() { return 1 }\n')
+  for (let i = 0; i < 21; i++) {
+    const name = `c${String(i).padStart(2, '0')}.ts`
+    nodefs.writeFileSync(
+      path.join(dir, name),
+      "import { parse } from './a'\nexport const value = parse()\n",
+    )
+  }
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const cards = repowikiCardsTool(ctx)
+
+  const out = await cards.execute({ query: 'parse', usages: true }, fakeExec)
+  assert.equal(out.symbolUsages[0].filesScanned, 20, '最多读取 20 个导入方文件')
+  assert.equal(out.symbolUsages[0].usages.length, 20)
+  assert.equal(out.symbolUsagesSkippedFiles, 1, '第 21 个文件计入缺口')
+  assert.equal(out.symbolUsages[0].truncated, true)
+  assert.equal(out.symbolUsagesTruncated, true)
+})

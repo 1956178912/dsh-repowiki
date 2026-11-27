@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.238.0] - 2026-11-28
+
+### Added
+
+- **Usage evidence in `repowiki-cards`**: `usages=true` answers "where is this
+  symbol used" for matched symbols. It combines import-level evidence
+  (`edge.symbols`) with identifier-boundary matches in importer sources,
+  excluding import statements/blocks and whole-line comments, and returns
+  `symbolUsages` entries with the defining file, importer import sites
+  (`{path, line}`), usage sites (`{path, line, text}`), scanned-file count and
+  unreadable importers. The scan is bounded to 5 symbols, 20 importer files
+  and 100 sites (10 per symbol).
+- **Honest incompleteness**: unreadable importers are listed as unknown (not
+  unused), symbols and files beyond the caps are counted
+  (`symbolUsagesSkipped`, `symbolUsagesSkippedFiles`), and per-symbol
+  `truncated` marks evidence limited by a site/file cap. Languages whose
+  import edges carry no named symbols yield no importer evidence instead of a
+  false zero.
+
+### Tests
+
+- 756 cases pass (LANG=en and LANG=zh); new coverage for usage sites with
+  comment/import exclusion, unreadable importers, the 5-symbol target cap,
+  the per-symbol site cap, the 20-file cap and docs-target emptiness.
+
 ## [0.237.0] - 2026-11-28
 
 ### Added
