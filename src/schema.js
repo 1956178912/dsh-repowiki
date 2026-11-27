@@ -144,6 +144,7 @@ export const MANIFEST_FILES = {
   'foundry.toml': 'foundry',
   'deps.edn': 'clojure',
   'project.clj': 'clojure',
+  '.terraform.lock.hcl': 'terraform',
   'CMakeLists.txt': 'cmake',
 }
 
@@ -199,6 +200,7 @@ export const EXTENSION_LANGS = {
   clj: 'clojure',
   cljs: 'clojure',
   cljc: 'clojure',
+  tf: 'hcl',
   c: 'c',
   h: 'c',
   cc: 'cpp',

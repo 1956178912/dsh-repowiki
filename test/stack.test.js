@@ -442,6 +442,22 @@ test('Clojure：deps.edn 与 project.clj 依赖与技术映射', () => {
     && names.includes('Malli') && names.includes('Reagent'))
 })
 
+test('Terraform：.terraform.lock.hcl provider 与技术映射', () => {
+  const info = detectStack({
+    '.terraform.lock.hcl': [
+      'provider "registry.terraform.io/hashicorp/aws" {',
+      '  version = "5.0.0"',
+      '}',
+      'provider "registry.terraform.io/hashicorp/random" {',
+      '  version = "3.5.0"',
+      '}',
+    ].join('\n'),
+  })
+  assert.equal(info.dependencyCounts.terraform, 2)
+  const names = info.technologies.map(t => t.name)
+  assert.ok(names.includes('AWS') && names.includes('random'))
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),

@@ -5,6 +5,28 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.215.0] - 2026-11-28
+
+### Added
+
+- **Terraform/HCL indexing (29th language)**: `.tf` files produce
+  `resource`/`data` blocks (`type.name`), `module`/`provider`/`terraform`
+  blocks and `variable`/`output`/`locals`. Block labels are read from
+  string content while ranges use the masked view, so braces inside
+  strings never break balancing; nested blocks (`lifecycle`, `dynamic`,
+  `required_providers`) stay unindexed. `source = "./modules/x"` resolves
+  to that directory's `main.tf` (or its lexicographically first `.tf`),
+  while registry/git sources stay edge-free. `.terraform.lock.hcl`
+  supplies provider names and Terraform technology mappings (AWS, Google
+  Cloud, Azure, Kubernetes, Helm…). Prompt fences and the panel language
+  filter know `hcl`.
+
+### Tests
+
+- 631 cases pass (LANG=en and LANG=zh); new coverage pins block kinds and
+  ranges, nested-block exclusion, module-source extraction/resolution,
+  external exclusion and lock-file provider metadata.
+
 ## [0.214.0] - 2026-11-28
 
 ### Added

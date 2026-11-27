@@ -3832,6 +3832,104 @@ function extractClojure(lines) {
 }
 
 /**
+ * 扫描 HCL 源码行：`#`/`//` 行注释截断、`/* … *\/` 块注释与字符串内容
+ * 在掩码视图替换为空格；code 视图保留字符串原文（供 module source 提取）。
+ * @param {string[]} lines - 源码行。
+ * @returns {Array<{code:string, masked:string}>} 双视图行。
+ */
+export function hclScan(lines) {
+  const out = []
+  let inBlock = false
+  let quote = null
+  for (const raw of lines) {
+    let code = ''
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') { inBlock = false; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (quote) {
+        code += ch
+        if (ch === '\\') {
+          if (i + 1 < raw.length) { code += raw[i + 1]; masked += '  '; i++ }
+          else masked += ' '
+          continue
+        }
+        if (ch === quote) { quote = null; masked += ch; continue }
+        masked += ' '
+        continue
+      }
+      if (ch === '#' || (ch === '/' && next === '/')) break
+      if (ch === '/' && next === '*') { inBlock = true; i++; masked += '  '; continue }
+      if (ch === '"') { quote = ch; code += ch; masked += ch; continue }
+      code += ch
+      masked += ch
+    }
+    out.push({ code, masked })
+  }
+  return out
+}
+
+/**
+ * 提取 HCL/Terraform 符号：`resource`/`data`（`type.name`）、`module`、
+ * `provider`、`terraform` 块与 `variable`/`output`/`locals`；块范围按
+ * 花括号配平，嵌套块（`lifecycle`、`dynamic` 等）不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractHcl(lines) {
+  const rows = hclScan(lines)
+  const masked = rows.map(row => row.masked)
+  const codeLines = rows.map(row => row.code)
+  const symbols = []
+  for (let i = 0; i < masked.length; i++) {
+    const maskedLine = masked[i].trim()
+    if (!maskedLine || !maskedLine.includes('{')) continue
+    // 块标签（resource "type" "name"）位于字符串内：用 code 视图提取，
+    // 范围仍用掩码视图配平，避免字符串中的花括号干扰
+    const line = codeLines[i].trim()
+    const block = /^([A-Za-z_]\w*)(?:\s+"([^"]*)")?(?:\s+"([^"]*)")?\s*\{/.exec(line)
+    if (!block) continue
+    const keyword = block[1]
+    const first = block[2]
+    const second = block[3]
+    let name = null
+    let kind = 'class'
+    if ((keyword === 'resource' || keyword === 'data') && first && second) {
+      name = `${first}.${second}`
+    } else if (keyword === 'module' && first) {
+      name = first
+    } else if (keyword === 'provider' && first) {
+      name = first
+    } else if (keyword === 'variable' && first) {
+      name = first
+      kind = 'variable'
+    } else if (keyword === 'output' && first) {
+      name = first
+      kind = 'variable'
+    } else if (keyword === 'locals') {
+      name = 'locals'
+      kind = 'variable'
+    } else if (keyword === 'terraform') {
+      name = 'terraform'
+    }
+    if (!name) continue
+    symbols.push({
+      name,
+      kind,
+      line: i + 1,
+      endLine: findBlockEnd(masked, i),
+      exported: true,
+    })
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -3971,6 +4069,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'erlang') return extractErlang(lines)
   if (lang === 'solidity') return extractSolidity(lines)
   if (lang === 'clojure') return extractClojure(lines)
+  if (lang === 'hcl') return extractHcl(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

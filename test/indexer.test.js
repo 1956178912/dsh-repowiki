@@ -1688,6 +1688,22 @@ test('Clojure：src 根命名空间解析与 deps.edn 技术栈', async () => {
   assert.ok(doc.stack.technologies.some(t => t.name === 'Clojure' && t.ecosystem === 'clojure'))
 })
 
+test('HCL：module source 解析到模块代表文件与 provider 技术栈', async () => {
+  const dir = makeProject({
+    '.terraform.lock.hcl': 'provider "registry.terraform.io/hashicorp/aws" {}\n',
+    'infra/main.tf': 'module "vpc" {\n  source = "./modules/vpc"\n}\n',
+    'infra/modules/vpc/main.tf': 'resource "aws_vpc" "this" {}\n',
+    'infra/modules/vpc/outputs.tf': 'output "id" { value = "x" }\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { hcl: 3 })
+
+  const edge = doc.edges.find(e => e.from === 'infra/main.tf' && e.to === 'infra/modules/vpc/main.tf')
+  assert.equal(edge?.line, 2, 'main.tf 代表模块')
+  assert.equal(doc.stack.dependencyCounts.terraform, 1)
+  assert.ok(doc.stack.technologies.some(t => t.name === 'AWS' && t.ecosystem === 'terraform'))
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

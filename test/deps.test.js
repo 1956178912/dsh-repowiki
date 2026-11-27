@@ -598,6 +598,23 @@ test('Clojure：ns require 提取与注释屏蔽', () => {
   ])
 })
 
+test('HCL：module source 相对路径与外部排除', () => {
+  const code = [
+    'module "vpc" {',
+    '  source = "./modules/vpc"',
+    '}',
+    'module "registry" {',
+    '  source = "terraform-aws-modules/vpc/aws"',
+    '}',
+    '# source = "./hidden"',
+  ].join('\n')
+  const imports = extractImports(code, 'hcl')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.relative]), [
+    ['./modules/vpc', 2, true],
+    ['terraform-aws-modules/vpc/aws', 5, false],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

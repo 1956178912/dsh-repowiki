@@ -9,7 +9,8 @@
 
 import { scriptBlockText } from './sfc.js'
 import {
-  shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan, clojureScan,
+  shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
+  clojureScan, hclScan,
 } from './symbols.js'
 
 /**
@@ -1127,6 +1128,30 @@ function extractClojureImports(lines) {
 }
 
 /**
+ * 提取 HCL/Terraform 的 `source = "…"` 引用（module 块的本地模块路径
+ * 为主要用途）；相对路径由 indexer 解析到模块目录的代表文件。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractHclImports(lines) {
+  const result = []
+  const rows = hclScan(lines)
+  for (let i = 0; i < rows.length; i++) {
+    const code = rows[i].code.trim()
+    const m = /^source\s*=\s*"([^"]+)"/.exec(code)
+    if (!m) continue
+    result.push({
+      specifier: m[1],
+      line: i + 1,
+      kind: 'import',
+      relative: m[1].startsWith('.'),
+      imported: [],
+    })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1238,6 +1263,7 @@ export function extractImports(code, lang) {
   if (lang === 'erlang') return extractErlangImports(lines)
   if (lang === 'solidity') return extractSolidityImports(lines)
   if (lang === 'clojure') return extractClojureImports(lines)
+  if (lang === 'hcl') return extractHclImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

@@ -3,6 +3,19 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.215.0] - 2026-11-28
+
+- **Terraform/HCL 支持（第 29 种语言）**：`.tf` 提取 `resource`/`data`
+  块（`type.name`）、`module`/`provider`/`terraform` 块与 `variable`/
+  `output`/`locals`。块标签从字符串原文读取、范围用掩码视图配平，字符串
+  内花括号不破坏配平；嵌套块（`lifecycle`/`dynamic`/`required_providers`）
+  不登记。`source = "./modules/x"` 解析到该目录的 `main.tf`（否则字典序
+  首个 `.tf`），registry/git 源不建边。`.terraform.lock.hcl` 提供 provider
+  名与 Terraform 技术映射（AWS/Google Cloud/Azure/Kubernetes/Helm 等）。
+  Prompt 围栏与面板语言筛选识别 `hcl`。
+- **测试**：631 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖块种类与范围、
+  嵌套块排除、模块源提取/解析、外部排除与 lock 文件 provider 元数据。
+
 ## [0.214.0] - 2026-11-28
 
 - **Clojure 支持（第 28 种语言）**：`.clj`/`.cljs`/`.cljc` 提取 `ns`

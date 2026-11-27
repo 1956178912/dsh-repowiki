@@ -1132,6 +1132,32 @@ function resolveSolidityImport(fromRel, specifier, indexed) {
 }
 
 /**
+ * 解析 Terraform 本地模块：`source = "./modules/x"` 按引用文件目录归一，
+ * 优先 `<dir>/main.tf`，否则取该目录字典序最小的 `.tf`；外部（registry/
+ * git）与插值路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - module source 路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveHclModule(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (!raw.startsWith('.') || raw.includes('\\') || raw.includes('${')) return null
+  const base = path.posix.dirname(fromRel)
+  const target = path.posix.normalize(path.posix.join(base, raw))
+  if (target === '..' || target.startsWith('../')) return null
+  const main = path.posix.join(target, 'main.tf')
+  if (indexed.has(main)) return main
+  const matches = []
+  for (const rel of indexed) {
+    if (rel.endsWith('.tf') && path.posix.dirname(rel) === target) matches.push(rel)
+  }
+  matches.sort()
+  return matches[0] ?? null
+}
+
+/**
  * 建立 Clojure 命名空间搜索根：任意层级的 `src/` 与 `test/` 目录，
  * 最后回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
@@ -2245,6 +2271,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'clojure') return resolveClojureSpecifier(imp.specifier, fromRel, ctx.clojureRoots, ctx.indexed)
+  if (lang === 'hcl') return resolveHclModule(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'lua') return resolveLuaSpecifier(imp.specifier, ctx.luaRoots, ctx.indexed)
   if (lang === 'zig') return resolveZigSpecifier(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'gleam') return resolveGleamSpecifier(imp.specifier, ctx.gleamRoots, ctx.indexed)

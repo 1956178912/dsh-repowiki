@@ -888,6 +888,39 @@ function rebarDependencies(text) {
   return deps
 }
 
+/** Terraform provider 短名 → 技术展示名的映射。 */
+const TERRAFORM_TECH = {
+  aws: 'AWS',
+  google: 'Google Cloud',
+  azurerm: 'Azure',
+  kubernetes: 'Kubernetes',
+  helm: 'Helm',
+  cloudflare: 'Cloudflare',
+  docker: 'Docker',
+  github: 'GitHub',
+  vault: 'Vault',
+  datadog: 'Datadog',
+  mongodbatlas: 'MongoDB Atlas',
+  tls: 'TLS',
+  random: 'random',
+  null: 'null',
+}
+
+/**
+ * 从 `.terraform.lock.hcl` 提取 provider 短名（取地址末段）。
+ * @param {string} text - lock 文件内容。
+ * @returns {string[]} provider 短名（去重）。
+ */
+function terraformLockProviders(text) {
+  const providers = []
+  for (const m of text.matchAll(/provider\s+"([^"]+)"/g)) {
+    const parts = m[1].split('/')
+    const name = parts[parts.length - 1]
+    if (name && !providers.includes(name)) providers.push(name)
+  }
+  return providers
+}
+
 /** Clojure / ClojureScript 依赖坐标 → 技术展示名的映射。 */
 const CLOJURE_TECH = {
   'org.clojure/clojure': 'Clojure',
@@ -1287,6 +1320,13 @@ export function detectStack(manifests) {
       for (const dep of deps) {
         const name = CLOJURE_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'clojure', source: path })
+      }
+    } else if (path === '.terraform.lock.hcl') {
+      const providers = terraformLockProviders(text)
+      info.dependencyCounts.terraform = providers.length
+      for (const provider of providers) {
+        const name = TERRAFORM_TECH[provider]
+        if (name) info.technologies.push({ name, ecosystem: 'terraform', source: path })
       }
     } else if (path === 'project.clj') {
       const proj = projectCljInfo(text)

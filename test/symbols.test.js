@@ -1654,6 +1654,51 @@ test('Clojure：ns/defn/def/defrecord/defprotocol 与括号范围', () => {
   assert.ok(!byName.has('commented'), 'comment 形式整体跳过')
 })
 
+test('HCL：resource/data/module/variable 与块范围', () => {
+  const code = [
+    '# resource "hidden" "x" {}',
+    'terraform {',
+    '  required_version = ">= 1.5"',
+    '}',
+    '',
+    'provider "aws" {',
+    '  region = "us-east-1"',
+    '}',
+    '',
+    'resource "aws_instance" "web" {',
+    '  ami = "ami-123"',
+    '  lifecycle {',
+    '    prevent_destroy = true',
+    '  }',
+    '}',
+    '',
+    'data "aws_ami" "ubuntu" {',
+    '  most_recent = true',
+    '}',
+    '',
+    'module "vpc" {',
+    '  source = "./modules/vpc"',
+    '}',
+    '',
+    'variable "region" {}',
+    'output "id" { value = "x" }',
+    'locals { a = 1 }',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'hcl')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('terraform').kind, 'class')
+  assert.equal(byName.get('aws').kind, 'class')
+  assert.equal(byName.get('aws_instance.web').kind, 'class')
+  assert.equal(byName.get('aws_instance.web').endLine, 15)
+  assert.equal(byName.get('aws_ami.ubuntu').kind, 'class')
+  assert.equal(byName.get('vpc').kind, 'class')
+  assert.equal(byName.get('region').kind, 'variable')
+  assert.equal(byName.get('id').kind, 'variable')
+  assert.equal(byName.get('locals').kind, 'variable')
+  assert.ok(!byName.has('lifecycle'), '嵌套块不登记')
+  assert.ok(!byName.has('hidden'), '注释内块不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

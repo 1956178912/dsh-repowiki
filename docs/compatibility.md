@@ -49,6 +49,7 @@
 | R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass`/`setRefClass`/`R6Class` 类及类内方法（method + parent）、`setGeneric` 泛型与 `setMethod` 方法（签名类为 parent）；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
 | Julia | `module`/`baremodule`、`struct`/`mutable struct`（含 `@kwdef`/模块限定宏前缀）、`abstract type`/`primitive type`、`@enum`（类型 + 非导出枚举值）、`function name(...)`（`Type.method` → method + parent）、短函数 `name(args) = expr`、`macro`、顶层 `const`；函数/结构体/宏体内部不登记；含 `module` 的文件按 `export` 标记可见性 | `include("path")` 相对引用文件解析（缺省补 `.jl`）；动态参数（`$` 插值/`joinpath`）不建边；`Project.toml` 提供包名/版本与 `[deps]`/`[extras]` 依赖计数 |
 | OCaml | 顶层 `let`/`let rec`（含 `let%ppx`、属性；运算符定义除外）与 `and` 续接的互递归函数、`type` 容器/别名（参数化名称取末尾标识符）与 `and` 续接类型、`module`/`module type`、`class`/`class type`、`exception`、`val`/`external`；缩进体内部与嵌套定义不登记；`(* … *)` 可嵌套注释、字符串与 `{|…|}`/`{id|…|id}` 原始字符串屏蔽；`struct`/`sig`/`object` 范围按配对 `end` 结束 | `open`/`include`/`open!`/`module M = Foo` 经"文件名→模块名"映射解析（首字母大写，`.ml` 优先于 `.mli`，`Foo.Bar` 归到 `foo.ml`）；同名模块选与引用文件共享目录最深者（同库优先）；外部库不建边；`dune-project` 提供项目名/版本（嵌套上限 20），`*.opam` 提供版本与 `depends` 依赖 |
+| HCL | `resource`/`data`（`type.name`）、`module`/`provider`/`terraform` 块（class）、`variable`/`output`/`locals`（variable）；嵌套块不登记；`#`/`//` 注释、`/* */` 与字符串屏蔽（标签从字符串原文读取，范围用掩码配平） | `source = "./modules/x"` 按引用文件目录解析到模块目录的 `main.tf`（否则字典序首个 `.tf`）；registry/git 与 `${}` 插值源不建边；`.terraform.lock.hcl` 的 `provider "…"` 提供依赖计数与技术映射 |
 | Clojure | `ns`（class）、`defn`/`defn-`/`defmacro`/`defmacro-`/`defmulti`/`defmethod`（function）、`def`/`defonce`（variable）、`defrecord`/`deftype`/`defprotocol`/`definterface`（class）；`^:private` 与 `defn-`/`defmacro-` 非导出；`;` 注释、字符串屏蔽、`(comment …)` 整体跳过；形式范围按圆/方/花括号配平 | `(:require …)`/`(:use …)` 的 `[ns.name …]` 命名空间点分换算路径，在每个 `src/`/`test/` 根与项目根下尝试同类扩展优先的 `.clj`/`.cljc`/`.cljs`；外部命名空间不建边；`deps.edn` `:deps` 与 `project.clj` `:dependencies` 提供依赖计数/版本与技术映射 |
 | Solidity | `contract`/`library`/`interface`（含 `abstract contract`）容器；成员 `function`/`constructor`/`receive`/`fallback`/`modifier`/`event`/`error`/`struct`/`enum`/`type X is`（method/type/class，带 `parent`）；文件级函数与类型；`private`/`internal` 非导出；`//`、`/* */` 与字符串屏蔽；范围按花括号配平（`;` 声明单行） | 相对 `import`（`import "…"`、`import {A} from "…"`、`import * as X from "…"`）按引用文件目录解析并补 `.sol`；npm/`hardhat/…` 等外部路径不建边；`foundry.toml` 标记 Foundry 工具链 |
 | Erlang | `-module`、`-record`、`-type`/`-opaque`、`-define` 宏、顶层函数（多子句、`when` 守卫、跨行签名）；`-export([f/1])` 决定可见性（默认私有，同名不同 arity 合并），`-module` 自身公开；缩进体与匿名函数不登记；`%` 注释、字符串、引号原子与 `$x` 字符字面量屏蔽 | `-include("…")` 先按引用文件目录，再经每个 `src/`/`include/` 根与项目根（原路径与补 `.hrl`）；`-include_lib("app/…")` 额外尝试剥离首段应用名的路径；外部头文件不建边；`rebar.config` 的 `{deps, …}` 提供依赖计数与 rebar 技术映射 |
@@ -141,7 +142,10 @@ OCaml 为轻量行级解析：只识别缩进 0 的声明；`module`/`class` 的
 的 `endLine` 可能延伸到下一个块。Clojure 为轻量括号解析：只识别行首
 `(` 的顶层形式（`#_(defn …)` 丢弃形式与 metadata 内的定义不登记）；
 `defmulti`/`defmethod` 同名合并；`deps.edn` 只读顶层 `:deps`，别名
-`(:require … :as-alias)` 仍指向原命名空间。
+`(:require … :as-alias)` 仍指向原命名空间。HCL 为轻量行级解析：块头
+必须与 `{` 同行（跨行块头不识别）；字符串插值 `${…}` 内引号可能提前
+结束字符串（仅影响该行后续识别）；`source` 属性按模块源解析，资源内
+同名属性可能在恰好存在同名目录时误连。
 
 ## 升级检查清单
 
