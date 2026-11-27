@@ -11,6 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
+  nixScan,
 } from './symbols.js'
 
 /**
@@ -1333,6 +1334,37 @@ function extractPascalImports(lines) {
 }
 
 /**
+ * 提取 Nix 的文件引用：`import ./x.nix`、`callPackage ./pkg.nix` 与
+ * `builtins.readFile|readDir|path ./x`；只登记相对路径，`<nixpkgs>`
+ * 等搜索路径不建边。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractNixImports(lines) {
+  const result = []
+  const masked = nixScan(lines)
+  const patterns = [
+    /\bimport\s+(\.\.?\/[^\s;()]+)/g,
+    /\bcallPackage\s+(\.\.?\/[^\s;()]+)/g,
+    /\bbuiltins\.(?:readFile|readDir|path)\s+(\.\.?\/[^\s;()]+)/g,
+  ]
+  for (let i = 0; i < masked.length; i++) {
+    const seen = new Set()
+    for (const re of patterns) {
+      re.lastIndex = 0
+      let m
+      while ((m = re.exec(masked[i])) !== null) {
+        const specifier = m[1].replace(/[),;]+$/, '')
+        if (!specifier || seen.has(specifier)) continue
+        seen.add(specifier)
+        result.push({ specifier, line: i + 1, kind: 'import', relative: true, imported: [] })
+      }
+    }
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1450,6 +1482,7 @@ export function extractImports(code, lang) {
   if (lang === 'fortran') return extractFortranImports(lines)
   if (lang === 'perl') return extractPerlImports(lines)
   if (lang === 'pascal') return extractPascalImports(lines)
+  if (lang === 'nix') return extractNixImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

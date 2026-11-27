@@ -1838,6 +1838,25 @@ test('Pascal：uses 单元名（大小写不敏感）与 in 显式路径解析',
   ])
 })
 
+test('Nix：import 相对路径、目录 default.nix 与外部搜索路径跳过', async () => {
+  const dir = makeProject({
+    'default.nix': '{ pkgs ? import <nixpkgs> {} }:\n{\n  pkg = import ./pkg.nix;\n  mod = import ./modules/foo;\n}\n',
+    'pkg.nix': '{ }:\n{ }\n',
+    'modules/foo/default.nix': '{ }:\n{ }\n',
+    'flake.nix': '{ inputs }:\n{\n  outputs = { self }: { packages.default = import ./default.nix; };\n}\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { nix: 4 })
+
+  const defaultEdges = doc.edges.filter(e => e.from === 'default.nix')
+  assert.deepEqual(defaultEdges.map(e => [e.line, e.to]).sort(), [
+    [3, 'pkg.nix'],
+    [4, 'modules/foo/default.nix'],
+  ])
+  const flakeEdges = doc.edges.filter(e => e.from === 'flake.nix')
+  assert.deepEqual(flakeEdges.map(e => [e.line, e.to]), [[3, 'default.nix']])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

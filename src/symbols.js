@@ -4600,6 +4600,101 @@ function extractPascal(lines) {
 }
 
 /**
+ * 扫描 Nix 源码行：`#` 行注释、`/* … *\/` 块注释、双引号字符串
+ * （反斜杠转义）与缩进字符串 `''…''`（`'''`、`''${`、`''\` 转义）
+ * 内容替换为空格；路径字面量（`./x`、`<nixpkgs>`）保留。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function nixScan(lines) {
+  const out = []
+  let inBlock = false
+  let quote = null
+  let indent = false
+  for (const raw of lines) {
+    let masked = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      const next = raw[i + 1]
+      if (inBlock) {
+        if (ch === '*' && next === '/') { inBlock = false; i++; masked += '  ' }
+        else masked += ' '
+        continue
+      }
+      if (quote) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { quote = null; masked += ch }
+        else masked += ' '
+        continue
+      }
+      if (indent) {
+        if (ch === "'" && raw.startsWith("'''", i)) { i += 2; masked += '   '; continue }
+        if (ch === "'" && raw.startsWith("''${", i)) { i += 3; masked += '    '; continue }
+        if (ch === "'" && next === "'" && raw[i + 2] === '\\') { i += 2; masked += '   '; continue }
+        if (ch === "'" && next === "'") { indent = false; i++; masked += "''"; continue }
+        masked += ' '
+        continue
+      }
+      if (ch === '#') break
+      if (ch === '/' && next === '*') { inBlock = true; i++; masked += '  '; continue }
+      if (ch === '"') { quote = ch; masked += ch; continue }
+      if (ch === "'" && next === "'") { indent = true; i++; masked += "''"; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/** Nix 语言关键字——禁止被误识别为绑定名。 */
+const NIX_KEYWORDS = new Set([
+  'if', 'then', 'else', 'assert', 'with', 'let', 'in', 'inherit', 'rec',
+  'or', 'null', 'true', 'false',
+])
+
+/**
+ * 提取 Nix 绑定符号：属性集/let 内的 `name = value;`、属性路径
+ * `a.b.c = value;`；值为属性集（`{`/`rec {`）登记 class 并配平范围，
+ * lambda（`x: …` / `{ … }: …`）登记 function，其余登记 variable。
+ * 嵌套属性集内的绑定带 `parent`；注释与字符串内文本不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractNix(lines) {
+  const masked = nixScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const containers = []
+  for (let i = 0; i < masked.length; i++) {
+    while (containers.length > 0 && containers[containers.length - 1].end <= i + 1) containers.pop()
+    const line = masked[i].trim()
+    if (line === '') continue
+    const m = /^([A-Za-z_][\w'-]*(?:\.[A-Za-z_][\w'-]*)*)\s*=(?!=)\s*(.*)$/.exec(line)
+    if (!m) continue
+    const name = m[1]
+    if (NIX_KEYWORDS.has(name)) continue
+    const value = m[2].trim()
+    const parent = containers.length > 0 ? containers[containers.length - 1].name : undefined
+    /** @type {string} */
+    let kind = 'variable'
+    let endLine = i + 1
+    const lambda = /^[A-Za-z_][\w'-]*\s*:/.test(value) || /^\{[^}]*\}\s*:/.test(value)
+    if (lambda) {
+      kind = 'function'
+    } else if (/^rec\s*\{/.test(value) || value.startsWith('{')) {
+      kind = 'class'
+      endLine = findBlockEnd(masked, i)
+      containers.push({ name, end: endLine })
+    }
+    /** @type {object} */
+    const symbol = { name, kind, line: i + 1, endLine, exported: true }
+    if (parent) symbol.parent = parent
+    symbols.push(symbol)
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4745,6 +4840,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'fortran') return extractFortran(lines)
   if (lang === 'perl') return extractPerl(lines)
   if (lang === 'pascal') return extractPascal(lines)
+  if (lang === 'nix') return extractNix(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

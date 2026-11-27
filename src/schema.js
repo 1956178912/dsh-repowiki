@@ -226,6 +226,7 @@ export const EXTENSION_LANGS = {
   dpr: 'pascal',
   dpk: 'pascal',
   lpr: 'pascal',
+  nix: 'nix',
   c: 'c',
   h: 'c',
   cc: 'cpp',

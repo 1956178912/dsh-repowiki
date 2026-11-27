@@ -55,6 +55,7 @@
 | Fortran | `module`/`program`/`subroutine`/`function`（含 `integer function`/`real(kind=8) function` 等类型前缀与 `pure`/`recursive`/`elemental`/`module` 修饰）、派生类型 `type [::] name`/`type, extends(…) :: name`、具名 `interface`；`end`/`end <unit>` 配平范围，模块内过程带 `parent`，`end do`/`end if`/`end select`/`end where` 不关闭程序单元；`!` 注释与单/双引号字符串（双写转义）屏蔽 | `use name`、`use :: name`、`use name, only: …`、`use, non_intrinsic :: name` 经大小写不敏感的 `module` 符号映射解析（模块名与文件名无需一致，同名取字典序最小文件）；`use, intrinsic :: …` 与未索引的外部模块不建边 |
 | Perl | `package Foo::Bar;`（语句形式，后续声明归属直到下一个 package）与 `package Foo { … }` 块形式登记为 class；`sub name` 为 function，包内为 method + `parent`；`_` 前缀按惯例非导出；`#` 注释（`$#array` 除外）、`=pod … =cut`、heredoc 与引号字符串屏蔽 | `use`/`require Foo::Bar` 把 `::` 换算路径，在每个 `lib/` 根与项目根下尝试 `.pm`/`.pl`；`use parent 'Foo'`/`use base qw(Foo)` 记录父模块；`require './x.pl'` 先项目根再脚本目录；pragma 与版本声明跳过，外部 CPAN 模块不建边 |
 | Pascal | `unit`/`program`/`library` 与 `type X = class/interface/record/object`（范围按 `class`/`record`/`interface` ↔ `end` 配平，`class function`/`class of` 不计新块）；`procedure`/`function`/`constructor`/`destructor`（接口声明止于本行，实现体按 `begin`/`case`/`try`/`asm` ↔ `end` 配平）、`property`（variable）；`TFoo.Bar` 实现以类为 `parent`；`//`、`{ … }`、`(* … *)` 与引号字符串屏蔽 | `uses` 跨行列表经大小写不敏感单元名映射（按文件名主干，Delphi 要求单元名与文件名一致）解析；`Unit in 'path.pas'` 先项目根再脚本目录，补 `.pas`/`.pp`/`.lpr`；外部单元不建边 |
+| Nix | 属性集与 `let` 内绑定：`name = value;`/`a.b.c = value;`（variable）、`{`/`rec {` 值（class，花括号配平）、`x:`/`{ … }:` lambda（function）；嵌套属性集成员带 `parent`；`#`、`/* */`、双引号与 `''…''` 缩进字符串（`'''`/`''${`/`''\` 转义）屏蔽 | `import`、`callPackage`、`builtins.readFile|readDir|path` 的相对路径按引用文件目录解析，尝试原路径、`.nix` 与目录 `default.nix`；`<nixpkgs>` 搜索路径与绝对路径不建边 |
 | Clojure | `ns`（class）、`defn`/`defn-`/`defmacro`/`defmacro-`/`defmulti`/`defmethod`（function）、`def`/`defonce`（variable）、`defrecord`/`deftype`/`defprotocol`/`definterface`（class）；`^:private` 与 `defn-`/`defmacro-` 非导出；`;` 注释、字符串屏蔽、`(comment …)` 整体跳过；形式范围按圆/方/花括号配平 | `(:require …)`/`(:use …)` 的 `[ns.name …]` 命名空间点分换算路径，在每个 `src/`/`test/` 根与项目根下尝试同类扩展优先的 `.clj`/`.cljc`/`.cljs`；外部命名空间不建边；`deps.edn` `:deps` 与 `project.clj` `:dependencies` 提供依赖计数/版本与技术映射 |
 | Solidity | `contract`/`library`/`interface`（含 `abstract contract`）容器；成员 `function`/`constructor`/`receive`/`fallback`/`modifier`/`event`/`error`/`struct`/`enum`/`type X is`（method/type/class，带 `parent`）；文件级函数与类型；`private`/`internal` 非导出；`//`、`/* */` 与字符串屏蔽；范围按花括号配平（`;` 声明单行） | 相对 `import`（`import "…"`、`import {A} from "…"`、`import * as X from "…"`）按引用文件目录解析并补 `.sol`；npm/`hardhat/…` 等外部路径不建边；`foundry.toml` 标记 Foundry 工具链 |
 | Erlang | `-module`、`-record`、`-type`/`-opaque`、`-define` 宏、顶层函数（多子句、`when` 守卫、跨行签名）；`-export([f/1])` 决定可见性（默认私有，同名不同 arity 合并），`-module` 自身公开；缩进体与匿名函数不登记；`%` 注释、字符串、引号原子与 `$x` 字符字面量屏蔽 | `-include("…")` 先按引用文件目录，再经每个 `src/`/`include/` 根与项目根（原路径与补 `.hrl`）；`-include_lib("app/…")` 额外尝试剥离首段应用名的路径；外部头文件不建边；`rebar.config` 的 `{deps, …}` 提供依赖计数与 rebar 技术映射 |
@@ -174,6 +175,10 @@ record/object` 形式（`type TFoo = ...` 同行写法不识别）；方法体�
 `begin`/`case`/`try`/`asm` 与 `end` 配平，`case` 之外的变体记录与
 匿名方法可能使范围偏长；`{$IFDEF}` 条件编译的两个分支都会解析；
 `{$I file.inc}` 与 `.inc` 文件不建边；`class of` 元类按单行 class 登记。
+Nix 为轻量行级解析：只识别行首绑定（`inherit`、`let … in` 同行写法与
+属性集内联单行绑定可能漏登记）；跨行 lambda 参数模式按 class 处理；
+`builtins.readFile` 之外的裸路径（如 `src = ./src;`）不建边；
+`flake.nix` 不作为技术栈清单，Nix 项目暂无 stack 识别。
 
 ## 升级检查清单
 

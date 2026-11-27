@@ -355,6 +355,7 @@ const LANGUAGE_LABELS = {
   fortran: 'Fortran',
   perl: 'Perl',
   pascal: 'Pascal',
+  nix: 'Nix',
   c: 'C',
   cpp: 'C++',
 }

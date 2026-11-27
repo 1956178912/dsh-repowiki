@@ -714,6 +714,27 @@ test('Pascal：uses 跨行列表与 in 路径', () => {
   ])
 })
 
+test('Nix：import/callPackage/readFile 相对路径与注释屏蔽', () => {
+  const code = [
+    '{ pkgs, ... }:',
+    '{',
+    '  lib = import ./lib;',
+    '  pkg = pkgs.callPackage ./pkgs/demo.nix { };',
+    '  version = builtins.readFile ./VERSION;',
+    '  # fake = import ./fake.nix;',
+    "  text = ''",
+    '    import ./heredoc.nix',
+    "  '';",
+    '}',
+  ].join('\n')
+  const imports = extractImports(code, 'nix')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line]), [
+    ['./lib', 3],
+    ['./pkgs/demo.nix', 4],
+    ['./VERSION', 5],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

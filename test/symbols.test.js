@@ -1962,6 +1962,46 @@ test('Pascal：unit/class/record/interface 与声明/实现方法范围', () => 
   assert.equal(byName.get('Destroy').endLine, 23, 'destructor 声明无体')
 })
 
+test('Nix：属性绑定、嵌套属性集 parent、lambda 与缩进字符串屏蔽', () => {
+  const code = [
+    '{ pkgs, lib, ... }:',
+    'let',
+    '  version = "1.0";',
+    '  mkPkg = name: { inherit name; };',
+    'in',
+    '{',
+    '  packages.default = mkPkg "demo";',
+    '  services.web = {',
+    '    enable = true;',
+    '    port = 8080;',
+    '  };',
+    '  helper = x: x + 1;',
+    '  # fake = 1;',
+    '  /* block = 2; */',
+    "  script = ''",
+    '    echo "} end"',
+    "  '';",
+    '}',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'nix')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('version').kind, 'variable')
+  assert.equal(byName.get('version').line, 3)
+  assert.equal(byName.get('mkPkg').kind, 'function')
+  assert.equal(byName.get('packages.default').kind, 'variable')
+  assert.equal(byName.get('packages.default').line, 7)
+  assert.equal(byName.get('services.web').kind, 'class')
+  assert.equal(byName.get('services.web').endLine, 11)
+  assert.equal(byName.get('enable').kind, 'variable')
+  assert.equal(byName.get('enable').parent, 'services.web')
+  assert.equal(byName.get('port').parent, 'services.web')
+  assert.equal(byName.get('helper').kind, 'function')
+  assert.equal(byName.get('script').kind, 'variable')
+  assert.ok(!byName.has('fake'), '行注释不登记')
+  assert.ok(!byName.has('block'), '块注释不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

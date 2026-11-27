@@ -5,6 +5,31 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.222.0] - 2026-11-28
+
+### Added
+
+- **Nix indexing (35th language)**: attribute bindings in attribute sets
+  and `let` blocks become symbols — `name = value;` and dotted paths
+  (`packages.default = …`) are variables, `{`/`rec {` values are classes
+  with brace-balanced ranges, and `x:`/`{ … }:` lambdas are functions;
+  bindings inside a named attribute set carry its name as `parent`.
+- **Nix masking**: `#` line comments, `/* … */` blocks, double-quoted
+  strings (backslash escaping) and `''…''` indented strings (with `'''`,
+  `''${` and `''\` escapes) are masked, so braces inside strings never
+  break attribute-set ranges.
+- **Nix dependency edges**: `import ./x.nix`, `callPackage ./pkg.nix` and
+  `builtins.readFile|readDir|path ./x` resolve relative to the importing
+  file, trying the literal path, a `.nix` suffix and a directory's
+  `default.nix`; `<nixpkgs>` lookups and absolute paths stay edge-free.
+
+### Tests
+
+- 650 cases pass (LANG=en and LANG=zh); new coverage for attribute
+  bindings, nested sets, dotted keys, lambdas, indented-string masking,
+  and `import`/`callPackage`/`readFile` resolution including directory
+  `default.nix` fallback.
+
 ## [0.221.0] - 2026-11-28
 
 ### Added

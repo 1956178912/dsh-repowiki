@@ -794,6 +794,28 @@ function resolvePerlSpecifier(fromRel, specifier, roots, indexed) {
 }
 
 /**
+ * 解析 Nix 文件引用：相对路径按引用文件目录归一，尝试原路径、补 `.nix`
+ * 与目录下的 `default.nix`；绝对路径、`<nixpkgs>` 搜索路径与越出项目的
+ * 路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - 路径字面量。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveNixPath(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim()
+  if (!raw.startsWith('.')) return null
+  const base = path.posix.dirname(fromRel)
+  const target = path.posix.normalize(path.posix.join(base, raw))
+  if (target === '..' || target.startsWith('../') || target === '.') return null
+  for (const candidate of [target, `${target}.nix`, `${target}/default.nix`]) {
+    if (indexed.has(candidate)) return candidate
+  }
+  return null
+}
+
+/**
  * 建立 Object Pascal 单元名（小写，语言大小写不敏感）→ 文件索引：Delphi
  * 要求 unit 名与文件名一致，因此按文件名主干登记（`.pas`/`.pp`/`.lpr`），
  * 同名取字典序最小文件，保证确定性。
@@ -2451,6 +2473,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
   if (lang === 'perl') return resolvePerlSpecifier(fromRel, imp.specifier, ctx.perlRoots, ctx.indexed)
   if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
+  if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)

@@ -181,6 +181,7 @@ export function fenceLang(lang) {
     case 'fortran': return 'fortran'
     case 'perl': return 'perl'
     case 'pascal': return 'pascal'
+    case 'nix': return 'nix'
     case 'c': return 'c'
     case 'cpp': return 'cpp'
     default: return ''

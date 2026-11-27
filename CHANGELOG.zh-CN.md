@@ -3,6 +3,22 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.222.0] - 2026-11-28
+
+- **Nix 支持（第 35 种语言）**：属性集与 `let` 内的属性绑定登记为符号——
+  `name = value;` 与点分路径（`packages.default = …`）为 variable，
+  `{`/`rec {` 值为 class（花括号配平范围），`x:`/`{ … }:` lambda 为
+  function；具名属性集内的绑定带 `parent`。
+- **Nix 屏蔽**：`#` 行注释、`/* … */` 块、双引号字符串（反斜杠转义）与
+  `''…''` 缩进字符串（`'''`/`''${`/`''\` 转义）屏蔽，字符串内花括号不会
+  破坏属性集范围。
+- **Nix 依赖边**：`import ./x.nix`、`callPackage ./pkg.nix` 与
+  `builtins.readFile|readDir|path ./x` 相对引用文件解析，尝试原路径、
+  `.nix` 后缀与目录 `default.nix`；`<nixpkgs>` 与绝对路径不建边。
+- **测试**：650 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖属性绑定、
+  嵌套属性集、点分键、lambda、缩进字符串屏蔽与三种引用 + 目录
+  `default.nix` 解析。
+
 ## [0.221.0] - 2026-11-28
 
 - **Object Pascal 支持（第 34 种语言）**：`.pas`/`.pp`/`.dpr`/`.dpk`/
