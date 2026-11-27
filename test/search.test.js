@@ -4,7 +4,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { tokenize, rankDocuments } from '../src/search.js'
+import { tokenize, tokenizeQuery, rankDocuments } from '../src/search.js'
 
 test('tokenize：拉丁词、CJK 单字与二元组', () => {
   const tokens = tokenize('IndexBuilder 索引构建')
@@ -14,6 +14,23 @@ test('tokenize：拉丁词、CJK 单字与二元组', () => {
   assert.ok(tokens.includes('引构'))
   assert.ok(tokens.includes('构建'))
   assert.deepEqual(tokenize(''), [])
+})
+
+test('tokenizeQuery：多字 CJK 只保留双字组，单字查询仍可用', () => {
+  assert.deepEqual(tokenizeQuery('无匹配'), ['无匹', '匹配'])
+  assert.deepEqual(tokenizeQuery('索引'), ['索引'])
+  assert.deepEqual(tokenizeQuery('图'), ['图'])
+  assert.deepEqual(tokenizeQuery('IndexBuilder 索引'), ['indexbuilder', '索引'])
+  assert.deepEqual(tokenizeQuery(''), [])
+})
+
+test('rankDocuments：多字 CJK 查询不再被单字误召回', () => {
+  const docs = [
+    { id: 'noise', type: 'card', path: 'n.ts', title: '噪声', body: '这里只有一个无序的词' },
+    { id: 'hit', type: 'card', path: 'h.ts', title: '命中', body: '这里讨论匹配规则' },
+  ]
+  const { results } = rankDocuments(docs, '无匹配')
+  assert.deepEqual(results.map(r => r.id), ['hit'], '仅含“无”的文档不应命中')
 })
 
 test('rankDocuments：标题命中优先于正文命中', () => {

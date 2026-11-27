@@ -44,6 +44,33 @@ export function tokenize(text) {
 }
 
 /**
+ * 查询侧分词：CJK 连续段长度 ≥ 2 时只产出双字组（bigram），不再产出
+ * 单字。文档侧保留单字以支持“图”这类单字查询；查询侧保留单字会让
+ * “无匹配”命中任何含“无”的文档，造成明显误召回。
+ * @param {string} text - 查询文本。
+ * @returns {string[]} 查询 token（已去重由调用方负责）。
+ */
+export function tokenizeQuery(text) {
+  const out = []
+  const source = String(text ?? '').toLowerCase()
+  const re = /[a-z0-9_]+|[\u3400-\u9fff]+/g
+  let match
+  while ((match = re.exec(source)) !== null) {
+    const piece = match[0]
+    if (/^[a-z0-9_]+$/.test(piece)) {
+      out.push(piece)
+      continue
+    }
+    if (piece.length === 1) {
+      out.push(piece)
+      continue
+    }
+    for (let i = 0; i + 1 < piece.length; i++) out.push(piece.slice(i, i + 2))
+  }
+  return out
+}
+
+/**
  * 计算单文档的加权词频与长度。
  * @param {SearchDoc} doc - { title, summary?, tags?, body? }。
  * @returns {{tf:Map<string, number>, length:number}} 词频与加权长度。
@@ -98,7 +125,7 @@ function makeSnippet(doc, tokens) {
 export function rankDocuments(docs, query, opts = {}) {
   const limit = Math.max(1, Math.floor(opts.limit ?? 50))
   const offset = Number.isInteger(opts.offset) && opts.offset > 0 ? opts.offset : 0
-  const queryTokens = [...new Set(tokenize(query))]
+  const queryTokens = [...new Set(tokenizeQuery(query))]
   if (queryTokens.length === 0 || docs.length === 0) {
     return { results: [], total: 0, truncated: false }
   }

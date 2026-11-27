@@ -961,6 +961,12 @@ window.__ModuleLoader__.load({
      * @param {string} text - 文本。
      * @returns {string[]} token。
      */
+    /**
+     * 查询侧分词（与 src/search.js tokenizeQuery 同构）：CJK 连续段长度
+     * ≥2 时只取双字组，避免单字误召回；单字段仍保留单字。
+     * @param {string} text - 查询文本。
+     * @returns {string[]} token 列表。
+     */
     function tokenizeClient(text) {
       const out = []
       const re = /[a-z0-9_]+|[\u3400-\u9fff]+/g
@@ -971,10 +977,11 @@ window.__ModuleLoader__.load({
           out.push(piece)
           continue
         }
-        for (let i = 0; i < piece.length; i++) {
-          out.push(piece[i])
-          if (i + 1 < piece.length) out.push(piece.slice(i, i + 2))
+        if (piece.length === 1) {
+          out.push(piece)
+          continue
         }
+        for (let i = 0; i + 1 < piece.length; i++) out.push(piece.slice(i, i + 2))
       }
       return out
     }

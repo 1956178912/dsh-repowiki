@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.175.0] - 2026-11-28
+
+### Fixed
+
+- **Chinese queries no longer match single characters**: both the BM25
+  search (`tokenizeQuery`) and the panel search now keep only two-character
+  bigrams for CJK runs of length two or more, while documents still index
+  unigrams so one-character queries keep working. Previously a query like
+  "无匹配" matched every card containing "无", burying the real result;
+  single-character queries ("图") behave as before. Latin tokens are
+  unchanged.
+
+### Tests
+
+- 552 cases pass (LANG=en and LANG=zh); new unit coverage pins the query
+  tokenizer (bigrams only for multi-character runs, unigrams preserved for
+  single-character runs, Latin untouched) and a BM25 fixture proves a
+  document containing only "无" is no longer returned for "无匹配".
+
 ## [0.174.0] - 2026-11-28
 
 ### Added
