@@ -5,6 +5,21 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.135.0] - 2026-11-27
+
+### Changed
+
+- **Bounded concurrent drift reads**: `checkCitationDrift` now prefetches
+  unique cited files with bounded concurrency (default 8, hard cap 16,
+  override via `concurrency`) instead of reading them one by one, then
+  compares in manifest order. Results, caps and `unchecked` accounting stay
+  identical; large wikis see lower status latency without changing output.
+
+### Tests
+
+- 489 cases pass (LANG=en and LANG=zh); new tests assert the concurrency cap
+  (3 active reads, 1 with `concurrency: 1`) while all digests still verify.
+
 ## [0.134.0] - 2026-11-27
 
 ### Added

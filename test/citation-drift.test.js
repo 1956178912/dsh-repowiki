@@ -124,6 +124,49 @@ test('citation-drift：超出比较上限的条目计入未检查', async () => 
   assert.equal(result.truncated, true)
 })
 
+test('citation-drift：有界并发读取且结果与顺序一致', async () => {
+  const pages = Array.from({ length: 5 }, (_, i) => ({
+    slug: `p${i}`,
+    title: `P${i}`,
+    citationDigests: { [`f${i}.ts#L1`]: citationDigest('x\n', 1, 1) },
+  }))
+  let active = 0
+  let maxActive = 0
+  let reads = 0
+  const result = await checkCitationDrift({ pages }, async () => {
+    reads++
+    active++
+    maxActive = Math.max(maxActive, active)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    active--
+    return 'x\n'
+  }, { concurrency: 3 })
+  assert.equal(result.checked, 5)
+  assert.equal(result.total, 0)
+  assert.equal(result.unchecked, 0)
+  assert.equal(reads, 5)
+  assert.equal(maxActive, 3, '并发上限被遵守')
+})
+
+test('citation-drift：concurrency=1 退化为串行', async () => {
+  const pages = Array.from({ length: 3 }, (_, i) => ({
+    slug: `p${i}`,
+    title: `P${i}`,
+    citationDigests: { [`f${i}.ts#L1`]: citationDigest('x\n', 1, 1) },
+  }))
+  let active = 0
+  let maxActive = 0
+  const result = await checkCitationDrift({ pages }, async () => {
+    active++
+    maxActive = Math.max(maxActive, active)
+    await new Promise(resolve => setTimeout(resolve, 2))
+    active--
+    return 'x\n'
+  }, { concurrency: 1 })
+  assert.equal(result.checked, 3)
+  assert.equal(maxActive, 1)
+})
+
 test('citation-drift：读取上限触发 unchecked', async () => {
   const manifest = {
     pages: [{
