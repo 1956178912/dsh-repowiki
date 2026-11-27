@@ -152,3 +152,37 @@ export function reexportTargets(barrel, maps) {
 export function barrelFiles(maps) {
   return [...new Set([...maps.stars.keys(), ...maps.named.keys()])].sort()
 }
+
+/**
+ * 找出经由 barrel 再导出 `targetPath#name` 的导入边。默认跳过再导出边
+ * 本身（它只说明符号继续下传，不构成使用证据）；影响面分析可开启
+ * `includeReexports` 把中间 barrel 也视为直接受影响文件。
+ * @param {ReexportEdge[]} edges - 索引边。
+ * @param {Array<{path?:string, symbols?:Array<{name?:string, exported?:boolean}>}>} files - 索引文件。
+ * @param {string} targetPath - 符号定义文件。
+ * @param {string} name - 符号名。
+ * @param {{includeReexports?:boolean}} [options] - 是否包含再导出边。
+ * @returns {Array<{path:string, line?:number}>} 导入方位置（按路径、行号排序）。
+ */
+export function reexportImportSites(edges, files, targetPath, name, options = {}) {
+  const maps = buildReexportMaps(edges)
+  const definitions = exportedNamesByFile(files)
+  /** @type {Array<{path:string, line?:number}>} */
+  const sites = []
+  for (const barrel of barrelFiles(maps)) {
+    if (barrel === targetPath) continue
+    const origins = resolveReexportOrigins(barrel, name, maps, definitions)
+    if (origins.length !== 1 || origins[0] !== targetPath) continue
+    for (const edge of edges) {
+      if (!edge || edge.to !== barrel || edge.from === targetPath) continue
+      if (!options.includeReexports && edge.kind === 'export-from') continue
+      const names = Array.isArray(edge.symbols) ? edge.symbols : []
+      if (!names.includes(name) && !names.includes('*')) continue
+      sites.push({
+        path: edge.from,
+        ...(Number.isInteger(edge.line) && edge.line > 0 ? { line: edge.line } : {}),
+      })
+    }
+  }
+  return sites.sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0))
+}

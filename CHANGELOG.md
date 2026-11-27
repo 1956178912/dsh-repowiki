@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.251.0] - 2026-11-28
+
+### Added
+
+- **Barrel-aware symbol impact**: `repowiki-impact` symbol scope now treats
+  importers that reach the changed symbol through an `export * from` or
+  same-name re-export barrel (and the intermediate re-exporting barrels) as
+  direct impact instead of the next transitive hop. Symbol references and
+  lexical usage evidence keep the barrel import line.
+- Shared `reexportImportSites` in `src/reexports.js` now powers the usages,
+  references and impact paths; `computeSymbolImpact` accepts the index file
+  entries as an optional fifth argument.
+
+### Tests
+
+- 784 cases pass (LANG=en); unit coverage for multi-hop barrel impact plus a
+  real-index `repowiki-impact` integration (direct counts, references,
+  usages).
+
 ## [0.250.0] - 2026-11-28
 
 ### Added

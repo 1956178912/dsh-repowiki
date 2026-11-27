@@ -3,6 +3,17 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.251.0] - 2026-11-28
+
+- **barrel 感知的符号影响面**：`repowiki-impact` 符号作用域把经
+  `export * from`/同名再导出 barrel 到达变更符号的导入方（以及中间再导出
+  barrel）计为直接影响，而不是落到下一跳传递层；符号引用与词法使用点
+  保留 barrel 导入行号。
+- `src/reexports.js` 新增共享的 `reexportImportSites`，由 usages/
+  references/impact 共用；`computeSymbolImpact` 可选接收索引文件条目。
+- **测试**：784 例通过（LANG=en）；新增多级 barrel 影响面单测与真实索引
+  `repowiki-impact` 集成（直接计数、引用、使用点）。
+
 ## [0.250.0] - 2026-11-28
 
 - **barrel 再导出链**：`repowiki-cards references`/`usages` 现在沿

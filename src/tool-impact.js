@@ -571,7 +571,7 @@ export function repowikiImpactTool(ctx) {
         ? resolveSymbolChanges(index, match.matched, symbolInputs, root)
         : { resolved: [], unmatched: [] }
       const symbolImpact = scope === 'symbol'
-        ? computeSymbolImpact(index.edges ?? [], symbolChanges.resolved, depth, limit)
+        ? computeSymbolImpact(index.edges ?? [], symbolChanges.resolved, depth, limit, index.files ?? [])
         : null
       const impact = symbolImpact ?? fileImpact
 

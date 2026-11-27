@@ -136,6 +136,56 @@ test('impact：命名空间导入按通配符纳入符号级影响', () => {
   assert.deepEqual(result.references, [{ path: 'ns.ts', line: 1, symbols: ['a1'] }])
 })
 
+test('impact：barrel 再导出链把最终导入方与中间 barrel 计入直接影响', () => {
+  const edges = [
+    { from: 'index.ts', to: 'core.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'outer.ts', to: 'index.ts', kind: 'export-from', line: 1, symbols: ['*'] },
+    { from: 'app.ts', to: 'outer.ts', kind: 'import', line: 2, symbols: ['parse'] },
+  ]
+  const files = [
+    { path: 'index.ts', symbols: [] },
+    { path: 'outer.ts', symbols: [] },
+    { path: 'core.ts', symbols: [{ name: 'parse', exported: true }] },
+  ]
+  const result = computeSymbolImpact(
+    edges, [{ path: 'core.ts', name: 'parse' }], 1, 10, files,
+  )
+  assert.equal(result.direct, 3, 'barrel 与最终导入方都是直接影响')
+  assert.deepEqual(result.impacted.map(item => [item.path, item.depth, item.symbols]), [
+    ['app.ts', 1, ['parse']],
+    ['index.ts', 1, ['parse']],
+    ['outer.ts', 1, ['parse']],
+  ])
+  assert.deepEqual(result.references, [
+    { path: 'app.ts', line: 2, symbols: ['parse'] },
+    { path: 'index.ts', line: 1, symbols: ['parse'] },
+    { path: 'outer.ts', line: 1, symbols: ['parse'] },
+  ])
+})
+
+test('repowiki-impact：符号模式穿过 barrel 再导出链', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-impact-barrel-'))
+  nodefs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+  nodefs.writeFileSync(path.join(dir, 'src/core.ts'), 'export function parse() { return 1 }\n')
+  nodefs.writeFileSync(path.join(dir, 'src/index.ts'), "export * from './core'\n")
+  nodefs.writeFileSync(path.join(dir, 'src/app.ts'),
+    "import { parse } from './index';\nexport const value = parse();\n")
+  const ctx = makeCtx(dir)
+  await repowikiIndexTool(ctx).execute({}, fakeExec)
+  const tool = repowikiImpactTool(ctx)
+
+  const out = await tool.execute({ paths: ['src/core.ts'], symbols: ['parse'], depth: 1 }, fakeExec)
+  assert.equal(out.scope, 'symbol')
+  assert.equal(out.impactedDirect, 2, 'barrel 与最终导入方都是直接影响')
+  assert.equal(out.impactedTotal, 2)
+  assert.deepEqual(out.impacted.map(item => item.path), ['src/app.ts', 'src/index.ts'])
+  assert.deepEqual(out.symbolReferences, [
+    { path: 'src/app.ts', line: 1, symbols: ['parse'] },
+    { path: 'src/index.ts', line: 1, symbols: ['parse'] },
+  ])
+  assert.deepEqual(out.usages, [{ path: 'src/app.ts', symbol: 'parse', line: 2, text: 'export const value = parse();' }])
+})
+
 test('impact：循环组按变更成员过滤并给出代表路径', () => {
   const edges = [
     { from: 'a.ts', to: 'b.ts' },

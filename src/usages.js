@@ -10,9 +10,7 @@
  * 明显噪声而不假装精确。
  */
 
-import {
-  barrelFiles, buildReexportMaps, exportedNamesByFile, resolveReexportOrigins,
-} from './reexports.js'
+import { reexportImportSites } from './reexports.js'
 
 /** 单次影响面分析返回的使用点条目上限。 */
 export const MAX_USAGE_ENTRIES = 100
@@ -200,20 +198,8 @@ export function usageImporters(edges = [], symbol, files = []) {
     addImporter(edge.from, edge.line)
   }
   if (files.length > 0) {
-    const maps = buildReexportMaps(edges)
-    const definitions = exportedNamesByFile(files)
-    for (const barrel of barrelFiles(maps)) {
-      if (barrel === symbol.path) continue
-      const origins = resolveReexportOrigins(barrel, symbol.name, maps, definitions)
-      if (origins.length !== 1 || origins[0] !== symbol.path) continue
-      for (const edge of edges) {
-        if (!edge || edge.to !== barrel || edge.from === symbol.path) continue
-        // 再导出边只说明符号继续下传，不构成使用证据
-        if (edge.kind === 'export-from') continue
-        const names = Array.isArray(edge.symbols) ? edge.symbols : []
-        if (!names.includes(symbol.name) && !names.includes('*')) continue
-        addImporter(edge.from, edge.line)
-      }
+    for (const site of reexportImportSites(edges, files, symbol.path, symbol.name)) {
+      addImporter(site.path, site.line)
     }
   }
   return [...byPath.entries()]

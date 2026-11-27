@@ -14,6 +14,7 @@
 import { findImportCycles } from './cycles.js'
 import { buildWikiReferenceIndex, wikiReferencesFor } from './wiki-references.js'
 import { collectAffectedTests } from './test-files.js'
+import { reexportImportSites } from './reexports.js'
 
 /** 单次返回的传递依赖方上限。 */
 export const MAX_IMPACT_ENTRIES = 100
@@ -297,17 +298,20 @@ export function resolveSymbolChanges(index, changed = [], inputs = [], root = ''
  * 符号级影响面：直接依赖方必须导入至少一个变更符号；传递层再从这些
  * 直接依赖方沿反向文件图展开（保守上界，因为无法证明下游使用了哪个
  * 中间符号）。返回的 references 是具名 import 证据，不是运行时调用点。
+ * 提供索引文件条目时，经由 `export * from`/同名具名再导出 barrel 导入
+ * 该符号的文件也算直接影响（而不是只能落到下一跳）。
  * @param {IndexEdge[]} [edges] - 依赖边。
  * @param {Array<{path:string, name:string}>} [resolved] - 已解析的符号定义。
  * @param {number} [depth] - 最大跳数（1–3）。
  * @param {number} [limit] - 明细上限。
+ * @param {IndexFile[]} [files] - 索引文件条目（用于解析再导出链）。
  * @returns {{impacted:Array<{path:string, depth:number, symbols:string[]}>,
  *   references:Array<{path:string, line:number, symbols:string[]}>,
  *   total:number, direct:number, truncated:boolean,
  *   tests:Array<{path:string, depth:number}>, testsTruncated:boolean}}
  *   精确直接影响与保守传递影响、受影响测试。
  */
-export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit = MAX_IMPACT_DOCS) {
+export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit = MAX_IMPACT_DOCS, files = []) {
   const maxDepth = Number.isInteger(depth) ? Math.min(MAX_IMPACT_DEPTH, Math.max(1, depth)) : 2
   const maxResults = Number.isInteger(limit) ? Math.min(MAX_IMPACT_ENTRIES, Math.max(1, limit)) : MAX_IMPACT_DOCS
   /** @type {Map<string, Set<string>>} */
@@ -354,6 +358,29 @@ export function computeSymbolImpact(edges = [], resolved = [], depth = 2, limit 
       referenceSites.set(key, site)
     }
     for (const name of imported) site.symbols.add(name)
+  }
+  // 再导出链：经 barrel 导入的文件与中间 barrel 也算直接受影响
+  if (files.length > 0) {
+    for (const [targetPath, names] of selected) {
+      for (const name of names) {
+        for (const site of reexportImportSites(edges, files, targetPath, name, { includeReexports: true })) {
+          let direct = directSymbolsByPath.get(site.path)
+          if (!direct) {
+            direct = new Set()
+            directSymbolsByPath.set(site.path, direct)
+          }
+          direct.add(name)
+          const line = site.line ?? 0
+          const key = `${site.path}\u0000${line}`
+          let refSite = referenceSites.get(key)
+          if (!refSite) {
+            refSite = { path: site.path, line, symbols: new Set() }
+            referenceSites.set(key, refSite)
+          }
+          refSite.symbols.add(name)
+        }
+      }
+    }
   }
   const references = [...referenceSites.values()]
     .map(site => ({ path: site.path, line: site.line, symbols: [...site.symbols].sort() }))

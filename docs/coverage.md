@@ -1,7 +1,7 @@
 # 方案覆盖率报告：修订版方案 ↔ 实现（v0.182.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.250.0）；测试 782/782（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.1%、分支 87.75%、函数 95.62%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.251.0）；测试 784/784（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.1%、分支 87.61%、函数 95.63%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -277,6 +277,7 @@
 | MATLAB 支持 | 第 43 种语言：`function`（多输出 `[a,b] = f`、单输出/无输出；嵌套函数带 `parent` 且非导出）、`classdef`（class）、`properties` 块成员（variable，`(Access=private)` 块非导出）与 `methods` 块函数（method，`parent` 为类，私有块非导出）；`%` 行注释、`%{`…`%}` 块注释、单/双引号字符串屏蔽，`x'` 转置不误判；范围按 `end` 在 `if`/`for`/`while`/`switch`/`try`/`spmd`/`arguments` 间配平，紧凑 `if x, y; end` 与无 `end` 风格函数（下一个同缩进 `function` 前收尾）均正确；与 Objective-C 共用 `.m`，按内容改判 | v0.249.0 |
 | 默认导入解析 | JS/TS `import Foo from './a'` 在 `deps.js` 记录 `default:Foo` 临时标记（纯默认、与具名/命名空间混合、`type` 前缀均支持）；索引器在边排序后调用 `resolveDefaultImportSymbols`，仅当目标文件存在同名导出符号（`exported !== false`）时替换为真实名字，否则丢弃标记并保留文件级边；不猜别名、匿名默认导出或唯一导出。引用/使用点/影响面自动继承解析结果 | v0.246.0 |
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
+| 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
 | 通配引用证据 | `import * as ns` 与 `export * from` 在 `deps.js` 记为 `*`（不再当作无符号副作用导入）：`referencesFor` 把 `*` 合并到目标全部符号（与具名引用去重排序），`usageImporters` 接受 `*` 作为潜在导入方（`usages` 仍经词法扫描确认实际使用），`computeSymbolImpact` 把 `*` 展开为所选符号的直接影响；默认导入保持文件级边、不猜默认导出名 | v0.243.0 |
 | 同文件使用点 | `repowiki-cards usages=true` 追加扫描定义文件：`findSymbolUsages` 新增 `skipRanges`（闭区间、非法区间忽略），定义范围不参与匹配，因此递归/签名文本不会被误算；定义文件优先读取且不占 20 个导入方上限，`filesScanned` 同时计入定义文件；DOM/工具测试覆盖定义行跳过、局部调用命中与上限记账 | v0.242.0 |
