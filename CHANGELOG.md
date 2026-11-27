@@ -5,6 +5,25 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.208.0] - 2026-11-28
+
+### Added
+
+- **Haskell export-list visibility**: `module M (a, B(..), (<+>)) where`
+  export lists now drive the `exported` flag. Top-level symbols missing
+  from the list are non-exported (retrieval ranks exported symbols first
+  and the unused-export audit skips them), `module X` re-exports are
+  ignored, operator exports and multi-line lists are supported, and class
+  methods inherit their class's visibility. Modules without an export list
+  keep everything public. `INDEX_PARSER_VERSION` moves to 9 so existing
+  indexes re-parse Haskell files.
+
+### Tests
+
+- 614 cases pass (LANG=en and LANG=zh); fixtures pin listed/unlisted
+  top-level symbols, multi-line lists with operator and module re-exports,
+  and the no-list public default.
+
 ## [0.207.0] - 2026-11-28
 
 ### Added

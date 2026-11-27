@@ -3223,16 +3223,78 @@ function haskellBlockEnd(masked, startIdx, indent) {
 }
 
 /**
+ * 解析 Haskell 模块导出列表（`module M (a, B(..), (<+>)) where`），
+ * 返回第一层导出的值/类型名；`module X` 重导出忽略，无导出列表返回 null
+ * （表示全部公开）。
+ * @param {string} masked - 模块声明行起的掩码文本（`where` 前）。
+ * @returns {Set<string>|null} 导出名集合；无列表返回 null。
+ */
+function haskellExportNames(masked) {
+  const open = masked.indexOf('(')
+  const close = masked.lastIndexOf(')')
+  if (open < 0 || close <= open) return null
+  const names = new Set()
+  /**
+   * 登记一个导出项。
+   * @param {string} part - 逗号分隔的单项。
+   * @returns {void}
+   */
+  const add = (part) => {
+    const text = part.trim()
+    if (!text || text.startsWith('module ')) return
+    const typeMatch = /^([A-Z][\w']*)\s*(?:\(|$)/.exec(text)
+    if (typeMatch) { names.add(typeMatch[1]); return }
+    const opMatch = /^\((.*)\)/.exec(text)
+    if (opMatch) { names.add(opMatch[1].trim()); return }
+    const valMatch = /^([a-z_][\w']*)/.exec(text)
+    if (valMatch) names.add(valMatch[1])
+  }
+  let depth = 0
+  let current = ''
+  for (const ch of masked.slice(open + 1, close)) {
+    if (ch === '(') { depth++; current += ch; continue }
+    if (ch === ')') { depth--; current += ch; continue }
+    if (ch === ',' && depth === 0) { add(current); current = ''; continue }
+    current += ch
+  }
+  add(current)
+  return names
+}
+
+/**
+ * 读取文件的模块导出列表（模块声明可跨行，最多向后拼接 50 行）。
+ * @param {string[]} masked - 掩码代码行。
+ * @returns {{name:string|null, exported:Set<string>|null}} 模块名与导出集合。
+ */
+function haskellModuleHeader(masked) {
+  for (let i = 0; i < masked.length; i++) {
+    const line = masked[i].trim()
+    if (!line.startsWith('module ')) continue
+    const name = /^module\s+([A-Z][\w.']*)/.exec(line)?.[1] ?? null
+    let block = ''
+    const limit = Math.min(masked.length, i + 50)
+    for (let j = i; j < limit; j++) {
+      block += ` ${masked[j].trim()}`
+      if (/\bwhere\b/.test(masked[j])) break
+    }
+    return { name, exported: name ? haskellExportNames(block) : null }
+  }
+  return { name: null, exported: null }
+}
+
+/**
  * 提取 Haskell 符号：`module`、`data`/`newtype`、`type`（含 `family`）、
  * `class` 与其类方法签名、`pattern`、顶层值签名（`name ::`，含名称与
  * `::` 分行的多行签名）与定义（含中缀操作符定义）。只识别缩进 0 的
  * 顶层声明；`where`/`let` 缩进体与实例方法不登记。
  * 同一名称的签名与定义合并为一个符号（行号取签名，范围覆盖定义）。
+ * 模块声明带导出列表时，未列出的顶层符号标记为非导出；类方法跟随其类。
  * @param {string[]} lines - 代码行。
  * @returns {SymbolInfo[]} 符号列表。
  */
 function extractHaskell(lines) {
   const masked = haskellScan(lines)
+  const header = haskellModuleHeader(masked)
   /** @type {Array<{name:string, kind:string, index:number, moduleDecl?:boolean, parent?:string}>} */
   const decls = []
   for (let i = 0; i < masked.length; i++) {
@@ -3342,12 +3404,19 @@ function extractHaskell(lines) {
     if (existing) {
       existing.endLine = Math.max(existing.endLine, endLine)
     } else {
+      const exported = decl.moduleDecl
+        ? true
+        : header.exported === null
+          ? !decl.name.startsWith('_')
+          : decl.parent
+            ? header.exported.has(decl.parent)
+            : header.exported.has(decl.name)
       byKey.set(key, {
         name: decl.name,
         kind: decl.kind,
         line: decl.index + 1,
         endLine,
-        exported: !decl.name.startsWith('_'),
+        exported,
         ...(decl.parent ? { parent: decl.parent } : {}),
       })
     }

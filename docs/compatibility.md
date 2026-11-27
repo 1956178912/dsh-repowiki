@@ -49,7 +49,7 @@
 | R | `name <- function(...)` / `name = function(...)`（含 `<<-`，跨行签名、分行 `{`、单行表达式体）、`setClass`/`setRefClass`/`R6Class` 类及类内方法（method + parent）、`setGeneric` 泛型与 `setMethod` 方法（签名类为 parent）；`.` 前缀非导出；普通赋值与函数体内嵌套函数不登记 | `source("path")` / `sys.source("path")` 先按文件目录、再按项目根解析，尝试 `.R`/`.r`；`library()` 与动态参数不建边；`DESCRIPTION` 提供包名/版本/依赖（Depends/Imports/Suggests/LinkingTo）；根 `NAMESPACE` 的 `export`/`exportClasses`/`exportMethods`/`S3method` 决定 `exported`（`exportPattern` 回退约定） |
 | Julia | `module`/`baremodule`、`struct`/`mutable struct`（含 `@kwdef`/模块限定宏前缀）、`abstract type`/`primitive type`、`@enum`（类型 + 非导出枚举值）、`function name(...)`（`Type.method` → method + parent）、短函数 `name(args) = expr`、`macro`、顶层 `const`；函数/结构体/宏体内部不登记；含 `module` 的文件按 `export` 标记可见性 | `include("path")` 相对引用文件解析（缺省补 `.jl`）；动态参数（`$` 插值/`joinpath`）不建边；`Project.toml` 提供包名/版本与 `[deps]`/`[extras]` 依赖计数 |
 | OCaml | 顶层 `let`/`let rec`（含 `let%ppx`、属性；运算符定义除外）与 `and` 续接的互递归函数、`type` 容器/别名（参数化名称取末尾标识符）与 `and` 续接类型、`module`/`module type`、`class`/`class type`、`exception`、`val`/`external`；缩进体内部与嵌套定义不登记；`(* … *)` 可嵌套注释、字符串与 `{|…|}`/`{id|…|id}` 原始字符串屏蔽；`struct`/`sig`/`object` 范围按配对 `end` 结束 | `open`/`include`/`open!`/`module M = Foo` 经"文件名→模块名"映射解析（首字母大写，`.ml` 优先于 `.mli`，`Foo.Bar` 归到 `foo.ml`）；外部库不建边；`dune-project` 提供项目名/版本，`*.opam` 提供版本与 `depends` 依赖 |
-| Haskell | `module` 声明（范围至文件尾）、`data`/`newtype`（含 `data family`）、`type`/`type family`、`class` 与类方法签名（含多行签名，`parent` 归属类）、`pattern` 同义词、顶层值签名（`name ::`，含多行签名）与定义（含中缀操作符定义）；签名与同名定义合并为一个符号；缩进 `where`/`let` 体、`instance` 方法与构造器不登记；`--` 注释、可嵌套 `{- … -}`（含 pragma）、字符串与字符字面量屏蔽 | `import [qualified] [safe] ["pkg"] Module` 按 GHC 模块路径换算（`Foo.Bar` → `Foo/Bar.hs`）在每个 `src`/`app`/`lib`/`test` 源根、cabal `hs-source-dirs` 声明目录与项目根下尝试 `.hs`/`.lhs`；外部包不建边；`*.cabal` 提供包名/版本与跨行 `build-depends` 依赖 |
+| Haskell | `module` 声明（范围至文件尾）与导出列表可见性（未列出的顶层符号非导出，类方法跟随类）、`data`/`newtype`（含 `data family`）、`type`/`type family`、`class` 与类方法签名（含多行签名，`parent` 归属类）、`pattern` 同义词、顶层值签名（`name ::`，含多行签名）与定义（含中缀操作符定义）；签名与同名定义合并为一个符号；缩进 `where`/`let` 体、`instance` 方法与构造器不登记；`--` 注释、可嵌套 `{- … -}`（含 pragma）、字符串与字符字面量屏蔽 | `import [qualified] [safe] ["pkg"] Module` 按 GHC 模块路径换算（`Foo.Bar` → `Foo/Bar.hs`）在每个 `src`/`app`/`lib`/`test` 源根、cabal `hs-source-dirs` 声明目录与项目根下尝试 `.hs`/`.lhs`；外部包不建边；`*.cabal` 提供包名/版本与跨行 `build-depends` 依赖 |
 | Nim | `proc`/`func`/`method`/`iterator`/`template`/`macro`/`converter`、`type Name = …` 容器、`type` 单独成段时的缩进成员（`Name* = object`/`enum`/`ref object`/`tuple`/别名，逐成员独立范围与 `*` 导出）、顶层 `const`/`let`/`var`；`*` 后缀标记导出；缩进体内部与嵌套例程不登记；只识别缩进 0 的声明 | `import`/`from … import`/`include`/`export` 经引用文件目录、每个 `src/` 根与项目根解析 `<module>.nim`/`.nims`；`std/` 与外部包不建边；`*.nimble` 提供项目名（文件名）/版本/`requires` 依赖 |
 | C | struct / union / enum / typedef（含匿名 typedef）/ 函数 / 原型 | `#include`（引号先查文件目录，两种形式都经 `include`/`src`/`inc` 根与项目根）；`static` 函数标记非导出 |
 | C++ | 以上 + class / 构造 / 析构 / 类内方法 / 类外 `Foo::bar` 定义 | 同上；尖括号形式只在 include 根命中时建边，系统头不建边 |
@@ -125,7 +125,8 @@ OCaml 为轻量行级解析：只识别缩进 0 的声明；`module`/`class` 的
 上限 20）。Haskell 为轻量
 行级解析：只识别缩进 0 的声明，`where` 绑定与 `instance` 方法不登记；
 类方法只登记签名（默认方法体不单独登记）；中缀操作符定义只识别简单
-形态；模块导出列表不参与可见性（统一视为可访问）；源根为
+形态；导出列表只解析第一层的值/类型/操作符名（`module` 重导出忽略、
+`type` 关键字导出不做特殊展开）；源根为
 `src`/`app`/`lib`/`test`、cabal `hs-source-dirs` 与项目根；
 `stack.yaml` 不作为依赖清单。
 

@@ -53,8 +53,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v5：Julia `@kwdef struct` 与 `@enum` 符号（Julia 提取规则变化）。
  *  v6：Nim `type` 块成员符号（Nim 提取规则变化）。
  *  v7：OCaml `and` 续接定义与 `{|…|}` 原始字符串屏蔽（OCaml 提取规则变化）。
- *  v8：Haskell 类方法签名与多行签名（Haskell 提取规则变化）。 */
-export const INDEX_PARSER_VERSION = 8
+ *  v8：Haskell 类方法签名与多行签名（Haskell 提取规则变化）。
+ *  v9：Haskell 模块导出列表决定顶层/类方法可见性（Haskell 提取规则变化）。 */
+export const INDEX_PARSER_VERSION = 9
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

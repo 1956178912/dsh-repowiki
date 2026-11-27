@@ -1500,6 +1500,43 @@ test('Haskell：类方法与多行签名', () => {
   assert.equal(render.endLine, 7)
 })
 
+test('Haskell：模块导出列表限制可见性', () => {
+  const code = [
+    'module Demo (run, Internal(..)) where',
+    '',
+    'run :: Int -> Int',
+    'run x = x',
+    '',
+    'data Internal = Internal',
+    '',
+    'hidden = 1',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'haskell')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('run').exported, true)
+  assert.equal(byName.get('Internal').exported, true)
+  assert.equal(byName.get('hidden').exported, false, '未列入导出列表')
+})
+
+test('Haskell：多行导出列表与操作符', () => {
+  const code = [
+    'module Demo',
+    '  ( run',
+    '  , (<+>)',
+    '  , module Data.List',
+    '  ) where',
+    '',
+    'run = 1',
+    'a <+> b = a + b',
+    'other = 2',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'haskell')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+  assert.equal(byName.get('run').exported, true)
+  assert.equal(byName.get('<+>').exported, true)
+  assert.equal(byName.get('other').exported, false)
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',
