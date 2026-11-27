@@ -145,7 +145,7 @@ export function generatePrompt(cards, stack, locale, memories = [], moduleRelati
  * @param {string} lang - 语言标识。
  * @returns {string} 围栏语言。
  */
-function fenceLang(lang) {
+export function fenceLang(lang) {
   switch (lang) {
     case 'javascript': return 'javascript'
     case 'typescript': return 'typescript'

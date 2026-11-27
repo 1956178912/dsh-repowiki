@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.210.0] - 2026-11-28
+
+### Added
+
+- **Language-onboarding guard**: `test/docs-consistency.test.js` now walks
+  every language in `SYMBOL_LANGUAGES` and fails when the prompt fence
+  (`fenceLang`) or the panel `LANGUAGE_LABELS` entry is missing. Adding an
+  extension to `src/schema.js` can no longer half-land silently. `fenceLang`
+  is exported for the guard without changing prompt output.
+
+### Tests
+
+- 619 cases pass (LANG=en and LANG=zh); the new case covers all 28 symbol
+  languages (26 languages plus Vue/Svelte SFC) against prompt fences and
+  panel labels.
+
 ## [0.209.0] - 2026-11-28
 
 ### Added

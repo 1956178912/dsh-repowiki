@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.210.0] - 2026-11-28
+
+- **语言接入完整性守卫**：`test/docs-consistency.test.js` 遍历
+  `SYMBOL_LANGUAGES` 的每种语言，缺少 Prompt 围栏（`fenceLang`）或面板
+  `LANGUAGE_LABELS` 条目即失败。给 `src/schema.js` 增加扩展名不再可能
+  只接入一半。`fenceLang` 为守卫导出，Prompt 输出不变。
+- **测试**：619 例在 LANG=en 与 LANG=zh 下全通过；新增用例覆盖全部
+  28 种符号语言（26 种语言 + Vue/Svelte SFC）的围栏与面板标签。
+
 ## [0.209.0] - 2026-11-28
 
 - **Erlang 支持（第 26 种语言）**：`.erl`/`.hrl` 提取 `-module`、
