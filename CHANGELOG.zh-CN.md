@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.188.0] - 2026-11-28
+
+- **Zig monorepo**：嵌套 `apps/*/build.zig.zon`（上限 20，根清单不受限）
+  的直接 `dependencies` 键计入 `dependencyCounts.zig`，项目名/版本仍只取
+  根清单。zon 的依赖键是用户自定义别名，因此只计数、不从键名推断技术名，
+  避免误判；嵌套清单沿既有有界读取管线按遍历顺序选定，输出保持确定。
+- **测试**：577 例在 LANG=en 与 LANG=zh 下全通过；新增嵌套
+  `apps/tool/build.zig.zon` 依赖累加、根元数据优先与“不映射技术名”断言。
+
 ## [0.187.0] - 2026-11-28
 
 - **Gleam monorepo 与跨行导入**：嵌套 `apps/*/gleam.toml`（上限 20，

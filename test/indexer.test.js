@@ -1267,9 +1267,11 @@ test('Zig：@import 相对当前文件解析与 build.zig.zon 技术栈', async 
     'src/util.zig': 'pub fn trim(s: []const u8) []const u8 { return s; }\n',
     'src/model/mod.zig': 'pub const Model = struct {};\n',
     'src/outside.zig': 'const up = @import("../src/util.zig");\nconst ext = @import("builtin");\n',
+    'apps/tool/build.zig.zon': '.{ .name = .tool, .version = "9.9.9", .dependencies = .{ .clap = .{} } }',
+    'apps/tool/src/tool.zig': 'pub fn run() void {}\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
-  assert.deepEqual(doc.stats.languages, { zig: 5 })
+  assert.deepEqual(doc.stats.languages, { zig: 6 })
 
   const edge = (from, to) => doc.edges.find(e => e.from === from && e.to === to)
   assert.equal(edge('src/main.zig', 'src/util.zig')?.line, 2, '同目录相对路径')
@@ -1280,7 +1282,7 @@ test('Zig：@import 相对当前文件解析与 build.zig.zon 技术栈', async 
 
   assert.equal(doc.stack.projectName, 'demo')
   assert.equal(doc.stack.projectVersion, '0.1.0')
-  assert.equal(doc.stack.dependencyCounts.zig, 1)
+  assert.equal(doc.stack.dependencyCounts.zig, 2, '子包 build.zig.zon 依赖累加')
 
   const util = doc.files.find(f => f.path === 'src/util.zig')
   assert.ok(util.symbols.some(s => s.name === 'trim' && s.kind === 'function' && s.exported))

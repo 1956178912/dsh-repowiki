@@ -98,6 +98,12 @@ const MAX_MIX_MANIFESTS = 20
 const MAX_GLEAM_MANIFESTS = 20
 
 /**
+ * 单次索引最多读取的嵌套 `build.zig.zon` 数（Zig monorepo 子包）。
+ * 根清单不受此上限影响；嵌套清单只用于依赖计数聚合。
+ */
+const MAX_ZIG_MANIFESTS = 20
+
+/**
  * 判断文件名是否为 JS/TS 解析配置或包清单。
  * @param {string} name - 文件基名。
  * @returns {boolean} 是则为 true。
@@ -117,7 +123,7 @@ function isJsConfigName(name) {
 function isConfigManifest(rel, name) {
   return isJsConfigName(name) || name === 'CMakeLists.txt' || name === 'go.mod'
     || name === 'pubspec.yaml' || name === 'composer.json' || name === 'mix.exs'
-    || name === 'gleam.toml'
+    || name === 'gleam.toml' || name === 'build.zig.zon'
 }
 
 /**
@@ -1812,6 +1818,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
   let composerManifestsRead = 0
   let mixManifestsRead = 0
   let gleamManifestsRead = 0
+  let zigManifestsRead = 0
   /** @type {Array<{abs:string, rel:string}>} */
   const selectedManifests = []
   for (const { abs, rel } of manifests) {
@@ -1845,6 +1852,11 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     if (nestedGleam) {
       if (gleamManifestsRead >= MAX_GLEAM_MANIFESTS) continue
       gleamManifestsRead++
+    }
+    const nestedZig = !MANIFEST_FILES[rel] && baseName === 'build.zig.zon'
+    if (nestedZig) {
+      if (zigManifestsRead >= MAX_ZIG_MANIFESTS) continue
+      zigManifestsRead++
     }
     selectedManifests.push({ abs, rel })
   }

@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.188.0] - 2026-11-28
+
+### Added
+
+- **Zig monorepos**: nested `apps/*/build.zig.zon` manifests (capped at 20,
+  root excluded) now contribute their direct `dependencies` keys to
+  `dependencyCounts.zig`, while the root manifest remains the only source
+  of project name and version. Dependency keys stay count-only — a zon key
+  is a user-chosen alias, so no technology names are inferred from it.
+  Nested manifests are selected in traversal order under the existing
+  bounded read pipeline, keeping output deterministic.
+
+### Tests
+
+- 577 cases pass (LANG=en and LANG=zh); new coverage pins dependency
+  accumulation across a nested `apps/tool/build.zig.zon`, root-only project
+  metadata and the deliberate absence of technology mappings.
+
 ## [0.187.0] - 2026-11-28
 
 ### Added

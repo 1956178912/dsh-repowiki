@@ -787,11 +787,13 @@ export function detectStack(manifests) {
         const name = MIX_TECH[dep]
         if (name) info.technologies.push({ name, ecosystem: 'mix', source: path })
       }
-    } else if (path === 'build.zig.zon') {
+    } else if (path === 'build.zig.zon' || path.endsWith('/build.zig.zon')) {
       const zon = zigZonInfo(text)
-      info.dependencyCounts.zig = zon.dependencies.length
-      if (!info.projectName && zon.name) info.projectName = zon.name
-      if (!info.projectVersion && zon.version) info.projectVersion = zon.version
+      // monorepo：根清单管项目元数据，子包清单只在依赖计数上累加；
+      // zon 的依赖键是用户自定义别名，不做技术名映射以避免误判
+      info.dependencyCounts.zig = (info.dependencyCounts.zig ?? 0) + zon.dependencies.length
+      if (path === 'build.zig.zon' && !info.projectName && zon.name) info.projectName = zon.name
+      if (path === 'build.zig.zon' && !info.projectVersion && zon.version) info.projectVersion = zon.version
     } else if (path === 'gleam.toml' || path.endsWith('/gleam.toml')) {
       const gleam = gleamTomlInfo(text)
       // monorepo：根清单管项目元数据，子包清单合并依赖计数/技术栈

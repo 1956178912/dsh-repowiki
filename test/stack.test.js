@@ -300,6 +300,17 @@ test('gleam.toml：monorepo 子包依赖合并、根项目名优先', () => {
   assert.ok(info.technologies.some(t => t.name === 'Lustre' && t.source === 'apps/web/gleam.toml'))
 })
 
+test('build.zig.zon：monorepo 子包依赖累加、根元数据优先', () => {
+  const info = detectStack({
+    'build.zig.zon': '.{ .name = .root_app, .version = "0.1.0", .dependencies = .{ .zap = .{} } }',
+    'apps/tool/build.zig.zon': '.{ .name = .tool, .version = "9.9.9", .dependencies = .{ .clap = .{}, .zap = .{} } }',
+  })
+  assert.equal(info.projectName, 'root_app', '项目名只取根清单')
+  assert.equal(info.projectVersion, '0.1.0')
+  assert.equal(info.dependencyCounts.zig, 3, '子包依赖直接子键累加')
+  assert.deepEqual(info.technologies, [], 'zon 依赖键是自定义别名，不臆造技术名')
+})
+
 test('多清单混合：生态不串扰', () => {
   const info = detectStack({
     'package.json': JSON.stringify({ dependencies: { vue: '^3' } }),
