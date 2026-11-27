@@ -4830,6 +4830,122 @@ function extractVbnet(lines) {
 }
 
 /**
+ * 扫描 Tcl 源码行：行首 `#` 注释整行屏蔽、命令分隔符 `;` 后的 `#`
+ * 注释截断、双引号字符串（反斜杠转义）内容替换为空格；`{…}` 字面量块
+ * 保留（Tcl 的 proc/类体本身就在花括号内，需要参与配平）。
+ * @param {string[]} lines - 源码行。
+ * @returns {string[]} 等长掩码行（行注释后截断）。
+ */
+export function tclScan(lines) {
+  const out = []
+  for (const raw of lines) {
+    if (/^\s*#/.test(raw)) { out.push(' '.repeat(raw.length)); continue }
+    let masked = ''
+    let quote = null
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i]
+      if (quote) {
+        if (ch === '\\') { i++; masked += '  ' }
+        else if (ch === '"') { quote = null; masked += ch }
+        else masked += ' '
+        continue
+      }
+      if (ch === '#' && /;\s*$/.test(raw.slice(0, i))) break
+      if (ch === '"') { quote = ch; masked += ch; continue }
+      masked += ch
+    }
+    out.push(masked)
+  }
+  return out
+}
+
+/**
+ * 计算 Tcl 块（proc/namespace/类体）的结束行：按整行花括号净值配平，
+ * 声明行可同时包含参数列表与 body。
+ * @param {string[]} lines - 掩码行。
+ * @param {number} startIdx - 声明起始行（0-based）。
+ * @returns {number} 结束行（1-based）。
+ */
+function tclBlockEnd(lines, startIdx) {
+  let depth = 0
+  let started = false
+  for (let i = startIdx; i < lines.length; i++) {
+    for (const ch of lines[i]) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+    if (depth > 0) started = true
+    if ((started && depth <= 0) || (!started && i === startIdx && depth === 0)) return i + 1
+  }
+  return startIdx + 1
+}
+
+/**
+ * 提取 Tcl 符号：`proc name {args} {…}`（function；命名空间内为 method
+ * 并带 `parent`）、`namespace eval Foo {…}` 与 TclOO
+ * `oo::class create Foo {…}`（class），以及类体内 `method`/`constructor`/
+ * `destructor`（method + `parent`）。注释与字符串内的伪定义不登记。
+ * @param {string[]} lines - 代码行。
+ * @returns {SymbolInfo[]} 符号列表。
+ */
+function extractTcl(lines) {
+  const masked = tclScan(lines)
+  const symbols = []
+  /** @type {Array<{name:string, end:number}>} */
+  const containers = []
+  for (let i = 0; i < masked.length; i++) {
+    while (containers.length > 0 && containers[containers.length - 1].end <= i + 1) containers.pop()
+    const line = masked[i].trim()
+    if (line === '') continue
+    const parent = containers.length > 0 ? containers[containers.length - 1].name : undefined
+
+    const nsMatch = /^namespace\s+eval\s+(?:::)?([A-Za-z_][\w:]*)\s*\{/.exec(line)
+    if (nsMatch) {
+      const end = tclBlockEnd(masked, i)
+      symbols.push({ name: nsMatch[1], kind: 'class', line: i + 1, endLine: end, exported: true })
+      containers.push({ name: nsMatch[1], end })
+      continue
+    }
+    const ooMatch = /^oo::class\s+create\s+([A-Za-z_]\w*)\s*\{/.exec(line)
+    if (ooMatch) {
+      const end = tclBlockEnd(masked, i)
+      /** @type {object} */
+      const symbol = { name: ooMatch[1], kind: 'class', line: i + 1, endLine: end, exported: true }
+      if (parent) symbol.parent = parent
+      symbols.push(symbol)
+      containers.push({ name: ooMatch[1], end })
+      continue
+    }
+    const procMatch = /^proc\s+(?:::)?([A-Za-z_][\w:]*)\s*\{/.exec(line)
+    if (procMatch) {
+      const parts = procMatch[1].split('::')
+      const name = parts[parts.length - 1]
+      const nsParent = parts.length > 1 ? parts.slice(0, -1).join('::') : parent
+      /** @type {object} */
+      const symbol = {
+        name, kind: nsParent ? 'method' : 'function', line: i + 1,
+        endLine: tclBlockEnd(masked, i), exported: true,
+      }
+      if (nsParent) symbol.parent = nsParent
+      symbols.push(symbol)
+      continue
+    }
+    const methodMatch = /^(method|constructor|destructor)\s*(?:([A-Za-z_]\w*)\s*)?\{/.exec(line)
+    if (methodMatch && parent && line.startsWith(methodMatch[1])) {
+      symbols.push({
+        name: methodMatch[2] ?? methodMatch[1],
+        kind: 'method',
+        line: i + 1,
+        endLine: tclBlockEnd(masked, i),
+        exported: true,
+        parent,
+      })
+    }
+  }
+  return symbols
+}
+
+/**
  * 提取 C/C++ 符号：class / struct / union / enum / typedef 与函数、方法、
  * 构造/析构函数。轻量行级解析：
  * - 类型声明要求名称后紧跟 `{`/`:`/`;`/`final`，避免把 `struct Foo x;` 变量误判；
@@ -4977,6 +5093,7 @@ export function extractSymbols(code, lang) {
   if (lang === 'pascal') return extractPascal(lines)
   if (lang === 'nix') return extractNix(lines)
   if (lang === 'vbnet') return extractVbnet(lines)
+  if (lang === 'tcl') return extractTcl(lines)
   if (lang === 'c' || lang === 'cpp') return extractCpp(lines)
   return []
 }

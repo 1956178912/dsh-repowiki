@@ -228,6 +228,7 @@ export const EXTENSION_LANGS = {
   lpr: 'pascal',
   nix: 'nix',
   vb: 'vbnet',
+  tcl: 'tcl',
   c: 'c',
   h: 'c',
   cc: 'cpp',

@@ -757,6 +757,22 @@ test('VB.NET：Imports（含别名）、Inherits/Implements 与注释屏蔽', ()
   ])
 })
 
+test('Tcl：source 路径与注释/字符串过滤', () => {
+  const code = [
+    'source ./lib/util.tcl',
+    'source scripts/init.tcl',
+    'source [file join $dir other.tcl]',
+    '# source ./commented.tcl',
+    'set x "source ./string.tcl"',
+    'set y 1 ; # source ./trailing.tcl',
+  ].join('\n')
+  const imports = extractImports(code, 'tcl')
+  assert.deepEqual(imports.map(i => [i.specifier, i.line, i.kind]), [
+    ['./lib/util.tcl', 1, 'require'],
+    ['scripts/init.tcl', 2, 'require'],
+  ])
+})
+
 test('Elixir：alias/import/require/use 与分组别名', () => {
   const code = [
     'defmodule MyApp.Accounts do',

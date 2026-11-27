@@ -3,6 +3,21 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.224.0] - 2026-11-28
+
+- **Tcl 支持（第 37 种语言）**：`proc name {args} {…}`（命名空间限定名
+  `::Foo::bar` 以 `Foo` 为 `parent`）、`namespace eval Foo {…}` 命名空间与
+  TclOO `oo::class create Foo {…}` 类，类体内 `method`/`constructor`/
+  `destructor`（method + `parent`）；块范围按整行花括号净值配平，proc 的
+  参数列表与 body 都计入。
+- **Tcl 屏蔽**：行首 `#` 注释、`; #` 尾注释与双引号字符串（反斜杠转义）
+  屏蔽；引号内花括号不会截断 proc/类范围。
+- **Tcl `source` 边**：`source ./x.tcl` 与 `source scripts/x.tcl` 先按
+  项目根、再回退脚本目录并补 `.tcl`；动态 `[file join …]` 不建边。
+- **测试**：656 例在 LANG=en 与 LANG=zh 下全通过；新增覆盖命名空间、
+  proc、TclOO 类、方法与构造器、花括号配平、字符串屏蔽、`source` 路径
+  与注释过滤。
+
 ## [0.223.0] - 2026-11-28
 
 - **VB.NET 支持（第 36 种语言）**：`Namespace`/`Class`/`Module`/

@@ -2062,6 +2062,53 @@ test('VB.NET：Namespace/Class/Interface/Enum 与例程、属性、事件范围'
   assert.ok(!byName.has('Basic'), '枚举值不登记')
 })
 
+test('Tcl：namespace eval/TclOO/proc 归属与字符串花括号屏蔽', () => {
+  const code = [
+    '# proc fake {} {}',
+    'namespace eval ::Vivado {',
+    '    proc run_flow {args} {',
+    '        puts "start }"',
+    '        return $args',
+    '    }',
+    '',
+    '    oo::class create Reporter {',
+    '        method report {name} {',
+    '            puts "reporting $name"',
+    '        }',
+    '        constructor {prefix} {',
+    '            set prefix $prefix',
+    '        }',
+    '    }',
+    '}',
+    '',
+    'proc ::Vivado::helper {} {',
+    '    return 1',
+    '}',
+    '',
+    'source ./lib/util.tcl',
+  ].join('\n')
+  const symbols = extractSymbols(code, 'tcl')
+  const byName = new Map(symbols.map(s => [s.name, s]))
+
+  assert.equal(byName.get('Vivado').kind, 'class')
+  assert.equal(byName.get('Vivado').endLine, 16)
+  assert.equal(byName.get('run_flow').kind, 'method')
+  assert.equal(byName.get('run_flow').parent, 'Vivado')
+  assert.equal(byName.get('run_flow').endLine, 6, '字符串内花括号不破坏范围')
+  assert.equal(byName.get('Reporter').kind, 'class')
+  assert.equal(byName.get('Reporter').parent, 'Vivado')
+  assert.equal(byName.get('Reporter').endLine, 15)
+  assert.equal(byName.get('report').kind, 'method')
+  assert.equal(byName.get('report').parent, 'Reporter')
+  assert.equal(byName.get('report').endLine, 11)
+  assert.equal(byName.get('constructor').parent, 'Reporter')
+  assert.equal(byName.get('constructor').endLine, 14)
+  assert.equal(byName.get('helper').kind, 'method', ':: 前缀命名空间归属')
+  assert.equal(byName.get('helper').parent, 'Vivado')
+  assert.equal(byName.get('helper').endLine, 20)
+  assert.ok(!byName.has('fake'), '行注释不登记')
+})
+
 test('Svelte：模块脚本与实例脚本分别保留行号', () => {
   const code = [
     '<script context="module" lang="ts">',

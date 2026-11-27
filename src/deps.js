@@ -11,7 +11,7 @@ import { scriptBlockText } from './sfc.js'
 import {
   shellScan, juliaScan, nimScan, ocamlScan, haskellScan, erlangScan, solidityScan,
   clojureScan, hclScan, groovyScan, powershellScan, fortranScan, perlScan, pascalScan,
-  nixScan, vbnetScan,
+  nixScan, vbnetScan, tclScan,
 } from './symbols.js'
 
 /**
@@ -1401,6 +1401,24 @@ function extractVbnetImports(lines) {
 }
 
 /**
+ * 提取 Tcl 的 `source` 脚本引用：只登记相对路径或 `.tcl` 文件；
+ * `source [file join …]` 等动态形式与注释/字符串内的伪语句跳过。
+ * @param {string[]} lines - 代码行。
+ * @returns {ImportInfo[]} 引用记录。
+ */
+function extractTclImports(lines) {
+  const result = []
+  const masked = tclScan(lines)
+  for (let i = 0; i < masked.length; i++) {
+    const m = /^source\s+((?:\.\.?\/)?[^\s;]+\.tcl|\.\.?\/[^\s;]+)/.exec(masked[i].trim())
+    if (!m) continue
+    const specifier = m[1].replace(/[;]+$/, '')
+    result.push({ specifier, line: i + 1, kind: 'require', relative: true, imported: [] })
+  }
+  return result
+}
+
+/**
  * 提取 Elixir 的 alias/import/require/use 引用。
  * - `alias MyApp.{Repo, Mailer}` 展开为多条；
  * - `alias Foo, as: Bar` 仍指向 Foo；
@@ -1520,6 +1538,7 @@ export function extractImports(code, lang) {
   if (lang === 'pascal') return extractPascalImports(lines)
   if (lang === 'nix') return extractNixImports(lines)
   if (lang === 'vbnet') return extractVbnetImports(lines)
+  if (lang === 'tcl') return extractTclImports(lines)
   if (lang === 'c' || lang === 'cpp') return extractCppImports(lines)
   return []
 }

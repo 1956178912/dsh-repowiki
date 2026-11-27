@@ -794,6 +794,31 @@ function resolvePerlSpecifier(fromRel, specifier, roots, indexed) {
 }
 
 /**
+ * 解析 Tcl `source` 路径：先按项目根、再按引用文件目录，尝试原路径与
+ * 补 `.tcl`；越出项目与外部路径不建边。
+ * @param {string} fromRel - 引用方文件相对路径。
+ * @param {string} specifier - source 路径。
+ * @param {Set<string>} indexed - 已索引文件集合。
+ * @returns {string|null} 命中文件；外部/无法解析返回 null。
+ */
+function resolveTclSource(fromRel, specifier, indexed) {
+  if (typeof specifier !== 'string') return null
+  const raw = specifier.trim().replace(/\\/g, '/')
+  if (raw === '' || (!raw.startsWith('.') && !/\.tcl$/.test(raw))) return null
+  const scriptDir = path.posix.dirname(fromRel)
+  const bases = ['']
+  if (scriptDir !== '.') bases.push(scriptDir)
+  for (const base of bases) {
+    const target = path.posix.normalize(path.posix.join(base, raw))
+    if (target === '..' || target.startsWith('../')) continue
+    for (const candidate of [target, `${target}.tcl`]) {
+      if (indexed.has(candidate)) return candidate
+    }
+  }
+  return null
+}
+
+/**
  * 解析 Nix 文件引用：相对路径按引用文件目录归一，尝试原路径、补 `.nix`
  * 与目录下的 `default.nix`；绝对路径、`<nixpkgs>` 搜索路径与越出项目的
  * 路径不建边。
@@ -2476,6 +2501,7 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
   if (lang === 'pascal') return resolvePascalUnit(fromRel, imp.specifier, ctx.pascalUnits, ctx.indexed)
   if (lang === 'nix') return resolveNixPath(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'vbnet') return resolveDottedSpecifier(imp.specifier, ctx.dottedPaths.vbnet)
+  if (lang === 'tcl') return resolveTclSource(fromRel, imp.specifier, ctx.indexed)
   if (lang === 'haskell') return resolveHaskellSpecifier(imp.specifier, ctx.haskellRoots, ctx.indexed)
   if (lang === 'erlang') return resolveErlangInclude(fromRel, imp.specifier, ctx.erlangRoots, ctx.indexed)
   if (lang === 'solidity') return resolveSolidityImport(fromRel, imp.specifier, ctx.indexed)

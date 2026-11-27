@@ -5,6 +5,29 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.224.0] - 2026-11-28
+
+### Added
+
+- **Tcl indexing (37th language)**: `proc name {args} {…}` definitions
+  (namespace-qualified `::Foo::bar` names carry `Foo` as `parent`),
+  `namespace eval Foo {…}` namespaces and TclOO `oo::class create Foo {…}`
+  classes, plus `method`/`constructor`/`destructor` inside a class body
+  (methods with `parent`). Block ranges follow whole-line brace balance,
+  so a proc's argument list and body are both accounted for.
+- **Tcl masking**: whole-line `#` comments, `; #` trailing comments and
+  double-quoted strings (backslash escaping) are masked; quoted braces
+  never truncate a proc or class range.
+- **Tcl `source` edges**: `source ./x.tcl` and `source scripts/x.tcl`
+  resolve from the project root with a script-directory fallback and
+  `.tcl` completion; dynamic `[file join …]` forms stay edge-free.
+
+### Tests
+
+- 656 cases pass (LANG=en and LANG=zh); new coverage for namespaces,
+  procs, TclOO classes, methods/constructors, brace-balanced ranges,
+  string masking, `source` paths and comment filtering.
+
 ## [0.223.0] - 2026-11-28
 
 ### Added

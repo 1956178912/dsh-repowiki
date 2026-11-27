@@ -1878,6 +1878,24 @@ test('VB.NET：命名空间后缀解析与 Inherits 依赖', async () => {
   ])
 })
 
+test('Tcl：source 相对路径、项目根与脚本目录解析', async () => {
+  const dir = makeProject({
+    'lib/util.tcl': 'proc util_help {} {}\n',
+    'scripts/init.tcl': 'source ./lib/util.tcl\nproc init {} {}\n',
+    'app/main.tcl': 'source ./lib/util.tcl\nsource scripts/init.tcl\nnamespace eval ::App { proc run {} {} }\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  assert.deepEqual(doc.stats.languages, { tcl: 3 })
+
+  const initEdges = doc.edges.filter(e => e.from === 'scripts/init.tcl')
+  assert.deepEqual(initEdges.map(e => [e.line, e.to]), [[1, 'lib/util.tcl']])
+  const mainEdges = doc.edges.filter(e => e.from === 'app/main.tcl')
+  assert.deepEqual(mainEdges.map(e => [e.line, e.to]).sort(), [
+    [1, 'lib/util.tcl'],
+    [2, 'scripts/init.tcl'],
+  ])
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

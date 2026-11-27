@@ -357,6 +357,7 @@ const LANGUAGE_LABELS = {
   pascal: 'Pascal',
   nix: 'Nix',
   vbnet: 'Visual Basic .NET',
+  tcl: 'Tcl',
   c: 'C',
   cpp: 'C++',
 }
