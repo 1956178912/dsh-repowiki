@@ -5,6 +5,24 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.206.0] - 2026-11-28
+
+### Added
+
+- **Haskell `hs-source-dirs`**: cabal `hs-source-dirs:` declarations
+  (comma lists plus indented continuation lines, per library/executable
+  stanza) are parsed into the Haskell module search roots, joined with the
+  conventional `src`/`app`/`lib`/`test` directories and the project root.
+  Projects using custom layouts such as `source/` or `library/` now resolve
+  `import` edges. Paths stay deterministic (depth, then lexicographic) and
+  manifest-relative.
+
+### Tests
+
+- 611 cases pass (LANG=en and LANG=zh); a fixture pins a `source/` library
+  directory and a multi-line `app` source directory declared in the cabal
+  manifest, proving the cross-directory import edge.
+
 ## [0.205.0] - 2026-11-28
 
 ### Added

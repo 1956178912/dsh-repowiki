@@ -1006,14 +1006,49 @@ function resolveOcamlSpecifier(specifier, modules) {
 }
 
 /**
+ * 从 `*.cabal` 清单提取 `hs-source-dirs` 目录（可逗号分隔与缩进续行），
+ * 相对清单所在目录归一；用于自定义源码目录的 Haskell 模块解析。
+ * @param {Record<string,string>} manifestTexts - 清单路径 → 内容。
+ * @returns {Set<string>} 源码目录集合（项目根为 ''）。
+ */
+function cabalSourceDirs(manifestTexts) {
+  const roots = new Set()
+  for (const [rel, text] of Object.entries(manifestTexts)) {
+    if (!rel.endsWith('.cabal')) continue
+    const base = path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel)
+    const lines = text.split(/\r?\n/)
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^\s*hs-source-dirs\s*:\s*(.*)$/.exec(lines[i])
+      if (!m) continue
+      let value = m[1]
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s+\S/.test(lines[j]) && !/^\s*[a-z][\w-]*\s*:/.test(lines[j])) {
+          value += `, ${lines[j].trim()}`
+        } else {
+          break
+        }
+      }
+      for (const part of value.split(',')) {
+        const dir = part.trim()
+        if (!dir) continue
+        const joined = path.posix.normalize(path.posix.join(base || '.', dir))
+        roots.add(joined === '.' ? '' : joined)
+      }
+    }
+  }
+  return roots
+}
+
+/**
  * 建立 Haskell 模块搜索根：任意层级的 `src/`/`app/`/`lib/`/`test/` 目录
- * （GHC/cabal 常见的 source-dirs），最后回退项目根；按深度、字典序排序
- * 保证确定性。
+ * （GHC/cabal 常见的 source-dirs）、cabal `hs-source-dirs` 声明目录，最后
+ * 回退项目根；按深度、字典序排序保证确定性。
  * @param {Iterable<string>} paths - 已索引文件相对路径。
+ * @param {Iterable<string>} [extraRoots] - 额外搜索根（如 cabal 声明）。
  * @returns {string[]} 搜索根（末项为项目根 ''）。
  */
-function buildHaskellRoots(paths) {
-  const roots = new Set()
+function buildHaskellRoots(paths, extraRoots = []) {
+  const roots = new Set(extraRoots)
   for (const rel of paths) {
     if (!rel.endsWith('.hs') && !rel.endsWith('.lhs')) continue
     const segments = rel.split('/').slice(0, -1)
@@ -1025,7 +1060,8 @@ function buildHaskellRoots(paths) {
     }
   }
   return [
-    ...[...roots].sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
+    ...[...roots].filter(root => root !== '')
+      .sort((a, b) => dirDepth(a) - dirDepth(b) || a.localeCompare(b)),
     '',
   ]
 }
@@ -2307,7 +2343,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
     ocamlModules: buildOcamlModules(files),
-    haskellRoots: buildHaskellRoots(indexed),
+    haskellRoots: buildHaskellRoots(indexed, cabalSourceDirs(manifestTexts)),
     luaRoots: buildLuaRoots(indexed),
     gleamRoots: buildGleamRoots(indexed),
     nimRoots: buildNimRoots(indexed),

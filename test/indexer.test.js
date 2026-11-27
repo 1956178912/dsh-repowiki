@@ -1567,6 +1567,27 @@ test('Rust：workspace 跨 crate use 解析（包名 - → _ 与路径依赖）'
   assert.equal(edge('crates/app/src/ui.rs', 'crates/core/src/lib.rs')?.line, 1, '无子模块回退 crate 入口')
 })
 
+test('Haskell：cabal hs-source-dirs 自定义源根', async () => {
+  const dir = makeProject({
+    'demo.cabal': [
+      'name: demo',
+      'version: 0.1.0.0',
+      'library',
+      '  hs-source-dirs: source',
+      '  build-depends: base',
+      'executable demo-exe',
+      '  hs-source-dirs:',
+      '      app',
+      '  build-depends: base',
+    ].join('\n'),
+    'source/Demo/Core.hs': 'module Demo.Core where\n\nrun = 1\n',
+    'app/Main.hs': 'module Main where\n\nimport Demo.Core\n\nmain = print run\n',
+  })
+  const doc = await buildIndex(makeFakeFs(dir), dir)
+  const edge = doc.edges.find(e => e.from === 'app/Main.hs' && e.to === 'source/Demo/Core.hs')
+  assert.equal(edge?.line, 3, '自定义 source 根解析')
+})
+
 test('索引确定性：目录枚举顺序不影响 files/edges 输出', async () => {
   const dir = makeProject({
     'c/x.js': 'export function x() {}\n',

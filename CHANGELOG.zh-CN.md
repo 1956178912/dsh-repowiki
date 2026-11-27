@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.206.0] - 2026-11-28
+
+- **Haskell `hs-source-dirs`**：解析 cabal 的 `hs-source-dirs:` 声明
+  （逗号列表与缩进续行，按 library/executable stanza），并入 Haskell
+  模块搜索根，与 `src`/`app`/`lib`/`test` 常规目录及项目根共同参与解析。
+  使用 `source/`、`library/` 等自定义布局的项目现在也能建立 `import` 边；
+  路径按深度、字典序排序且相对清单目录，保持确定性。
+- **测试**：611 例在 LANG=en 与 LANG=zh 下全通过；夹具覆盖 cabal 声明的
+  `source/` 库目录与跨行 `app` 源码目录，验证跨目录导入边。
+
 ## [0.205.0] - 2026-11-28
 
 - **Rust workspace crate 解析**：嵌套 `Cargo.toml`（上限 20）把
