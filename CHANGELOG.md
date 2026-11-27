@@ -5,6 +5,22 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.141.0] - 2026-11-27
+
+### Added
+
+- **Page integrity gate**: `verify:wiki` now enumerates wiki page files
+  (frontmatter slug, three-level nesting like `listWikiPages`). A manifest
+  slug without a file fails with
+  `N page(s) in the manifest have no file on disk`, while page files not in
+  the manifest only warn. `missingPages`/`orphanedPages` are included in the
+  JSON report, closing another generate/verify gap.
+
+### Tests
+
+- 503 cases pass (LANG=en and LANG=zh); a new case deletes a manifest page,
+  adds an orphan page, and asserts the failure, the warning, and both lists.
+
 ## [0.140.0] - 2026-11-27
 
 ### Added

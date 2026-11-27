@@ -8,6 +8,7 @@
  * - 行号越界（索引 v6 起记录 `files[].lines`）
  * - 引用内容漂移（清单 v3 `citationDigests`）
  * - 陈旧 Wiki（卡片与已采信记忆的 `inputDigest`/`memoryDigest` 与清单不一致）
+ * - 清单登记但磁盘缺失的页面（孤儿页仅告警）
  * - 指纹覆盖率（默认仅告警，`--strict` 时失败）
  *
  * 用法：
@@ -31,7 +32,7 @@ import {
 import { parseCard } from '../src/knowledge.js'
 import { parseMemoryText } from '../src/memory.js'
 import { MEMORY_DIR } from '../src/schema.js'
-import { digestText } from '../src/util.js'
+import { digestText, parseFrontmatter } from '../src/util.js'
 
 const ASSET_DIR = '.dsh-repowiki'
 const WIKI_DIR = 'wiki'
@@ -40,6 +41,9 @@ const MANIFEST_FILE = '_index.json'
 
 /** 非索引引用的文件系统探测上限（与 status 一致）。 */
 const MAX_FS_PROBES = 200
+
+/** 发现 Wiki 页面的目录深度上限（与 listWikiPages 一致）。 */
+const MAX_PAGE_DEPTH = 3
 
 const USAGE = [
   'Usage: node scripts/verify-wiki.mjs [options]',
@@ -308,6 +312,57 @@ function memoriesDigest(memories) {
 }
 
 /**
+ * 枚举某 locale 的 Wiki 页面文件（slug 优先取 frontmatter，与 listWikiPages 一致）。
+ * @param {string} root - 项目根。
+ * @param {string} locale - 语言。
+ * @returns {Promise<Map<string, {path:string, title:string}>>} slug → 页面信息。
+ */
+async function readWikiPages(root, locale) {
+  const base = path.join(root, ASSET_DIR, WIKI_DIR, locale)
+  const pages = new Map()
+  /**
+   * 递归枚举目录（深度上限防异常树）。
+   * @param {string} dir - 绝对目录。
+   * @param {number} depth - 当前深度。
+   * @returns {Promise<void>}
+   */
+  const walk = async (dir, depth) => {
+    if (depth > MAX_PAGE_DEPTH) return
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await walk(path.join(dir, entry.name), depth + 1)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+      const file = path.join(dir, entry.name)
+      let slug = entry.name.replace(/\.md$/, '')
+      let title = slug
+      try {
+        const parsed = parseFrontmatter(await readFile(file, 'utf8'))
+        if (parsed) {
+          if (typeof parsed.meta.slug === 'string' && parsed.meta.slug) slug = parsed.meta.slug
+          if (typeof parsed.meta.title === 'string' && parsed.meta.title) title = parsed.meta.title
+        }
+      } catch {
+        // 坏页仍以文件名参与缺失/孤儿判定
+      }
+      pages.set(slug, {
+        path: path.relative(root, file).split(path.sep).join('/'),
+        title,
+      })
+    }
+  }
+  await walk(base, 0)
+  return pages
+}
+
+/**
  * 校验单个 locale。
  * @param {string} root - 项目根。
  * @param {string} locale - 语言目录名。
@@ -372,6 +427,23 @@ async function verifyLocale(root, locale, index, strict) {
     if (strict) issues.push(message)
     else warnings.push(message)
   }
+  // 页面完整性：generate 的短路要求清单里的每个 slug 都仍在磁盘上；
+  // 缺失页说明 Wiki 被部分删除或写入失败，不重新生成就会一直缺页。
+  const diskPages = await readWikiPages(root, locale)
+  const manifestSlugs = [...new Set(
+    manifest.pages
+      .map(page => (typeof page?.slug === 'string' ? page.slug : ''))
+      .filter(Boolean),
+  )]
+  const manifestSlugSet = new Set(manifestSlugs)
+  const missingPages = manifestSlugs.filter(slug => !diskPages.has(slug))
+  const orphanedPages = [...diskPages.keys()].filter(slug => !manifestSlugSet.has(slug)).sort()
+  if (missingPages.length > 0) {
+    issues.push(`${missingPages.length} page(s) in the manifest have no file on disk: ${missingPages.slice(0, 3).join(', ')}`)
+  }
+  if (orphanedPages.length > 0) {
+    warnings.push(`${orphanedPages.length} page file(s) are not in the manifest: ${orphanedPages.slice(0, 3).join(', ')}`)
+  }
   const { known, capped } = await resolveKnown(root, manifest, index.files)
   const broken = findBrokenWikiCitations(manifest, known)
   const ranges = findCitationRangeIssues(manifest, lineCounts(index.files), known)
@@ -409,6 +481,9 @@ async function verifyLocale(root, locale, index, strict) {
     stale,
     staleReasons,
     pages: manifest.pages.length,
+    pageFiles: diskPages.size,
+    missingPages,
+    orphanedPages,
     broken,
     ranges,
     drift,

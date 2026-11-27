@@ -3,6 +3,15 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.141.0] - 2026-11-27
+
+- **页面完整性门禁**：`verify:wiki` 递归枚举 Wiki 页面文件（slug 优先取
+  frontmatter，深度 ≤3，与 `listWikiPages` 一致）。清单登记但磁盘缺失的
+  页面默认失败（`N page(s) in the manifest have no file on disk`），未入
+  清单的孤儿页仅告警；JSON 输出 `missingPages`/`orphanedPages`。
+- **测试**：503 例在 LANG=en 与 LANG=zh 下全通过；新增删除清单页、加入
+  孤儿页后断言失败、告警与两个列表的用例。
+
 ## [0.140.0] - 2026-11-27
 
 - **记忆感知的陈旧门禁**：`verify:wiki` 同时重算已采信记忆的

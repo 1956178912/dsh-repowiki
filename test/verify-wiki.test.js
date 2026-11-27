@@ -36,9 +36,17 @@ function writeIndex(root, files) {
   writeJson(path.join(root, '.dsh-repowiki/index.json'), { schemaVersion: 6, files })
 }
 
-/** 写 Wiki 清单。 */
+/** 写 Wiki 清单，并为清单页落盘占位 Markdown（与 generate 产物一致）。 */
 function writeManifest(root, locale, manifest) {
   writeJson(path.join(root, '.dsh-repowiki/wiki', locale, '_index.json'), manifest)
+  for (const page of Array.isArray(manifest.pages) ? manifest.pages : []) {
+    if (typeof page?.slug !== 'string' || !page.slug) continue
+    const title = typeof page.title === 'string' && page.title ? page.title : page.slug
+    writeText(
+      path.join(root, '.dsh-repowiki/wiki', locale, `${page.slug}.md`),
+      `${encodeFrontmatter({ slug: page.slug, title })}\n# ${title}\n`,
+    )
+  }
 }
 
 /** 构造带指纹的单页清单。 */
@@ -220,6 +228,34 @@ test('verify-wiki：未覆盖默认警告，严格模式失败', async () => {
   assert.equal(strict.ok, false)
   assert.match(strict.issues.join(' '), /1 citation\(s\) have no content digest/)
   assert.match(strict.issues.join(' '), /manifest has no inputDigest\/memoryDigest/)
+})
+
+test('verify-wiki：清单页面缺失失败，孤儿页仅警告', async () => {
+  const root = makeRoot()
+  writeText(path.join(root, 'a.ts'), 'one\ntwo\n')
+  writeIndex(root, [{ path: 'a.ts', lines: 2 }])
+  writeManifest(root, 'zh', {
+    schemaVersion: 3,
+    inputDigest: digestText('', 16),
+    memoryDigest: digestText('', 16),
+    pages: [pageWithDigest('a.ts#L1', citationDigest('one\ntwo\n', 1, 1))],
+  })
+
+  const complete = await verifyWiki({ root })
+  assert.equal(complete.ok, true)
+  assert.equal(complete.locales[0].pageFiles, 1)
+
+  fs.rmSync(path.join(root, '.dsh-repowiki/wiki/zh/overview.md'))
+  writeText(
+    path.join(root, '.dsh-repowiki/wiki/zh/extra.md'),
+    `${encodeFrontmatter({ slug: 'extra', title: 'Extra' })}\n# Extra\n`,
+  )
+  const broken = await verifyWiki({ root })
+  assert.equal(broken.ok, false)
+  assert.match(broken.issues.join(' '), /page\(s\) in the manifest have no file on disk/)
+  assert.match(broken.warnings.join(' '), /page file\(s\) are not in the manifest/)
+  assert.deepEqual(broken.locales[0].missingPages, ['overview'])
+  assert.deepEqual(broken.locales[0].orphanedPages, ['extra'])
 })
 
 test('verify-wiki：--require 让缺失资产在 CI 中失败', async () => {

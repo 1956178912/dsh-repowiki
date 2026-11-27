@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.140.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.141.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.140.0）；测试 502/502（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 86.36%、函数 95.17%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
+- 核对对象：本仓库当前实现（v0.141.0）；测试 503/503（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.06%、分支 86.08%、函数 95.2%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径；`src/` + `index.js` + `client.js` 的运行时行覆盖约 97.8%）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -69,7 +69,7 @@
 | 5 | 配置走 patch 层、警惕整体替换 | ✅ | `cordis.patch.yml` 只含插件注册行；`wiki-plan.yaml` 项目级随 Git |
 | 6 | LLM 子任务一律 outputSchema 约束 | ✅ | `src/card-schema.js`/wiki schema；`runSubagent` 强制 |
 | 7 | 不碰保留与实验机制 | ✅ | 未用 `appendPluginRecord`/`Session.append`/`@Remote` |
-| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（502/502，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
+| 8 | 升级回归门禁（代码改↔Wiki 跟、dsh 变↔冒烟跑） | ✅ | 自动化部分已落地：`.github/workflows/tests.yml` 在 Linux/macOS（阻塞）与 Windows（canary）× Node 22/24 上跑 lint、typecheck、密钥扫描、`node --test test/*.test.js`（503/503，含 LLM 执行路径契约回归、多 locale、有界并发与重试、运行快照、行号级反向引用、Wiki 引用反查/跳转与引用完整性、行号越界与内容漂移、保守导出审计、模块耦合指标、16 语言提取、符号级影响证据与词法使用点、受影响测试路由、PageRank 核心文件与 repo map 兜底、符号锚点上下文包、面板核心文件 chip 与引用问题徽章、真实 React+jsdom 的 DOM 事件回归与故障注入降级链、并发锁接线、打包与版本一致性守卫），并通过 `scripts/check-coverage.mjs` 卡门禁（行 ≥95 / 分支 ≥85 / 函数 ≥85）；CodeQL + `npm audit` + SBOM 独立工作流。dsh 版本变更侧的回归另有 `npm run verify:host` 解析本机 app.asar 核对 --dsw-* 令牌漂移，UI 侧仍靠安装验证流程（remove→install→GUI 冒烟），无 CI 可跑 dsh 本身 |
 | 9 | `disabled: !!js` 条件禁用 | ⚠️ | 方案 §11.2-2.2 已降级为 execute 内早退（主实现），未用方言 |
 
 ## 5. §11.4 成本与 .gitignore
@@ -210,7 +210,8 @@
 | 有界并发漂移读取 | `checkCitationDrift` 先收集安全且在上限内的唯一路径，按默认 8（硬上限 16，`options.concurrency`）并发预取，再按清单顺序比较；结果、截断与 `unchecked` 口径不变 | v0.135.0 |
 | 页级覆盖率明细 | `citationCoveragePages` 复用页级计数，列出最多 10 个未覆盖页面（按未覆盖数降序，带 `reasons` 与 `truncated`）；status 输出并在 `Citation digests` 行点名示例；health 只加提示不扣分 | v0.136.0 |
 | 陈旧 Wiki 检测 | `scripts/verify-wiki.mjs` 读取 `knowledge/<locale>/*.md`，按 `path:sourceDigest` 排序哈希重算 `inputDigest`（与 generate 同口径，sha256-16），与清单不一致时默认失败；v0.140.0 起同时按 `slug:body` 重算已采信记忆的 `memoryDigest`（与 generate 增量短路同口径），`staleReasons` 区分 `cards`/`memory`，文本报告标记 `(stale: cards, memory)`；旧清单缺指纹时默认告警、`--strict` 失败。`--require` 让无 Wiki 清单也失败，避免 CI 静默通过 | v0.139.0 / v0.140.0 |
-| CI Wiki 门禁 | `scripts/verify-wiki.mjs` 复用 `wiki-references`/`citation-drift`：断链（索引 + 200 探测）、越界（索引 v6）、漂移（清单 v3）与陈旧 Wiki（卡片/已采信记忆指纹变化）默认失败；未覆盖/未验证默认警告、`--strict` 失败（缺陈旧指纹也失败）；`--require` 要求存在清单；支持 `--root`/`--locale`/`--json`，退出码 0/1/2 | v0.137.0 / v0.140.0 |
+| 页面完整性 | 递归枚举 `wiki/<locale>` 的 `.md`（slug 优先取 frontmatter，深度 ≤3，与 `listWikiPages` 一致）；清单登记但磁盘缺失的页面默认失败并点名示例，未入清单的孤儿页仅告警；JSON 输出 `missingPages`/`orphanedPages` 与 `pageFiles` | v0.141.0 |
+| CI Wiki 门禁 | `scripts/verify-wiki.mjs` 复用 `wiki-references`/`citation-drift`：断链（索引 + 200 探测）、越界（索引 v6）、漂移（清单 v3）、陈旧 Wiki（卡片/已采信记忆指纹变化）与清单页缺失默认失败；未覆盖/未验证默认警告、`--strict` 失败（缺陈旧指纹也失败）；`--require` 要求存在清单；支持 `--root`/`--locale`/`--json`，退出码 0/1/2 | v0.137.0 / v0.141.0 |
 | 多行 JS/TS 导入与解析缓存版本 | 跨行 import/export-from 保留起始行与完整具名符号；`parserVersion` 在解析规则升级时使旧 symbols/imports 缓存失效，保留正确增量统计，同版本后续恢复复用 | v0.117.0 |
 
 **剩余未覆盖项全部集中在浏览器侧**（无浏览器控制，见 `docs/checkpoints/phase-15-convergence.md`）。
