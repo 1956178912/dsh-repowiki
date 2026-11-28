@@ -3,6 +3,16 @@
 本文件是 [CHANGELOG.md](CHANGELOG.md) 的中文摘要镜像：英文版为权威记录，
 此处每版给出 1–4 条要点。版本遵循 README 路线图的阶段划分。
 
+## [0.278.0] - 2026-11-28
+
+- **GDScript `extends Base` 全局类名**：标识符形态的 `extends`（含
+  `class_name Hero extends Character` 同行写法）通过 `class_name` → 文件
+  映射解析，记为 `extends-class` 边并携带基类名符号证据；内置基类
+  （如 `Node2D`）与未知类名不建边。
+- `class_name` 符号标记 `globalName`，映射在缓存复用后仍有效；解析器
+  v29 重新解析缓存符号。
+- **测试**：841 例通过（LANG=en）；新增全局类名继承的符号/导入/索引断言。
+
 ## [0.277.0] - 2026-11-28
 
 - **GDScript 支持**（第 45 种符号语言）：`.gd` 脚本登记 `class_name`/

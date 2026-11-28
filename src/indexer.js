@@ -832,6 +832,26 @@ function buildElixirModules(files) {
 }
 
 /**
+ * 建立 GDScript 全局类名（`class_name`）→ 文件索引：`extends Base` 只写
+ * 类名，需按全局注册名解析；同名类取字典序最小文件，保证确定性。
+ * @param {Array<{path:string, lang:string, symbols?:Array<{name?:string, globalName?:boolean}>}>} files
+ *   索引文件条目。
+ * @returns {Map<string,string>} 全局类名 → 文件相对路径。
+ */
+function buildGdscriptClasses(files) {
+  const classes = new Map()
+  for (const file of files) {
+    if (file.lang !== 'gdscript') continue
+    for (const symbol of file.symbols ?? []) {
+      if (symbol?.globalName !== true || typeof symbol.name !== 'string') continue
+      const existing = classes.get(symbol.name)
+      if (existing === undefined || file.path < existing) classes.set(symbol.name, file.path)
+    }
+  }
+  return classes
+}
+
+/**
  * 建立 Fortran 模块名（小写，语言大小写不敏感）→ 文件索引：使用
  * `module` 符号（模块名与文件名无约定），同名模块取字典序最小文件，
  * 保证确定性。
@@ -2929,7 +2949,7 @@ function resolveRustUse(fromRel, specifier, indexed, crateRoots, crates, rootExp
  *   swiftTargets:Map<string,string>,
  *   jsAliases:JsAliasConfig[], workspacePackages:Map<string,WorkspacePackage>,
  *   dartPackages:Map<string,string>,
- *   elixirModules:Map<string,string>,
+ *   elixirModules:Map<string,string>, gdscriptClasses:Map<string,string>,
  *   ocamlModules:Map<string,string[]>,
  *   fortranModules:Map<string,string>,
  *   perlRoots:string[],
@@ -2984,7 +3004,11 @@ function resolveImportEdge(lang, fromRel, imp, ctx) {
     }
     return imp.relative ? resolveDartSpecifier(fromRel, imp.specifier, ctx.indexed) : null
   }
-  if (lang === 'gdscript') return resolveGodotPath(fromRel, imp.specifier, ctx.indexed)
+  if (lang === 'gdscript') {
+    // `extends Base` 按全局 class_name 映射；`preload`/`load`/字符串 extends 走路径
+    if (imp.kind === 'extends-class') return ctx.gdscriptClasses.get(imp.specifier) ?? null
+    return resolveGodotPath(fromRel, imp.specifier, ctx.indexed)
+  }
   if (lang === 'elixir') return resolveElixirSpecifier(imp.specifier, ctx.elixirModules)
   if (lang === 'ocaml') return resolveOcamlSpecifier(imp.specifier, fromRel, ctx.ocamlModules)
   if (lang === 'fortran') return resolveFortranUse(imp.specifier, ctx.fortranModules)
@@ -3379,6 +3403,7 @@ export async function buildIndex(fs, rootAbs, opts = {}) {
     workspacePackages: buildWorkspacePackages(manifestTexts),
     dartPackages: buildDartPackages(manifestTexts),
     elixirModules: buildElixirModules(files),
+    gdscriptClasses: buildGdscriptClasses(files),
     ocamlModules: buildOcamlModules(files),
     fortranModules: buildFortranModules(files),
     perlRoots: buildPerlRoots(indexed),

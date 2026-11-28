@@ -1,7 +1,7 @@
-# 方案覆盖率报告：修订版方案 ↔ 实现（v0.277.0）
+# 方案覆盖率报告：修订版方案 ↔ 实现（v0.278.0）
 
 - 依据：`方案评审与修订版-v1.md`（§6 修订版方案、§10.3 升级韧性、§11.5 速查表）
-- 核对对象：本仓库当前实现（v0.277.0）；测试 841/841（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.1%、分支 87.94%、函数 95.52%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
+- 核对对象：本仓库当前实现（v0.278.0）；测试 841/841（`LANG=en` 与 `LANG=zh` 双环境）；`npm run coverage:check` 汇总行覆盖 98.11%、分支 87.8%、函数 95.52%（多次运行波动约 0.2pp，源于定时器/取消分支的调度次序；全量口径）
 - 图例：✅ 按方案实现 ｜ ⚠️ 有据偏离（评审中已决策）｜ ❌ 未做（后置/不做）
 
 ## 1. §6.1 架构：一个 bundle，资产层
@@ -279,6 +279,7 @@
 | 上下文包使用点 | `collectSymbolUsages` 移入 `src/usages.js`（cards/context 共用）：`repowiki-context usages=true` 把已解析锚点按定义文件分组，收集直接具名/命名空间导入方与定义文件的使用点；关系段追加 `usage <symbol> in <path>: N site(s)`、每符号 ≤2 条站点与不可读提示，结果输出 `usages`/`usagesSkipped`/`usagesSkippedFiles`/`usagesTruncated`；默认关闭，不影响无 usages 请求 | v0.245.0 |
 | 再导出链影响面 | `computeSymbolImpact(edges, resolved, depth, limit, files)` 经 `reexportImportSites`（`includeReexports: true`）把 barrel 导入方与中间再导出 barrel 计为直接影响，`symbolReferences` 带 barrel 导入行号；文件级影响/风险分不变；`repowiki-impact` 传入 `index.files` | v0.251.0 |
 | 再导出链引用/使用点 | `src/reexports.js` 由 references/usages 共用：`export * from` 与同名 `export { x } from` 链最多 4 跳，具名导入的最终导入方归到真实定义文件；barrel 自身同名导出遮蔽星号来源，多来源按歧义跳过，再导出边本身不算使用点；`import * as ns` 导入方把 `*` 潜在引用传到下游 barrel 的目标文件；索引器保留 `edges[].kind`（`import`/`export-from`/`require`/`mod`），旧索引重建后生效 | v0.250.0 |
+| GDScript `extends` 全局类名 | `class_name` 符号标记 `globalName`，`buildGdscriptClasses` 建立全局类名 → 文件映射（同名取字典序最小）；`extractGdscriptImports` 对标识符 `extends Base`（含 `class_name Hero extends Character`）记 `extends-class` 并携带基类名，`resolveImportEdge` 查表解析；内置/未知类名不建边；解析器 v29 | v0.278.0 |
 | GDScript 支持 | 第 45 种语言：`extractGdscript` 登记 `class_name`/内部 `class`、`func`（类内 method + parent）、`signal`（variable）、`var`（`@export`/`@onready`/`static var`）、`const`、`enum`（type），缩进推导范围与归属，函数体内局部变量跳过，`_` 前缀非导出；`extractGdscriptImports` 提取 `preload`/`load`/`extends` 的 `res://` 路径；`resolveGodotPath` 根相对解析并拒绝 `user://`/绝对路径；`project.godot` 提供项目名与 Godot 技术/引擎版本 | v0.277.0 |
 | Astro 支持 | 第 44 种语言：`src/sfc.js` 新增 `astroBlockText`（顶部 `--- … ---` frontmatter + `<script>` 块，行号与源文件对齐；未闭合 frontmatter 保守延伸到文件尾）；`extractSymbols`/`extractImports` 复用 JS/TS 规则，模板/注释/样式不产符号与边；`package.json` 的 `astro` 计入 Astro 技术；`prompts.js` 围栏与面板标签通过语言接入守卫 | v0.276.0 |
 | Swift `@_exported` / Rust `include!` / Lua 跨行 | `extractSwiftImports` 识别 `@testable`/`@_exported` 属性（后者记 `kind: 'reexport'`，含子模块形态）；`extractRustImports` 识别行首 `include!("字面量")`（kind `require`，动态 `concat!`/`env!` 跳过），`resolveRustModPath` 统一解析显式相对路径；`extractLuaImports` 改为整文件扫描，长括号可跨行并按位置回算行号，`stripLuaComments` 支持任意等号数 `--[=*[ … ]=*]` 块注释；解析器 v28 | v0.275.0 |

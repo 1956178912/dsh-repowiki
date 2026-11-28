@@ -19,10 +19,10 @@ import {
  * @typedef {Object} ImportInfo
  * @property {string} specifier - 源码中的原始模块说明符（如 './foo'、'react'、'.pkg.mod'）。
  * @property {number} line - 语句所在行（1-based）。
- * @property {'import'|'export-from'|'require'|'mod'|'mod-path'|'reexport'|'part'} kind - 引用形态
+ * @property {'import'|'export-from'|'require'|'mod'|'mod-path'|'reexport'|'part'|'extends-class'} kind - 引用形态
  *   （`mod` 仅 Rust：`mod foo;` 模块声明；`mod-path` 仅 Rust：`#[path = "…"] mod foo;`
  *   显式文件路径；`reexport` 仅 Rust `pub use`；`part` 仅 Dart：`part 'x.dart';`
- *   把 part 文件并入当前库）。
+ *   把 part 文件并入当前库；`extends-class` 仅 GDScript：`extends Base` 全局类名）。
  * @property {boolean} relative - 是否作为本地文件边的候选（JS/Python 为
  *   相对路径语义；Go/Rust/Java 中表示"需尝试本地解析"，解析失败即忽略）。
  * @property {string[]} imported - 具名导入符号列表（用于符号级引用边）。
@@ -1990,6 +1990,19 @@ function extractGdscriptImports(lines) {
         relative: true,
         imported: [],
       })
+    } else {
+      // `extends Base`：全局类名引用，由索引器按 `class_name` 映射解析；
+      // 内置类型（Node2D 等）解析失败自然不建边
+      const extClass = /\bextends\s+(?<name>[A-Za-z_]\w*)\b/.exec(codeLines[i])
+      if (extClass) {
+        result.push({
+          specifier: extClass.groups.name,
+          line: i + 1,
+          kind: 'extends-class',
+          relative: false,
+          imported: [extClass.groups.name],
+        })
+      }
     }
   }
   return result

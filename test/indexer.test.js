@@ -1119,17 +1119,23 @@ test('GDScript：res:// 路径解析、语言分布与 Godot 项目元数据', a
     ].join('\n'),
     'scripts/base.gd': 'class_name Base\n',
     'scenes/enemy.gd': 'class_name Enemy\n',
+    'scripts/warrior.gd': 'extends Base\nfunc strike():\n\tpass\n',
+    'scripts/ghost.gd': 'extends Missing\n',
     'external.gd': 'const X = preload("user://save.gd")\n',
   })
   const doc = await buildIndex(makeFakeFs(dir), dir)
 
-  assert.equal(doc.stats.languages.gdscript, 4)
+  assert.equal(doc.stats.languages.gdscript, 6)
   const edges = doc.edges.filter(e => e.from === 'scripts/player.gd')
   assert.deepEqual(edges.map(e => [e.to, e.line]), [
     ['scripts/base.gd', 1],
     ['scenes/enemy.gd', 2],
   ], 'res:// 解析为项目根相对路径')
   assert.ok(!doc.edges.some(e => e.from === 'external.gd'), 'user:// 不建边')
+  const inherit = doc.edges.find(e => e.from === 'scripts/warrior.gd')
+  assert.deepEqual([inherit?.to, inherit?.kind, inherit?.symbols, inherit?.line],
+    ['scripts/base.gd', 'extends-class', ['Base'], 1], 'extends 全局类名解析到 class_name 文件')
+  assert.ok(!doc.edges.some(e => e.from === 'scripts/ghost.gd'), '未知全局类名不建边')
   assert.equal(doc.stack.projectName, 'Demo Game')
   assert.ok(doc.stack.technologies.some(t => t.name === 'Godot'
     && t.ecosystem === 'godot' && t.version === '4.2'), 'Godot 技术与引擎版本')

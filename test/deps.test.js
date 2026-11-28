@@ -593,6 +593,13 @@ test('GDScript：preload/load/extends 路径与注释/字符串屏蔽', () => {
   ])
   assert.ok(!imports.some(i => i.specifier.includes('commented')), '注释不提取')
   assert.ok(!imports.some(i => i.specifier.includes('string.gd')), '字符串内文本不提取')
+
+  // 全局类名继承（含与 class_name 同行写法）
+  const classExtends = extractImports('extends Base\nclass_name Hero extends Character\n', 'gdscript')
+  assert.deepEqual(classExtends.map(i => [i.specifier, i.kind, i.imported]), [
+    ['Base', 'extends-class', ['Base']],
+    ['Character', 'extends-class', ['Character']],
+  ])
 })
 
 test('Lua：require 字符串与括号形式，注释不提取', () => {

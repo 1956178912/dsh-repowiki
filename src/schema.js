@@ -73,8 +73,9 @@ export const INDEX_COMPATIBLE_VERSIONS = new Set([2, 3, 4, 5, 6])
  *  v25：C# `using static` 记 `*` 潜在引用，剥离 `global::` 限定符。
  *  v26：Dart `part 'x.dart'` 记为独立边形态 `kind: 'part'`（库合并）。
  *  v27：Rust `#[path = "…"] mod foo;` 记为 `mod-path`，Lua 长括号 require。
- *  v28：Swift `@_exported import` 记为 reexport，Rust `include!("…")` 建边。 */
-export const INDEX_PARSER_VERSION = 28
+ *  v28：Swift `@_exported import` 记为 reexport，Rust `include!("…")` 建边。
+ *  v29：GDScript `class_name` 标记 globalName，`extends Base` 全局类名解析。 */
+export const INDEX_PARSER_VERSION = 29
 
 /** 产物支持的语言（卡片与 Wiki 的 locale 目录名）。 */
 export const SUPPORTED_LOCALES = ['zh', 'en']

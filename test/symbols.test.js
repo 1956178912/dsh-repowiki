@@ -820,6 +820,7 @@ test('GDScript：class_name/func/signal/var/const/enum 与内部类归属', () =
   const byName = new Map(symbols.map(s => [s.name, s]))
 
   assert.equal(byName.get('Player')?.kind, 'class', 'class_name 注册为类')
+  assert.equal(byName.get('Player')?.globalName, true, 'class_name 标记全局类名')
   assert.equal(byName.get('died')?.kind, 'variable', 'signal 记为变量类符号')
   assert.equal(byName.get('speed')?.line, 5, '@export 注解后的 var 仍登记')
   assert.equal(byName.get('MAX_JUMPS')?.kind, 'variable')
@@ -830,6 +831,7 @@ test('GDScript：class_name/func/signal/var/const/enum 与内部类归属', () =
   assert.ok(!byName.has('local_only'), '函数体内局部变量不登记')
   assert.ok(!byName.has('fake'), '字符串内 func 文本不登记')
   assert.equal(byName.get('Inventory')?.kind, 'class', '内部类')
+  assert.equal(byName.get('Inventory')?.globalName, undefined, '内部类不注册全局名')
   assert.equal(byName.get('items')?.parent, 'Inventory')
   assert.equal(byName.get('add_item')?.kind, 'method')
   assert.equal(byName.get('add_item')?.parent, 'Inventory')

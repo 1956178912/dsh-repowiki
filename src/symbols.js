@@ -26,6 +26,8 @@ import { astroBlockText, scriptBlockText } from './sfc.js'
  *   （用于默认导出的再导出解析；匿名默认导出无法具名，不登记）。
  * @property {boolean} [starExported] - Python 星号导入是否可见（false 表示
  *   被 `__all__` 排除或以下划线开头；缺省视为可见）。
+ * @property {boolean} [globalName] - GDScript `class_name` 注册的全局类名
+ *   （供 `extends Base` 的跨文件解析；内部类不带该字段）。
  */
 
 /** Dart 顶层/成员声明关键字（禁止被误识别为函数名）。 */
@@ -6540,6 +6542,7 @@ function extractGdscript(lines) {
         line: i + 1,
         endLine: i + 1,
         exported: true,
+        globalName: true,
       })
       continue
     }

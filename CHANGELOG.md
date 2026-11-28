@@ -5,6 +5,23 @@ English | [中文摘要](CHANGELOG.zh-CN.md)
 All notable changes to this project are documented in this file. Versions
 follow the phase plan in the README roadmap.
 
+## [0.278.0] - 2026-11-28
+
+### Added
+
+- **GDScript `extends Base` global class names**: `extends` with an
+  identifier (including the `class_name Hero extends Character` form) now
+  resolves through a `class_name` → file map, producing an `extends-class`
+  edge that carries the base class name as symbol evidence. Built-in bases
+  (e.g. `Node2D`) and unknown names build no edge.
+- `class_name` symbols are marked `globalName` so the mapping survives cache
+  reuse; parser v29 re-parses cached symbols.
+
+### Tests
+
+- 841 cases pass (LANG=en); new symbol/import/index assertions for global
+  class-name inheritance.
+
 ## [0.277.0] - 2026-11-28
 
 ### Added
