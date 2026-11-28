@@ -84,7 +84,7 @@ export function repowikiIndexTool(ctx) {
           ignored: { type: 'integer', description: 'Entries skipped because of .gitignore/.repowikiignore rules.' },
           skipped: { type: 'integer', description: 'Source files skipped because they were unreadable or above the per-file size limit.' },
           skippedTooLarge: { type: 'integer', description: 'Subset of skipped: files above the per-file size limit.' },
-          languages: { type: 'object', additionalProperties: { type: 'integer' }, description: 'Indexed file count per language.' },
+          languages: { type: 'object', additionalProperties: true, description: 'Indexed file count per language; values are integers.' },
           git: {
             type: 'object',
             additionalProperties: false,

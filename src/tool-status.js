@@ -327,7 +327,7 @@ export function repowikiStatusTool(ctx) {
               files: { type: 'integer' },
               symbols: { type: 'integer' },
               modules: { type: 'integer' },
-              languages: { type: 'object', additionalProperties: { type: 'integer' } },
+              languages: { type: 'object', additionalProperties: true, description: 'Indexed file count per language; values are integers.' },
               skipped: { type: 'integer', description: 'Source files skipped during indexing (unreadable or above the per-file size limit).' },
               untrusted: {
                 type: 'object',

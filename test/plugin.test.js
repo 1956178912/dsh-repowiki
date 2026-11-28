@@ -80,3 +80,49 @@ test('apply → execute 端到端：注册后工具可直接执行并产出索�
   assert.equal(cardsValue.matches.length, 1)
   assert.equal(cardsValue.matches[0].symbols[0].name, 'main')
 })
+
+/**
+ * 递归遍历 JsonSchemaNode 的每个 schema 节点。
+ * 覆盖 properties/items/组合关键字等宿主支持的容器形态。
+ */
+function walkSchema(node, visit, pointer = '#') {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return
+  visit(node, pointer)
+  for (const key of ['properties', 'patternProperties', 'definitions', '$defs']) {
+    const bucket = node[key]
+    if (bucket && typeof bucket === 'object') {
+      for (const [name, child] of Object.entries(bucket)) {
+        walkSchema(child, visit, `${pointer}/${key}/${name}`)
+      }
+    }
+  }
+  for (const key of ['items', 'additionalProperties', 'additionalItems', 'not', 'if', 'then', 'else']) {
+    const child = node[key]
+    if (child && typeof child === 'object' && !Array.isArray(child)) {
+      walkSchema(child, visit, `${pointer}/${key}`)
+    }
+  }
+  for (const key of ['allOf', 'anyOf', 'oneOf']) {
+    if (Array.isArray(node[key])) {
+      node[key].forEach((child, i) => walkSchema(child, visit, `${pointer}/${key}/${i}`))
+    }
+  }
+}
+
+test('output.schema 符合宿主 JsonSchemaNode 子集：additionalProperties 必须是布尔值', async () => {
+  const dir = nodefs.mkdtempSync(path.join(os.tmpdir(), 'repowiki-plugin-'))
+  const ctx = makeRecordingCtx(dir)
+  await apply(ctx, {})
+
+  assert.ok(ctx.tools.registered.length > 0, '工具已注册')
+  for (const def of ctx.tools.registered) {
+    walkSchema(def.output.schema, (node, pointer) => {
+      if (!Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) return
+      assert.equal(
+        typeof node.additionalProperties,
+        'boolean',
+        `${def.name} ${pointer}.additionalProperties 必须为布尔值，否则宿主拒绝激活插件`,
+      )
+    })
+  }
+})
